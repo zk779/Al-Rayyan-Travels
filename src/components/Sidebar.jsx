@@ -158,11 +158,11 @@ const Sidebar = () => {
             <div className="flex items-center gap-3">
               <img
                 src={isDarkMode ? LogoDark : LogoLight}
-                alt="AR-Rayyan Logo"
+                alt="Al-Rayyan Logo"
                 className="w-12 h-12 rounded-lg border-2 border-gray-200"
               />
               <div>
-                <p className="font-bold text-lg">AR-Rayyan</p>
+                <p className="font-bold text-lg">Al-Rayyan</p>
                 <p className="text-sm text-gray-500">Travel & Tourism</p>
               </div>
             </div>
@@ -234,7 +234,7 @@ const Sidebar = () => {
           <div className="p-4 flex items-center gap-3">
             <img
               src={isDarkMode ? LogoDark : LogoDark}
-              alt="AR-Rayyan Logo"
+              alt="Al-Rayyan Logo"
               className={`w-10 h-10 rounded-lg border-2 ${
                 isDarkMode ? "border-gray-300" : "border-gray-200"
               } ${isCollapsed ? "mx-auto" : ""}`}
@@ -246,7 +246,7 @@ const Sidebar = () => {
                     isDarkMode ? "text-white" : "text-gray-200"
                   }`}
                 >
-                  AR-Rayyan
+                  Al-Rayyan
                 </p>
                 <p className="text-sm text-gray-300">Travel & Tourism</p>
               </div>
