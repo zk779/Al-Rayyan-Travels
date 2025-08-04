@@ -1,0 +1,24 @@
+/* src/index.css */
+@import "tailwindcss";
+
+
+.bg-gradient-primary {
+
+  background: linear-gradient(to top left, #6b7280, #1e293b)
+}
+
+.bg-gradient-primary:hover {
+  background: linear-gradient(to top left, #4b5563, #1f2937);
+}
+
+.bg-gradient-active {
+  background: linear-gradient(to top left, #f3f4f6, #e5e7eb);
+}
+
+.bg-gradient-active:hover {
+  background: linear-gradient(to top left, #d1d5db, #9ca3af);
+}
+
+button:hover {
+  cursor: pointer;
+}
