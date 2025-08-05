@@ -110,7 +110,7 @@ const Sidebar = () => {
         )}
       </button>
       {openSections[sectionName] && (
-        <div className={`pl-6 space-y-2 ${isCollapsed ? "hidden" : ""}`}>
+        <div className={`pl-6 py-2 space-y-2 ${isCollapsed ? "hidden" : ""}`}>
           {links.map((link, index) => (
             <Link
               key={index}
@@ -259,7 +259,7 @@ const Sidebar = () => {
               { to: "/vendors", icon: Store, label: "Vendors" },
             ].map((item) => createLink(item.to, item.icon, item.label))}
             {createCollapsible("sales", HandCoins, "Sales", [
-              { to: "/new-sale", label: "New Sale", icon: Plus }, // Added icon for "New Sale"
+              { to: "/new-services", label: "New Services", icon: Plus }, // Added icon for "New Services"
               { to: "/manage-sale", label: "Manage Sale", icon: ScrollText }, // Added icon for "Manage Sale"
               { to: "/report", label: "Report List", icon: PieChart }, // Added icon for "Report List"
             ])}

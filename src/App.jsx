@@ -6,6 +6,7 @@ import { SidebarProvider } from "./context/SidebarContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import AirlineCodesPage from "./pages/AirlinesCode";
 import VendorsPage from "./pages/Vendors";
+import NewServices from "./pages/NewServices";
 
 function App() {
   return (
@@ -23,6 +24,7 @@ function App() {
                 element={<AirlineCodesPage />}
               />
               <Route path="/vendors" element={<VendorsPage />} />
+              <Route path="/new-services" element={<NewServices />} />
             </Route>
           </Routes>
         </Router>
