@@ -144,7 +144,7 @@ export default function SalesTabComponent() {
   return (
     <div className="space-y-4">
       <Card className="bg-slate-50">
-        <CardContent className="pt-6">
+        <CardContent className="">
           <div className="flex items-center gap-4">
             <Label htmlFor="date" className="text-sm font-medium">
               Transaction Date:
