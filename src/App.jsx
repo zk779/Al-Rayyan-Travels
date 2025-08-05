@@ -7,6 +7,7 @@ import { ThemeProvider } from "./context/ThemeContext";
 import AirlineCodesPage from "./pages/AirlinesCode";
 import VendorsPage from "./pages/Vendors";
 import NewServices from "./pages/NewServices";
+import LedgerComponent from "./pages/Ledger";
 
 function App() {
   return (
@@ -25,6 +26,7 @@ function App() {
               />
               <Route path="/vendors" element={<VendorsPage />} />
               <Route path="/new-services" element={<NewServices />} />
+              <Route path="/ledger" element={<LedgerComponent />} />
             </Route>
           </Routes>
         </Router>

@@ -119,6 +119,7 @@ button:hover {
   --primary-foreground: oklch(0.985 0 0);
 
   --secondary: oklch(0.97 0 0);
+  --success: oklch(73.364% 0.22016 144.319);
 
   --secondary-foreground: oklch(0.205 0 0);
 
@@ -234,6 +235,7 @@ button:hover {
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
   }
