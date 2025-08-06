@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Users, Shield, UserCheck } from "lucide-react";
+import { Users, Shield, UserCheck, Building2 } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -14,6 +14,7 @@ import {
 } from "../../shadcn/components/ui/tabs";
 import UsersTab from "../components/Users-tab";
 import RolesTab from "../components/Roles-tab";
+import BranchesTab from "../components/Branches-tab";
 
 // Mock data
 export const initialRoles = [
@@ -109,20 +110,81 @@ export const initialUsers = [
   },
 ];
 
+export const initialBranches = [
+  {
+    id: "1",
+    name: "Main Branch",
+    code: "MB001",
+    address: "123 Business District, Downtown",
+    city: "New York",
+    country: "USA",
+    phone: "+1 555 123 4567",
+    email: "main@alrayyan.com",
+    manager: "Sarah Johnson",
+    status: "Active",
+    employeeCount: 25,
+    createdAt: "2024-01-10",
+  },
+  {
+    id: "2",
+    name: "Airport Branch",
+    code: "AB002",
+    address: "Terminal 1, JFK Airport",
+    city: "New York",
+    country: "USA",
+    phone: "+1 555 234 5678",
+    email: "airport@alrayyan.com",
+    manager: "Mike Wilson",
+    status: "Active",
+    employeeCount: 15,
+    createdAt: "2024-01-15",
+  },
+  {
+    id: "3",
+    name: "Mall Branch",
+    code: "ML003",
+    address: "Level 2, Central Mall",
+    city: "Los Angeles",
+    country: "USA",
+    phone: "+1 555 345 6789",
+    email: "mall@alrayyan.com",
+    manager: "Emily Davis",
+    status: "Active",
+    employeeCount: 12,
+    createdAt: "2024-02-01",
+  },
+  {
+    id: "4",
+    name: "Downtown Branch",
+    code: "DT004",
+    address: "456 Main Street",
+    city: "Chicago",
+    country: "USA",
+    phone: "+1 555 456 7890",
+    email: "downtown@alrayyan.com",
+    manager: "David Brown",
+    status: "Inactive",
+    employeeCount: 8,
+    createdAt: "2024-02-10",
+  },
+];
+
 export default function UsersMain() {
   const [activeTab, setActiveTab] = useState("users");
   const [users, setUsers] = useState(initialUsers);
   const [roles, setRoles] = useState(initialRoles);
+  const [branches, setBranches] = useState(initialBranches);
 
   // Calculate statistics
   const totalUsers = users.length;
   const totalRoles = roles.length;
   const activeUsers = users.filter((user) => user.status === "Active").length;
+  const totalBranches = branches.length;
 
   return (
-    <div className="w-full mx-auto p-6 space-y-6">
+    <div className="w-full max-w-7xl mx-auto p-6 space-y-6">
       {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Users</CardTitle>
@@ -163,6 +225,21 @@ export default function UsersMain() {
             </p>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              Total Branches
+            </CardTitle>
+            <Building2 className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-600">
+              {totalBranches}
+            </div>
+            <p className="text-xs text-muted-foreground">Branch locations</p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Main Content */}
@@ -170,7 +247,7 @@ export default function UsersMain() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Users className="h-5 w-5" />
-            User Management
+            Management System
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -179,8 +256,9 @@ export default function UsersMain() {
             onValueChange={setActiveTab}
             className="w-full"
           >
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="users">Users</TabsTrigger>
+              <TabsTrigger value="branches">Branches</TabsTrigger>
               <TabsTrigger value="roles">Roles</TabsTrigger>
             </TabsList>
 
@@ -190,6 +268,14 @@ export default function UsersMain() {
 
             <TabsContent value="roles">
               <RolesTab roles={roles} setRoles={setRoles} />
+            </TabsContent>
+
+            <TabsContent value="branches">
+              <BranchesTab
+                branches={branches}
+                setBranches={setBranches}
+                users={users}
+              />
             </TabsContent>
           </Tabs>
         </CardContent>
