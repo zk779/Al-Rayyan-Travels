@@ -28,6 +28,11 @@ import {
   RotateCcwIcon,
   Plus,
   BookCheck,
+  User2,
+  User,
+  Users2,
+  UserLockIcon,
+  UserCog,
 } from "lucide-react";
 import { useSidebar } from "../context/SidebarContext";
 import { ThemeContext } from "../context/ThemeContext";
@@ -227,11 +232,11 @@ const Sidebar = () => {
         className={`${isCollapsed ? "w-20" : "w-64"} ${
           isDarkMode
             ? "bg-gradient-to-t from-slate-800 to-gray-600 text-white"
-            : "bg-gradient-to-tl from-gray-500 to-slate-800 text-black"
+            : "bg-gradient-to-tl from-gray-600 to-slate-900 text-black"
         } backdrop-blur-md shadow-2xl h-screen fixed transition-all duration-300 hidden md:block sm:hidden`}
       >
         <div className="flex flex-col h-full">
-          <div className="p-4 flex items-center gap-3">
+          <div className="p-4 flex items-center gap-3 border-b border-gray-200">
             <img
               src={isDarkMode ? LogoDark : LogoDark}
               alt="Al-Rayyan Logo"
@@ -257,6 +262,7 @@ const Sidebar = () => {
               { to: "/", icon: Home, label: "Dashboard" },
               { to: "/airline-codes", icon: Plane, label: "Airline Codes" },
               { to: "/vendors", icon: Store, label: "Vendors" },
+              { to: "/customers", icon: Users2, label: "Customers" },
             ].map((item) => createLink(item.to, item.icon, item.label))}
             {createCollapsible("sales", HandCoins, "Sales", [
               { to: "/new-services", label: "New Services", icon: Plus }, // Added icon for "New Services"
@@ -275,6 +281,7 @@ const Sidebar = () => {
 
             {createLink("/ledger", LandmarkIcon, "Ledger", () => {})}
             {createLink("/expense", Wallet, "Expense", () => {})}
+            {createLink("/users", UserCog, "Users", () => {})}
             {createLink("/login", LogOut, "Log out", () => {
               setActivePath("/login");
               handleLogout();

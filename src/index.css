@@ -166,7 +166,7 @@ button:hover {
   --sidebar-ring: oklch(0.708 0 0);
 }
 
-.dark {
+/* .dark {
 
   --background: oklch(0.145 0 0);
 
@@ -229,7 +229,7 @@ button:hover {
   --sidebar-border: oklch(1 0 0 / 10%);
 
   --sidebar-ring: oklch(0.556 0 0);
-}
+} */
 
 @layer base {
   * {

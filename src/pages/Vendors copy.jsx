@@ -284,26 +284,23 @@ const VendorsPage = () => {
 
   return (
     <div className="min-h-screen p-6">
-      <div className="flex mb-4 justify-between space-x-4">
-        <h1 className="text-2xl font-bold">Vendors</h1>
-        <Space>
-          <div className="w-96">
-            <Input
-              placeholder="Search vendors..."
-              value={searchText}
-              onChange={(e) => handleSearch(e.target.value)}
-              prefix={<Search className="w-5 h-5" />}
-              size="medium"
-            />
-          </div>
-          <Button
-            type="primary"
-            icon={<Plus className="w-5 h-5" />}
-            onClick={() => showModal()}
-          >
-            Add New Vendor
-          </Button>
-        </Space>
+      <div className="flex mb-4 justify-end space-x-4">
+        <div className="w-96">
+          <Input
+            placeholder="Search vendors..."
+            value={searchText}
+            onChange={(e) => handleSearch(e.target.value)}
+            prefix={<Search className="w-5 h-5" />}
+            size="medium"
+          />
+        </div>
+        <Button
+          type="primary"
+          icon={<Plus className="w-5 h-5" />}
+          onClick={() => showModal()}
+        >
+          Add New Vendor
+        </Button>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {/* Dashboard Cards */}

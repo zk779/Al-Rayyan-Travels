@@ -176,7 +176,7 @@ export default function LedgerComponent() {
 
   const getStatusBadge = (status) => {
     const variants = {
-      completed: "default",
+      completed: "success",
       pending: "secondary",
       refunded: "destructive",
     };
@@ -472,7 +472,7 @@ export default function LedgerComponent() {
 
         {/* Summary Footer */}
         {filteredTransactions.length > 0 && (
-          <Card className="bg-gray-900 text-white">
+          <Card className="bg-gradient-primary text-white">
             <CardContent className="pt-6">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
                 <div>

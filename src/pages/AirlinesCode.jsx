@@ -9,7 +9,7 @@ import {
   message,
   Space,
 } from "antd";
-import { Edit, Trash, Plus, Search } from "lucide-react";
+import { Edit, Trash, Plus, Search, Plane, CheckCheckIcon } from "lucide-react";
 
 const AirlineCodesPage = () => {
   const [airlineCodes, setAirlineCodes] = useState([
@@ -29,15 +29,17 @@ const AirlineCodesPage = () => {
       status: false,
     },
   ]);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModal, setIsEditModal] = useState(false);
   const [currentCode, setCurrentCode] = useState(null);
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
-  const [filteredData, setFilteredData] = useState(airlineCodes);
   const [searchText, setSearchText] = useState("");
+  const [filteredData, setFilteredData] = useState(airlineCodes);
   const [selectedRowKeys, setSelectedRowKeys] = useState([]);
 
+  // Search functionality
   const handleSearch = (value) => {
     setSearchText(value);
     setFilteredData(
@@ -49,6 +51,7 @@ const AirlineCodesPage = () => {
     );
   };
 
+  // Modal handling for editing and adding codes
   const showModal = (code = null) => {
     setIsModalOpen(true);
     setIsEditModal(!!code);
@@ -127,6 +130,7 @@ const AirlineCodesPage = () => {
     );
   };
 
+  // Define columns for the table
   const columns = [
     { title: "Sr", key: "sr", render: (_, __, index) => index + 1 },
     {
@@ -230,14 +234,60 @@ const AirlineCodesPage = () => {
           )}
         </Space>
       </div>
-      <Table
-        columns={columns}
-        dataSource={filteredData}
-        rowKey="id"
-        pagination={{ pageSize: 10 }}
-        rowSelection={rowSelection}
-        rowClassName="bg-white"
-      />
+
+      <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4 mb-6">
+        {/* Dashboard Cards */}
+        {[
+          {
+            title: "Total Airline Codes",
+            count: airlineCodes.length,
+            icon: <Plane className="w-8 h-8 text-blue-600" />,
+          },
+          {
+            title: "Active Airlines",
+            count: airlineCodes.filter((airlineCodes) => airlineCodes.status)
+              .length,
+            icon: <CheckCheckIcon className="w-8 h-8 text-blue-600" />,
+          },
+        ].map(({ title, count, icon }, idx) => (
+          <div
+            key={idx}
+            className="bg-white p-5 rounded-lg shadow flex items-center justify-between"
+          >
+            <div>
+              <div className="text-gray-500 text-sm font-medium">{title}</div>
+              <div className="text-3xl font-bold text-gray-800">{count}</div>
+            </div>
+            <div className="flex items-center">{icon}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-white p-1 rounded-lg shadow">
+        <div className="flex p-3 justify-between items-center mb-4">
+          <div className="text-lg font-semibold">
+            Airline Codes List ({airlineCodes.length})
+          </div>
+          {selectedRowKeys.length > 0 && (
+            <Button
+              danger
+              onClick={handleDeleteSelected}
+              icon={<Trash className="w-5 h-5 mr-2" />}
+              className="flex items-center"
+            >
+              Delete Selected
+            </Button>
+          )}
+        </div>
+        <Table
+          columns={columns}
+          dataSource={filteredData}
+          rowKey="id"
+          pagination={{ pageSize: 10 }}
+          rowSelection={rowSelection}
+        />
+      </div>
+
       <Modal
         title={isEditModal ? "Edit Airline Code" : "Add New Airline Code"}
         open={isModalOpen}
@@ -245,44 +295,35 @@ const AirlineCodesPage = () => {
         footer={null}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
-          <Form.Item
-            label="Airline Code"
-            name="code"
-            rules={[
-              { required: true, message: "Enter airline code!" },
-              { max: 15, message: "Max 15 characters!" },
-              {
-                pattern: /^[A-Z0-9]+$/,
-                message: "Uppercase letters or numbers only!",
-              },
-            ]}
-          >
-            <Input placeholder="e.g., AA" />
-          </Form.Item>
-          <Form.Item
-            label="IATA Name"
-            name="iataName"
-            rules={[
-              { required: true, message: "Enter IATA name!" },
-              { max: 15, message: "Max 15 characters!" },
-              {
-                pattern: /^[A-Z0-9]+$/,
-                message: "Uppercase letters or numbers only!",
-              },
-            ]}
-          >
-            <Input placeholder="e.g., AA" />
-          </Form.Item>
-          <Form.Item
-            label="Airline Name"
-            name="name"
-            rules={[{ required: true, message: "Enter airline name!" }]}
-          >
-            <Input placeholder="e.g., American Airlines" />
-          </Form.Item>
-          <Form.Item label="Status" name="status" valuePropName="checked">
-            <Switch checkedChildren="Active" unCheckedChildren="Inactive" />
-          </Form.Item>
+          <div className="grid grid-cols-2 gap-4 mb-0">
+            <Form.Item
+              label="Airline Code"
+              name="code"
+              rules={[{ required: true, message: "Enter airline code!" }]}
+            >
+              <Input placeholder="e.g., AA" />
+            </Form.Item>
+            <Form.Item
+              label="IATA Name"
+              name="iataName"
+              rules={[{ required: true, message: "Enter IATA name!" }]}
+            >
+              <Input placeholder="e.g., AA" />
+            </Form.Item>
+          </div>
+          <div className="grid grid-cols-2 gap-4 mb-0">
+            <Form.Item
+              label="Airline Name"
+              name="name"
+              rules={[{ required: true, message: "Enter airline name!" }]}
+            >
+              <Input placeholder="e.g., American Airlines" />
+            </Form.Item>
+            <Form.Item label="Status" name="status" valuePropName="checked">
+              <Switch checkedChildren="Active" unCheckedChildren="Inactive" />
+            </Form.Item>
+          </div>
+
           <Form.Item>
             <Button
               type="primary"
