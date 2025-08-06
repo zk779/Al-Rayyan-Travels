@@ -33,10 +33,10 @@ function TabsTrigger({ className, ...props }) {
       className={cn(
         "inline-flex items-center justify-center gap-1.5 px-4 py-1 text-sm font-medium rounded-md border border-transparent transition-all duration-300 ease-in-out", // Base styles
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500", // Focus outline
-        "bg-transparent hover:bg-gray-200 dark:hover:bg-gray-800", // Hover effect
+        "bg-transparent hover:bg-gray-200 dark:hover:bg-gray-200", // Hover effect
         "text-gray-700 dark:text-gray-300", // Default text color
         "data-[state=active]:bg-gradient-to-b from-gray-500 to-slate-800 data-[state=active]:text-white", // Active state styles
-        "data-[state=active]:transform data-[state=active]:scale-105", // Scaling effect on active state
+        "data-[state=active]:transform data-[state=active]:scale-100", // Scaling effect on active state
         "focus-visible:ring-offset-2", // Focus visible offset
         "data-[state=active]:shadow-lg", // Shadow on active state
         "dark:data-[state=active]:border-input dark:data-[state=active]:bg-input/30", // Dark mode active state
