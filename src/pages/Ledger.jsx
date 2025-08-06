@@ -34,6 +34,13 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { format } from "date-fns";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "../../shadcn/components/ui/popover";
+import { cn } from "../../shadcn/lib/utils"; // Utility for classnames (optional)
+import { Calendar } from "../../shadcn/components/ui/calendar";
 
 // Mock data for demonstration
 const mockTransactions = [
@@ -129,6 +136,7 @@ const suppliers = [
 export default function LedgerComponent() {
   const [selectedSupplier, setSelectedSupplier] = useState("all");
   const [startDate, setStartDate] = useState("2024-01-01");
+  const [dateRange, setDateRange] = useState();
   const [endDate, setEndDate] = useState("2024-01-31");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -230,7 +238,7 @@ export default function LedgerComponent() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Supplier Filter */}
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-700">
@@ -254,37 +262,62 @@ export default function LedgerComponent() {
                 </Select>
               </div>
 
-              {/* Start Date */}
+              {/* Date Range Picker */}
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-700">
-                  Start Date
+                  Date Range
                 </label>
-                <div className="relative">
-                  <Input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="pl-10"
-                  />
-                  <CalendarIcon className="h-4 w-4 absolute left-3 top-3 text-gray-400" />
-                </div>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      id="date"
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !dateRange && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {dateRange?.from ? (
+                        dateRange.to ? (
+                          <>
+                            {format(dateRange.from, "LLL dd, y")} -{" "}
+                            {format(dateRange.to, "LLL dd, y")}
+                          </>
+                        ) : (
+                          format(dateRange.from, "LLL dd, y")
+                        )
+                      ) : (
+                        <span>Pick a date range</span>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      initialFocus
+                      mode="range"
+                      defaultMonth={dateRange?.from}
+                      selected={dateRange}
+                      onSelect={setDateRange}
+                      numberOfMonths={2}
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
+            </div>
 
-              {/* End Date */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">
-                  End Date
-                </label>
-                <div className="relative">
-                  <Input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="pl-10"
-                  />
-                  <CalendarIcon className="h-4 w-4 absolute left-3 top-3 text-gray-400" />
-                </div>
-              </div>
+            {/* Clear Filters Button */}
+            <div className="flex justify-end mt-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSelectedSupplier("all");
+                  setDateRange(undefined);
+                }}
+              >
+                Clear Filters
+              </Button>
             </div>
           </CardContent>
         </Card>
