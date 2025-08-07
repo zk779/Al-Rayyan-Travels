@@ -10,6 +10,8 @@ import NewServices from "./pages/NewServices";
 import LedgerComponent from "./pages/Ledger";
 import CustomersPage from "./pages/Customer";
 import UsersPage from "./pages/Users";
+import SalesReport from "./pages/SalesReport";
+import ProfilePage from "./pages/Profile";
 
 function App() {
   return (
@@ -31,6 +33,8 @@ function App() {
               <Route path="/ledger" element={<LedgerComponent />} />
               <Route path="/customers" element={<CustomersPage />} />
               <Route path="/users" element={<UsersPage />} />
+              <Route path="/sales-report" element={<SalesReport />} />
+              <Route path="/profile" element={<ProfilePage />} />
             </Route>
           </Routes>
         </Router>

@@ -266,7 +266,7 @@ const Sidebar = () => {
             ].map((item) => createLink(item.to, item.icon, item.label))}
             {createCollapsible("sales", HandCoins, "Sales", [
               { to: "/new-services", label: "New Services", icon: Plus }, // Added icon for "New Services"
-              { to: "/manage-sale", label: "Manage Sale", icon: ScrollText }, // Added icon for "Manage Sale"
+              { to: "/sales-report", label: "Sale Report", icon: ScrollText }, // Added icon for "Manage Sale"
               { to: "/report", label: "Report List", icon: PieChart }, // Added icon for "Report List"
             ])}
 

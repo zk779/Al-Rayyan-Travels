@@ -36,6 +36,7 @@ import {
   SheetContent,
   SheetTrigger,
 } from "../../shadcn/components/ui/sheet";
+import { Link } from "react-router-dom";
 
 // Removed TypeScript interface and type annotation
 
@@ -48,10 +49,7 @@ const Header = ({ onMenuToggle, showMobileMenu = true }) => {
     console.log("Logout clicked");
   };
 
-  const handleProfileSettings = () => {
-    // Add profile settings logic here
-    console.log("Profile settings clicked");
-  };
+  const handleProfileSettings = () => {};
 
   const handleNotificationClick = () => {
     // Add notification logic here
@@ -187,10 +185,10 @@ const Header = ({ onMenuToggle, showMobileMenu = true }) => {
                 <DropdownMenuLabel className="font-normal">
                   <div className="flex flex-col space-y-1">
                     <p className="text-sm font-medium leading-none">
-                      Admin User
+                      Mudassar Javed
                     </p>
                     <p className="text-xs leading-none text-muted-foreground">
-                      admin@alrayyan.com
+                      mudassar.umar89@gmail.com
                     </p>
                   </div>
                 </DropdownMenuLabel>
@@ -199,15 +197,10 @@ const Header = ({ onMenuToggle, showMobileMenu = true }) => {
                   onClick={handleProfileSettings}
                   className="cursor-pointer"
                 >
-                  <User className="mr-2 h-4 w-4" />
-                  <span>Profile Settings</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={handleSettingsClick}
-                  className="cursor-pointer"
-                >
-                  <Settings className="mr-2 h-4 w-4" />
-                  <span>Account Settings</span>
+                  <Link to="/profile" className="flex items-center gap-2">
+                    <User className="mr-2 h-4 w-4" />
+                    <span>Profile Settings</span>
+                  </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
