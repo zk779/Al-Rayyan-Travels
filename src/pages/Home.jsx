@@ -23,6 +23,7 @@ import {
 import { Table, Tabs } from "antd";
 import PieChartComponent from "../components/PieChart";
 import LineChartComponent from "../components/LineChartComponent";
+import LiveDateTime from "../components/liveclock";
 
 const Dashboard = () => {
   const location = useLocation();
@@ -177,19 +178,27 @@ const Dashboard = () => {
     <div className="flex-1 p-6 transition-all duration-300 ease-in-out">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
         <div>
+          <h1 className="text-3xl font-bold text-gray-900">Welcome Back !</h1>
+          <p className="text-gray-500 text-sm mt-1">
+            Here's what's happening with your travel business today.
+          </p>
+        </div>
+        {/* <div>
           <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
           <p className="text-gray-500 text-sm mt-1">
             Manage your invoices and track payments
           </p>
-        </div>
+        </div> */}
         <div className="mt-4 md:mt-0">
-          <Link
+          <LiveDateTime />
+
+          {/* <Link
             to={"/new-sale"}
             className="bg-gradient-primary hover:bg-blue-700 text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors duration-200 flex items-center"
           >
             <Plus className="mr-2" size={16} />
             New Sale
-          </Link>
+          </Link> */}
         </div>
       </div>
 
