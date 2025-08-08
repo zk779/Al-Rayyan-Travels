@@ -104,8 +104,8 @@ const Dashboard = () => {
 
   const quickActions = [
     {
-      title: "Add Expense",
-      to: "/items",
+      title: "New Services",
+      to: "/new-services",
       icon: <Plus size={18} />,
       color: "bg-gradient-to-br from-blue-500 to-blue-900 hover:bg-blue-700",
     },
