@@ -303,7 +303,7 @@ export default function ExpensePage() {
         </div>
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
-            <Button>
+            <Button className="bg-gradient-primary">
               <Plus className="h-4 w-4 mr-2" />
               Add Expense
             </Button>
