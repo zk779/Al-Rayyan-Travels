@@ -13,6 +13,7 @@ import UsersPage from "./pages/Users";
 import SalesReport from "./pages/SalesReport";
 import ProfilePage from "./pages/Profile";
 import Dashboard from "./pages/Dashboard";
+import Expense from "./pages/Expense";
 
 function App() {
   return (
@@ -36,6 +37,7 @@ function App() {
               <Route path="/customers" element={<CustomersPage />} />
               <Route path="/users" element={<UsersPage />} />
               <Route path="/sales-report" element={<SalesReport />} />
+              <Route path="/expenses" element={<Expense />} />
               <Route path="/profile" element={<ProfilePage />} />
             </Route>
           </Routes>

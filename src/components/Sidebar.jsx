@@ -280,7 +280,7 @@ const Sidebar = () => {
             ])}
 
             {createLink("/ledger", LandmarkIcon, "Ledger", () => {})}
-            {createLink("/expense", Wallet, "Expense", () => {})}
+            {createLink("/expenses", Wallet, "Expense", () => {})}
             {createLink("/users", UserCog, "Users", () => {})}
             {createLink("/login", LogOut, "Log out", () => {
               setActivePath("/login");
