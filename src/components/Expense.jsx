@@ -292,7 +292,6 @@ export default function ExpensePage() {
 
   return (
     <div className="w-full max-w-7xl mx-auto p-6 space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">
@@ -312,7 +311,6 @@ export default function ExpensePage() {
         </Dialog>
       </div>
 
-      {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -360,11 +358,9 @@ export default function ExpensePage() {
         </Card>
       </div>
 
-      {/* Filters */}
       <Card>
         <CardContent className="pt-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {/* Search */}
             <div className="space-y-2">
               <Label>Search</Label>
               <div className="relative">
@@ -378,7 +374,6 @@ export default function ExpensePage() {
               </div>
             </div>
 
-            {/* Status Filter */}
             <div className="space-y-2">
               <Label>Status</Label>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -394,7 +389,6 @@ export default function ExpensePage() {
               </Select>
             </div>
 
-            {/* Category Filter */}
             <div className="space-y-2">
               <Label>Category</Label>
               <Select value={categoryFilter} onValueChange={setCategoryFilter}>
@@ -412,7 +406,6 @@ export default function ExpensePage() {
               </Select>
             </div>
 
-            {/* Clear Filters */}
             <div className="space-y-2">
               <Label>&nbsp;</Label>
               <Button
@@ -431,7 +424,6 @@ export default function ExpensePage() {
         </CardContent>
       </Card>
 
-      {/* Expenses Table */}
       <Card>
         <CardHeader>
           <div className="flex justify-between items-center">
@@ -545,7 +537,6 @@ export default function ExpensePage() {
         </CardContent>
       </Card>
 
-      {/* Add/Edit Expense Dialog */}
       <Dialog
         open={isAddDialogOpen || isEditDialogOpen}
         onOpenChange={(open) => {
@@ -569,7 +560,6 @@ export default function ExpensePage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            {/* Date */}
             <div className="space-y-2">
               <Label>Date</Label>
               <Popover>
@@ -597,7 +587,6 @@ export default function ExpensePage() {
               </Popover>
             </div>
 
-            {/* Category */}
             <div className="space-y-2 ">
               <Label>Category</Label>
               <Select
@@ -619,7 +608,6 @@ export default function ExpensePage() {
               </Select>
             </div>
 
-            {/* Amount */}
             <div className="space-y-2">
               <Label>Amount</Label>
               <Input
@@ -633,7 +621,6 @@ export default function ExpensePage() {
               />
             </div>
 
-            {/* Branch */}
             <div className="space-y-2">
               <Label>Branch</Label>
               <Select
@@ -655,7 +642,6 @@ export default function ExpensePage() {
               </Select>
             </div>
 
-            {/* Status */}
             <div className="space-y-2">
               <Label>Status</Label>
               <Select
@@ -676,7 +662,6 @@ export default function ExpensePage() {
                 </SelectContent>
               </Select>
             </div>
-            {/* Description */}
             <div className="space-y-2">
               <Label>Description</Label>
               <Textarea
