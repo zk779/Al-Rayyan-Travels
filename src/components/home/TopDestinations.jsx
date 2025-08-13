@@ -13,8 +13,8 @@ const TopDestinations = () => {
   const destinations = [
     {
       id: 1,
-      name: "The Maldives",
-      region: "Indian Ocean",
+      name: "Umrah, Saudi Arabia",
+      region: "Middle East",
       price: "$8,999",
       image:
         "https://media.istockphoto.com/id/482206266/photo/kaaba-in-mecca.jpg?s=612x612&w=0&k=20&c=wwzNu3XMQpCRVdAcBbeerUGaew0Fk2nGPQkH98Wj474=",
