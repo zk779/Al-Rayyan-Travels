@@ -12,6 +12,7 @@ import CustomersPage from "./pages/Customer";
 import UsersPage from "./pages/Users";
 import SalesReport from "./pages/SalesReport";
 import ProfilePage from "./pages/Profile";
+import Dashboard from "./pages/Dashboard";
 
 function App() {
   return (
@@ -23,6 +24,7 @@ function App() {
             <Route path="/" element={<Layout />}>
               {/* Define child routes for different pages */}
               <Route index element={<Home />} />
+              <Route path="/dashboard" element={<Dashboard />} />
               <Route
                 path="/airline-codes"
                 index

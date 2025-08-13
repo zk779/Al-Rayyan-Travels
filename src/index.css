@@ -21,6 +21,16 @@
   background: linear-gradient(to top left, #d1d5db, #9ca3af);
 }
 
+/* Custom gradient for gradient-main */
+.bg-gradient-main {
+  background: linear-gradient(to right, #E0AE25, #DF8854);
+}
+
+.bg-gradient-main:hover {
+  background: linear-gradient(to right, #D98F1C, #D16A3B);
+}
+
+
 button:hover {
   cursor: pointer;
 }
@@ -239,4 +249,36 @@ button:hover {
   body {
     @apply bg-background text-foreground;
   }
+}
+
+@keyframes gradient-x {
+
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+.animate-gradient-x {
+  background: linear-gradient(90deg,
+      #00bcd4,
+      /* Bright Cyan */
+      #0097c1,
+      /* Vibrant Blue */
+      #4e73e6,
+      /* Deep Blue */
+      #9b4de2,
+      /* Purple */
+      #00bcd4
+      /* Bright Cyan */
+    );
+  background-size: 300% 100%;
+  animation: gradient-x 8s ease-in-out infinite;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
