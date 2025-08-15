@@ -35,6 +35,10 @@ button:hover {
   cursor: pointer;
 }
 
+body {
+  background-color: #F9FAFB;
+}
+
 @theme inline {
 
   --radius-sm: calc(var(--radius) - 4px);

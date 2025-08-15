@@ -139,10 +139,10 @@ const Sidebar = () => {
   const MobileMenuButton = () => (
     <button
       onClick={() => setIsMobileMenuOpen(true)}
-      className="absolute w-fit top-0 left-0 z-50 p-1 rounded-lg bg-blue-600 text-white shadow-lg hover:bg-blue-700 transition-colors md:hidden"
+      className="relative w-15 top-2 left-2 z-50 p-1 rounded-lg bg-blue-600 text-white shadow-lg hover:bg-blue-700 transition-colors md:hidden"
       aria-label="Open Sidebar"
     >
-      <Menu className="w-6 h-6" />
+      <Menu className="w-12 h-8" />
     </button>
   );
 
@@ -156,19 +156,31 @@ const Sidebar = () => {
       <aside
         className={`fixed top-0 left-0 w-64 h-screen z-50 flex flex-col transform transition-transform duration-300 ease-in-out ${
           isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
-        } ${isDarkMode ? "bg-gray-800" : "bg-white"} md:hidden`}
+        } ${
+          isDarkMode
+            ? "bg-gradient-to-t from-slate-800 to-gray-600 text-white"
+            : "bg-gradient-to-tl from-gray-600 to-slate-900 text-black"
+        } md:hidden`}
       >
         <div className="p-6 flex flex-col h-full">
           <div className="flex justify-between items-center mb-6">
             <div className="flex items-center gap-3">
               <img
-                src={isDarkMode ? LogoDark : LogoLight}
+                src={isDarkMode ? LogoDark : LogoDark}
                 alt="Al-Rayyan Logo"
-                className="w-12 h-12 rounded-lg border-2 border-gray-200"
+                className={`w-10 h-10 rounded-lg border-2 ${
+                  isDarkMode ? "border-gray-300" : "border-gray-200"
+                } ${isCollapsed ? "mx-auto" : ""}`}
               />
               <div>
-                <p className="font-bold text-lg">Al-Rayyan</p>
-                <p className="text-sm text-gray-500">Travel & Tourism</p>
+                <p
+                  className={`font-bold text-lg ${
+                    isDarkMode ? "text-white" : "text-gray-200"
+                  }`}
+                >
+                  Al-Rayyan
+                </p>
+                <p className="text-sm text-gray-300">Travel & Tourism</p>
               </div>
             </div>
             <button
@@ -181,22 +193,29 @@ const Sidebar = () => {
           </div>
           <nav className="flex-1 space-y-2">
             {[
-              { to: "/", icon: Home, label: "Dashboard" },
-              { to: "/airline-codes", icon: List, label: "Airline Codes" },
-              {
-                to: "/manage-invoice",
-                icon: FileText,
-                label: "Manage Invoice",
-              },
-              { to: "/invoice", icon: FilePlus, label: "Invoice Creation" },
-              { to: "/billing", icon: PieChart, label: "Manage Sales" },
-              { to: "/ledger", icon: PieChart, label: "Ledger" },
-              { to: "/expense", icon: PieChart, label: "Expense" },
+              { to: "/dashboard", icon: Home, label: "Dashboard" },
+              { to: "/airline-codes", icon: Plane, label: "Airline Codes" },
+              { to: "/vendors", icon: Store, label: "Vendors" },
+              { to: "/customers", icon: Users2, label: "Customers" },
             ].map((item) => createLink(item.to, item.icon, item.label))}
-            {createCollapsible("reports", NotebookPen, "Reports", [
-              { to: "/report", label: "Report" },
-              { to: "/payment-list", label: "Payment List" },
+            {createCollapsible("sales", HandCoins, "Sales", [
+              { to: "/new-services", label: "New Services", icon: Plus }, // Added icon for "New Services"
+              { to: "/sales-report", label: "Sale Report", icon: ScrollText }, // Added icon for "Manage Sale"
+              { to: "/report", label: "Report List", icon: PieChart }, // Added icon for "Report List"
             ])}
+
+            {createCollapsible("payments", SaudiRiyal, "Payments", [
+              {
+                to: "/payment-list",
+                icon: BookCheck,
+                label: "Payment List",
+              },
+              { to: "/refund-list", icon: RotateCcwIcon, label: "Refund List" }, // No icon for this link
+            ])}
+
+            {createLink("/ledger", LandmarkIcon, "Ledger", () => {})}
+            {createLink("/expenses", Wallet, "Expense", () => {})}
+            {createLink("/users", UserCog, "Users", () => {})}
             {createLink("/login", LogOut, "Log out", () => {
               setActivePath("/login");
               handleLogout();
@@ -259,7 +278,7 @@ const Sidebar = () => {
           </div>
           <nav className="flex-1 p-4 space-y-2">
             {[
-              { to: "/", icon: Home, label: "Dashboard" },
+              { to: "/dashboard", icon: Home, label: "Dashboard" },
               { to: "/airline-codes", icon: Plane, label: "Airline Codes" },
               { to: "/vendors", icon: Store, label: "Vendors" },
               { to: "/customers", icon: Users2, label: "Customers" },
