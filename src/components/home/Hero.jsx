@@ -127,7 +127,7 @@ const Hero = () => {
                   />
 
                   {/* Floating Badge */}
-                  <div className="absolute -bottom-6 -right-6 bg-gradient-to-bl from-cyan-300 to-blue-500 text-white px-6 py-3 rounded-2xl shadow-lg font-bold tracking-wide transform transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3">
+                  <div className="absolute -bottom-6 -right-6 bg-gradient-to-bl from-cyan-300 to-blue-500 text-white px-6 py-3 rounded-2xl shadow-lg font-bold tracking-wide transform transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3 hidden lg:block">
                     <div className="text-2xl">25+</div>
                     <div className="text-xs opacity-90">
                       Years of Excellence

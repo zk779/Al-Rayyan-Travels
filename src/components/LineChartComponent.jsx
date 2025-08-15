@@ -218,7 +218,7 @@ const BarChartComponent = () => {
 
   return (
     <div className="px-6 py-2 bg-white rounded-2xl shadow-xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col md:flex-row lg:flex-row justify-between items-center mb-6">
         <h2 className="text-2xl font-semibold text-gray-900">Sales Data</h2>
         {/* Tab Navigation */}
         <div className="flex gap-4">

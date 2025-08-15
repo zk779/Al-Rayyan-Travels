@@ -105,12 +105,12 @@ const Header = () => {
               </a>
             ))}
             {/* Mobile Login Button */}
-            <a
-              href="#login"
-              className="block text-center bg-cyan-500 text-white hover:bg-cyan-600 px-6 py-2 rounded-md mt-4"
+            <Link
+              to="/dashboard"
+              className="bg-gradient-to-bl flex items-center from-cyan-300 to-blue-500 text-white hover:bg-cyan-600 px-6 py-2 text-sm rounded-md transition-all duration-300"
             >
-              Login
-            </a>
+              Agent Login <LockKeyhole className="ml-1 h-4 w-4" />
+            </Link>
           </div>
         </div>
       )}

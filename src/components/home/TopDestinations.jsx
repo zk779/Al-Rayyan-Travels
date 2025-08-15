@@ -56,7 +56,7 @@ const TopDestinations = () => {
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentSlide((prev) => (prev + 1) % destinations.length);
-    }, 5000);
+    }, 500000000);
     return () => clearInterval(interval);
   }, [destinations.length]);
 
@@ -118,7 +118,7 @@ const TopDestinations = () => {
             >
               {destinations.map((dest) => (
                 <div key={dest.id} className="w-full flex-shrink-0 relative">
-                  <div className="relative h-96 md:h-[600px] lg:h-[640px]">
+                  <div className="relative h-64 md:h-[600px] lg:h-[640px]">
                     <img
                       src={dest.image}
                       alt={dest.name}

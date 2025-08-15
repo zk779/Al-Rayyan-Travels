@@ -175,7 +175,7 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="flex-1 p-6 transition-all duration-300 ease-in-out">
+    <div className="flex-1 transition-all duration-300 ease-in-out">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Welcome Back !</h1>
@@ -183,27 +183,10 @@ const Dashboard = () => {
             Here's what's happening with your travel business today.
           </p>
         </div>
-        {/* <div>
-          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-500 text-sm mt-1">
-            Manage your invoices and track payments
-          </p>
-        </div> */}
         <div className="mt-4 md:mt-0">
           <LiveDateTime />
-
-          {/* <Link
-            to={"/new-sale"}
-            className="bg-gradient-primary hover:bg-blue-700 text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors duration-200 flex items-center"
-          >
-            <Plus className="mr-2" size={16} />
-            New Sale
-          </Link> */}
         </div>
       </div>
-
-      {/* Stats Cards */}
-
       <Tabs defaultActiveKey="payments" className="ant-tabs-light">
         {statsData.map((tab) => (
           <Tabs.TabPane
@@ -243,7 +226,7 @@ const Dashboard = () => {
           </Tabs.TabPane>
         ))}
       </Tabs>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 my-6">
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 sm:grid-cols-1 gap-4 my-6">
         {quickActions.map((action, index) => (
           <Link
             key={index}
@@ -255,7 +238,7 @@ const Dashboard = () => {
           </Link>
         ))}
       </div>
-      <div className="h-96">
+      <div className="h-96 mb-8">
         <LineChartComponent />
       </div>
 

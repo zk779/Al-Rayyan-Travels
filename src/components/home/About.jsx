@@ -39,7 +39,7 @@ const About = () => {
             </div>
 
             {/* Floating Badge */}
-            <div className="absolute -bottom-8 -left-8 bg-black border border-gray-700 rounded-2xl p-5 shadow-2xl font-bold tracking-wide bg-gradient-to-b from-gray-900 to-black transform transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-6">
+            <div className="absolute -bottom-8 -left-8 bg-black border border-gray-700 rounded-2xl p-5 shadow-2xl font-bold tracking-wide bg-gradient-to-b from-gray-900 to-black transform transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-6 hidden lg:block">
               <div className="text-3xl text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400">
                 25+
               </div>

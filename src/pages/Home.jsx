@@ -52,7 +52,7 @@ const App = () => {
       {showGoUp && (
         <div
           onClick={scrollToTop}
-          className="fixed bottom-8 right-8 cursor-pointer p-3 bg-gradient-to-bl from-cyan-300 to-blue-500 rounded-full shadow-lg hover:scale-110 transition-transform duration-300"
+          className="fixed bottom-8 right-8 z-50 cursor-pointer p-3 bg-gradient-to-bl from-cyan-300 to-blue-500 rounded-full shadow-lg hover:scale-110 transition-transform duration-300"
         >
           <ArrowBigUpDash className="h-8 w-8 text-white animate-bounce" />
         </div>

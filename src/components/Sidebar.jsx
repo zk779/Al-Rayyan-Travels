@@ -139,7 +139,7 @@ const Sidebar = () => {
   const MobileMenuButton = () => (
     <button
       onClick={() => setIsMobileMenuOpen(true)}
-      className="fixed top-4 left-4 z-50 p-2 rounded-lg bg-blue-600 text-white shadow-lg hover:bg-blue-700 transition-colors md:hidden"
+      className="absolute w-fit top-0 left-0 z-50 p-1 rounded-lg bg-blue-600 text-white shadow-lg hover:bg-blue-700 transition-colors md:hidden"
       aria-label="Open Sidebar"
     >
       <Menu className="w-6 h-6" />
