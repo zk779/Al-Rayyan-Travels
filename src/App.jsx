@@ -14,6 +14,7 @@ import SalesReport from "./pages/SalesReport";
 import ProfilePage from "./pages/Profile";
 import Dashboard from "./pages/Dashboard";
 import Expense from "./pages/Expense";
+import ReportPage from "./pages/ReportPage";
 
 function App() {
   return (
@@ -39,6 +40,7 @@ function App() {
               <Route path="/sales-report" element={<SalesReport />} />
               <Route path="/expenses" element={<Expense />} />
               <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/report" element={<ReportPage />} />
             </Route>
           </Routes>
         </Router>

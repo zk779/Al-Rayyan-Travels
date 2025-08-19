@@ -10,6 +10,8 @@ import {
   MoreHorizontal,
   Eye,
   Calendar,
+  Users,
+  Building2,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -72,7 +74,7 @@ import {
 } from "../../shadcn/components/ui/alert-dialog";
 import { Textarea } from "../../shadcn/components/ui/textarea";
 
-// Mock expense data
+// Mock data
 const initialExpenses = [
   {
     id: "1",
@@ -82,15 +84,17 @@ const initialExpenses = [
     description: "Business trip to Los Angeles",
     branch: "Main Branch",
     status: "Approved",
+    employee: null,
   },
   {
     id: "2",
     date: "2024-03-14",
-    category: "Office Supplies",
-    amount: 125.5,
-    description: "Office supplies for Q1",
+    category: "Salary",
+    amount: 3500.0,
+    description: "Monthly salary - March 2024",
     branch: "Main Branch",
-    status: "Pending",
+    status: "Approved",
+    employee: "John Smith",
   },
   {
     id: "3",
@@ -99,34 +103,49 @@ const initialExpenses = [
     amount: 800.0,
     description: "Google Ads campaign",
     branch: "Airport Branch",
-    status: "Approved",
-  },
-  {
-    id: "4",
-    date: "2024-03-12",
-    category: "Meals",
-    amount: 180.75,
-    description: "Client dinner meeting",
-    branch: "Downtown Branch",
-    status: "Rejected",
+    status: "Pending",
+    employee: null,
   },
 ];
 
 const categories = [
-  "Travel",
-  "Meals",
   "Office Supplies",
-  "Marketing",
+  "Salary",
+  "Travel",
   "Technology",
+  "Marketing",
+  "Meals",
   "Training",
   "Other",
 ];
+
 const branches = [
-  "Main Branch",
-  "Airport Branch",
-  "Mall Branch",
-  "Downtown Branch",
+  { id: "main", name: "Main Branch" },
+  { id: "airport", name: "Airport Branch" },
+  { id: "mall", name: "Mall Branch" },
+  { id: "downtown", name: "Downtown Branch" },
 ];
+
+const employees = {
+  main: [
+    { id: "emp1", name: "John Smith", position: "Manager", salary: 3500 },
+    { id: "emp2", name: "Sarah Johnson", position: "Agent", salary: 2800 },
+    { id: "emp3", name: "Mike Wilson", position: "Supervisor", salary: 3200 },
+  ],
+  airport: [
+    { id: "emp4", name: "Emily Davis", position: "Manager", salary: 3600 },
+    { id: "emp5", name: "David Brown", position: "Agent", salary: 2900 },
+  ],
+  mall: [
+    { id: "emp6", name: "Lisa Garcia", position: "Agent", salary: 2700 },
+    { id: "emp7", name: "Tom Anderson", position: "Supervisor", salary: 3100 },
+  ],
+  downtown: [
+    { id: "emp8", name: "Anna Martinez", position: "Manager", salary: 3500 },
+    { id: "emp9", name: "Chris Taylor", position: "Agent", salary: 2800 },
+  ],
+};
+
 const statuses = ["Pending", "Approved", "Rejected"];
 
 export default function ExpensePage() {
@@ -153,7 +172,15 @@ export default function ExpensePage() {
     description: "",
     branch: "",
     status: "Pending",
+    employee: "",
+    selectedBranchId: "",
   });
+
+  // Salary workflow states
+  const [showBranchSelection, setShowBranchSelection] = useState(false);
+  const [showEmployeeSelection, setShowEmployeeSelection] = useState(false);
+  const [selectedBranch, setSelectedBranch] = useState(null);
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
 
   // Calculate totals
   const totalExpenses = expenses.reduce(
@@ -177,10 +204,58 @@ export default function ExpensePage() {
     const matchesSearch =
       expense.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
       expense.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      expense.branch.toLowerCase().includes(searchQuery.toLowerCase());
+      expense.branch.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (expense.employee &&
+        expense.employee.toLowerCase().includes(searchQuery.toLowerCase()));
 
     return matchesStatus && matchesCategory && matchesSearch;
   });
+
+  // Handle category change for salary workflow
+  const handleCategoryChange = (category) => {
+    setExpenseForm({
+      ...expenseForm,
+      category,
+      branch: "",
+      employee: "",
+      selectedBranchId: "",
+    });
+    setShowBranchSelection(category === "Salary");
+    setShowEmployeeSelection(false);
+    setSelectedBranch(null);
+    setSelectedEmployee(null);
+  };
+
+  // Handle branch selection for salary
+  const handleBranchSelection = (branchId) => {
+    const branch = branches.find((b) => b.id === branchId);
+    setSelectedBranch(branch);
+    setExpenseForm({
+      ...expenseForm,
+      branch: branch.name,
+      selectedBranchId: branchId,
+      employee: "",
+      amount: "",
+    });
+    setShowEmployeeSelection(true);
+    setSelectedEmployee(null);
+  };
+
+  // Handle employee selection for salary
+  const handleEmployeeSelection = (employeeId) => {
+    const employee = employees[expenseForm.selectedBranchId]?.find(
+      (emp) => emp.id === employeeId
+    );
+    if (employee) {
+      setSelectedEmployee(employee);
+      setExpenseForm({
+        ...expenseForm,
+        employee: employee.name,
+        amount: employee.salary.toString(),
+        description: `Monthly salary for ${employee.name} - ${employee.position}`,
+      });
+    }
+  };
 
   // Selection handlers
   const handleSelectAll = (checked) => {
@@ -219,7 +294,27 @@ export default function ExpensePage() {
       description: expense.description,
       branch: expense.branch,
       status: expense.status,
+      employee: expense.employee || "",
+      selectedBranchId:
+        expense.category === "Salary"
+          ? branches.find((b) => b.name === expense.branch)?.id || ""
+          : "",
     });
+
+    // Set salary workflow states for editing
+    if (expense.category === "Salary") {
+      setShowBranchSelection(true);
+      setShowEmployeeSelection(true);
+      const branch = branches.find((b) => b.name === expense.branch);
+      setSelectedBranch(branch);
+      if (branch && expense.employee) {
+        const employee = employees[branch.id]?.find(
+          (emp) => emp.name === expense.employee
+        );
+        setSelectedEmployee(employee);
+      }
+    }
+
     setIsEditDialogOpen(true);
   };
 
@@ -274,7 +369,13 @@ export default function ExpensePage() {
       description: "",
       branch: "",
       status: "Pending",
+      employee: "",
+      selectedBranchId: "",
     });
+    setShowBranchSelection(false);
+    setShowEmployeeSelection(false);
+    setSelectedBranch(null);
+    setSelectedEmployee(null);
   };
 
   const getStatusColor = (status) => {
@@ -292,6 +393,7 @@ export default function ExpensePage() {
 
   return (
     <div className="w-full mx-auto p-6 space-y-6">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">
@@ -301,16 +403,16 @@ export default function ExpensePage() {
             Track and manage company expenses
           </p>
         </div>
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-gradient-primary">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Expense
-            </Button>
-          </DialogTrigger>
-        </Dialog>
+        <Button
+          className="bg-gradient-primary"
+          onClick={() => setIsAddDialogOpen(true)}
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Add Expense
+        </Button>
       </div>
 
+      {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -358,6 +460,7 @@ export default function ExpensePage() {
         </Card>
       </div>
 
+      {/* Filters */}
       <Card>
         <CardContent className="pt-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -424,6 +527,7 @@ export default function ExpensePage() {
         </CardContent>
       </Card>
 
+      {/* Expenses Table */}
       <Card>
         <CardHeader>
           <div className="flex justify-between items-center">
@@ -459,6 +563,7 @@ export default function ExpensePage() {
                   <TableHead className="text-right">Amount</TableHead>
                   <TableHead>Description</TableHead>
                   <TableHead>Branch</TableHead>
+                  <TableHead>Employee</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="w-20">Actions</TableHead>
                 </TableRow>
@@ -467,7 +572,7 @@ export default function ExpensePage() {
                 {filteredExpenses.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={8}
+                      colSpan={9}
                       className="text-center py-8 text-gray-500"
                     >
                       No expenses found
@@ -487,12 +592,29 @@ export default function ExpensePage() {
                       <TableCell>
                         {format(new Date(expense.date), "MMM dd, yyyy")}
                       </TableCell>
-                      <TableCell>{expense.category}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          {expense.category === "Salary" && (
+                            <Users className="h-4 w-4 text-blue-500" />
+                          )}
+                          {expense.category}
+                        </div>
+                      </TableCell>
                       <TableCell className="text-right font-medium">
                         ${expense.amount.toFixed(2)}
                       </TableCell>
                       <TableCell>{expense.description}</TableCell>
                       <TableCell>{expense.branch}</TableCell>
+                      <TableCell>
+                        {expense.employee ? (
+                          <div className="flex items-center gap-1">
+                            <Users className="h-3 w-3 text-gray-400" />
+                            {expense.employee}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </TableCell>
                       <TableCell>
                         <Badge variant={getStatusColor(expense.status)}>
                           {expense.status}
@@ -537,6 +659,7 @@ export default function ExpensePage() {
         </CardContent>
       </Card>
 
+      {/* Add/Edit Expense Dialog */}
       <Dialog
         open={isAddDialogOpen || isEditDialogOpen}
         onOpenChange={(open) => {
@@ -548,7 +671,7 @@ export default function ExpensePage() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingExpense ? "Edit Expense" : "Add New Expense"}
@@ -560,6 +683,7 @@ export default function ExpensePage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            {/* Date */}
             <div className="space-y-2">
               <Label>Date</Label>
               <Popover>
@@ -587,13 +711,12 @@ export default function ExpensePage() {
               </Popover>
             </div>
 
-            <div className="space-y-2 ">
+            {/* Category */}
+            <div className="space-y-2">
               <Label>Category</Label>
               <Select
                 value={expenseForm.category}
-                onValueChange={(value) =>
-                  setExpenseForm({ ...expenseForm, category: value })
-                }
+                onValueChange={handleCategoryChange}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select category" />
@@ -601,13 +724,111 @@ export default function ExpensePage() {
                 <SelectContent>
                   {categories.map((category) => (
                     <SelectItem key={category} value={category}>
-                      {category}
+                      <div className="flex items-center gap-2">
+                        {category === "Salary" && <Users className="h-4 w-4" />}
+                        {category}
+                      </div>
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
+            {/* Salary Workflow - Branch Selection */}
+            {showBranchSelection && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Building2 className="h-4 w-4" />
+                  Select Branch
+                </Label>
+                <Select
+                  value={expenseForm.selectedBranchId}
+                  onValueChange={handleBranchSelection}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Choose branch for salary expense" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {branches.map((branch) => (
+                      <SelectItem key={branch.id} value={branch.id}>
+                        <div className="flex items-center gap-2">
+                          <Building2 className="h-4 w-4" />
+                          {branch.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Salary Workflow - Employee Selection */}
+            {showEmployeeSelection && selectedBranch && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  Select Employee ({selectedBranch.name})
+                </Label>
+                <Select
+                  value={selectedEmployee?.id || ""}
+                  onValueChange={handleEmployeeSelection}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Choose employee for salary" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {employees[expenseForm.selectedBranchId]?.map(
+                      (employee) => (
+                        <SelectItem key={employee.id} value={employee.id}>
+                          <div className="flex items-center justify-between w-full">
+                            <div className="flex items-center gap-2">
+                              <Users className="h-4 w-4" />
+                              <div>
+                                <div className="font-medium">
+                                  {employee.name}
+                                </div>
+                                <div className="text-sm text-gray-500">
+                                  {employee.position}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="text-sm font-medium">
+                              ${employee.salary}
+                            </div>
+                          </div>
+                        </SelectItem>
+                      )
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Regular Branch Selection (for non-salary expenses) */}
+            {!showBranchSelection && (
+              <div className="space-y-2">
+                <Label>Branch</Label>
+                <Select
+                  value={expenseForm.branch}
+                  onValueChange={(value) =>
+                    setExpenseForm({ ...expenseForm, branch: value })
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select branch" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {branches.map((branch) => (
+                      <SelectItem key={branch.id} value={branch.name}>
+                        {branch.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Amount */}
             <div className="space-y-2">
               <Label>Amount</Label>
               <Input
@@ -618,30 +839,16 @@ export default function ExpensePage() {
                 onChange={(e) =>
                   setExpenseForm({ ...expenseForm, amount: e.target.value })
                 }
+                disabled={expenseForm.category === "Salary" && selectedEmployee}
               />
+              {expenseForm.category === "Salary" && selectedEmployee && (
+                <p className="text-sm text-gray-500">
+                  Amount auto-filled based on employee salary
+                </p>
+              )}
             </div>
 
-            <div className="space-y-2">
-              <Label>Branch</Label>
-              <Select
-                value={expenseForm.branch}
-                onValueChange={(value) =>
-                  setExpenseForm({ ...expenseForm, branch: value })
-                }
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select branch" />
-                </SelectTrigger>
-                <SelectContent>
-                  {branches.map((branch) => (
-                    <SelectItem key={branch} value={branch}>
-                      {branch}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
+            {/* Status */}
             <div className="space-y-2">
               <Label>Status</Label>
               <Select
@@ -662,6 +869,8 @@ export default function ExpensePage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Description */}
             <div className="space-y-2">
               <Label>Description</Label>
               <Textarea
@@ -723,7 +932,12 @@ export default function ExpensePage() {
                   <Label className="text-sm font-medium text-gray-500">
                     Category
                   </Label>
-                  <p className="text-base">{viewingExpense.category}</p>
+                  <p className="text-base flex items-center gap-2">
+                    {viewingExpense.category === "Salary" && (
+                      <Users className="h-4 w-4 text-blue-500" />
+                    )}
+                    {viewingExpense.category}
+                  </p>
                 </div>
               </div>
               <div>
@@ -756,6 +970,17 @@ export default function ExpensePage() {
                   </Badge>
                 </div>
               </div>
+              {viewingExpense.employee && (
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">
+                    Employee
+                  </Label>
+                  <p className="text-base flex items-center gap-2">
+                    <Users className="h-4 w-4 text-gray-400" />
+                    {viewingExpense.employee}
+                  </p>
+                </div>
+              )}
             </div>
           )}
           <DialogFooter>

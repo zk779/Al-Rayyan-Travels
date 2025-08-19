@@ -23,7 +23,7 @@ export default function NewSaleComponent() {
   const [activeTab, setActiveTab] = useState("new-sale");
 
   return (
-    <div className="w-full max-w-7xl mx-auto p-6">
+    <div className="w-full ">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center text-2xl gap-2">
