@@ -126,7 +126,7 @@ export default function SalesTabComponent() {
     <div className="space-y-6">
       {/* Date Picker */}
       <Card className="bg-slate-50 mb-2">
-        <CardContent className="pt-6 pb-4">
+        <CardContent className="">
           <div className="flex items-center gap-4">
             <Label className="text-sm font-medium whitespace-nowrap">
               Transaction Date:
