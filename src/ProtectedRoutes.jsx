@@ -1,5 +1,6 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
+import { Spin } from "antd";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL; // e.g. http://localhost:5000
 
@@ -68,7 +69,9 @@ export default function ProtectedRoutes() {
   if (!authChecked) {
     return (
       <div className="min-h-screen grid place-items-center">
-        <div className="text-sm text-gray-500">Verifying session…</div>
+        <div className="text-sm text-gray-500">
+          <Spin size="large" />
+        </div>
       </div>
     );
   }
