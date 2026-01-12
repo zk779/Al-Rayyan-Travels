@@ -1,15 +1,5 @@
-import { useState } from "react";
-import {
-  CalendarIcon,
-  TrendingUp,
-  TrendingDown,
-  DollarSign,
-  Users,
-  Plane,
-  Download,
-  Filter,
-  Search,
-} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { CalendarIcon, Download, Filter, Search } from "lucide-react";
 import {
   format,
   subDays,
@@ -53,89 +43,9 @@ import DetailedReportTab from "../components/salesReport/detailedReport";
 import BranchReportTab from "../components/salesReport/branchReport";
 import RefundsTab from "../components/salesReport/refundReport";
 
-// Mock sales data
-export const mockSalesData = [
-  {
-    id: "1",
-    date: "2024-03-15",
-    invoiceNumber: "INV-001234",
-    documentNumber: "TK001234",
-    airline: "AA",
-    customer: "John Smith",
-    agent: "Sarah Johnson",
-    branch: "Main Branch",
-    netPrice: 450.0,
-    sellPrice: 520.0,
-    profit: 70.0,
-    paymentMethod: "Credit Card",
-    status: "Completed",
-    remarks: "Business class upgrade requested",
-  },
-  {
-    id: "2",
-    date: "2024-03-15",
-    invoiceNumber: "INV-001235",
-    documentNumber: "TK001235",
-    airline: "EK",
-    customer: "Jane Doe",
-    agent: "Mike Wilson",
-    branch: "Airport Branch",
-    netPrice: 850.0,
-    sellPrice: 980.0,
-    profit: 130.0,
-    paymentMethod: "Cash",
-    status: "Completed",
-    remarks: "Priority boarding included",
-  },
-  {
-    id: "3",
-    date: "2024-03-14",
-    invoiceNumber: "INV-001236",
-    documentNumber: "TK001236",
-    airline: "BA",
-    customer: "Bob Johnson",
-    agent: "Emily Davis",
-    branch: "Mall Branch",
-    netPrice: 620.0,
-    sellPrice: 720.0,
-    profit: 100.0,
-    paymentMethod: "Bank Transfer",
-    status: "Completed",
-    remarks: "Extra baggage allowance",
-  },
-  {
-    id: "4",
-    date: "2024-03-14",
-    invoiceNumber: "INV-001237",
-    documentNumber: "TK001237",
-    airline: "QR",
-    customer: "Alice Brown",
-    agent: "Sarah Johnson",
-    branch: "Main Branch",
-    netPrice: 750.0,
-    sellPrice: 890.0,
-    profit: 140.0,
-    paymentMethod: "Credit Card",
-    status: "Completed",
-    remarks: "Frequent flyer miles applied",
-  },
-  {
-    id: "5",
-    date: "2024-03-13",
-    invoiceNumber: "INV-001238",
-    documentNumber: "TK001238",
-    airline: "LH",
-    customer: "Charlie Wilson",
-    agent: "David Brown",
-    branch: "Downtown Branch",
-    netPrice: 380.0,
-    sellPrice: 450.0,
-    profit: 70.0,
-    paymentMethod: "Cash",
-    status: "Pending",
-    remarks: "Seat selection pending",
-  },
-];
+/* ===========================
+   MOCK REFUNDS (UNCHANGED)
+=========================== */
 
 export const mockRefundData = [
   {
@@ -152,25 +62,11 @@ export const mockRefundData = [
     agent: "Sarah Johnson",
     branch: "Main Branch",
     status: "Processed",
-    remarks: "Customer requested full refund due to medical emergency",
-  },
-  {
-    id: "2",
-    date: "2024-03-14",
-    invoiceNumber: "INV-001235",
-    documentNumber: "RF001235",
-    airline: "EK",
-    customer: "Lisa Smith",
-    originalAmount: 980.0,
-    refundFee: 80.0,
-    serviceCharge: 30.0,
-    refundAmount: 870.0,
-    agent: "Mike Wilson",
-    branch: "Airport Branch",
-    status: "Pending",
-    remarks: "Flight cancelled by airline, processing refund",
+    remarks: "Customer requested full refund",
   },
 ];
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
 export default function SalesReport() {
   const [activeTab, setActiveTab] = useState("detailed");
@@ -178,217 +74,269 @@ export default function SalesReport() {
     from: subDays(new Date(), 30),
     to: new Date(),
   });
+
   const [selectedBranch, setSelectedBranch] = useState("all");
   const [selectedAgent, setSelectedAgent] = useState("all");
   const [selectedAirline, setSelectedAirline] = useState("all");
 
-  // Search functionality
   const [searchQuery, setSearchQuery] = useState("");
   const [searchBy, setSearchBy] = useState("all");
 
-  // Calculate metrics
-  const totalSales = mockSalesData.reduce(
-    (sum, sale) => sum + sale.sellPrice,
-    0
-  );
-  const totalProfit = mockSalesData.reduce((sum, sale) => sum + sale.profit, 0);
-  const totalTransactions = mockSalesData.length;
-  const avgTicketValue = totalSales / totalTransactions;
-  const profitMargin = (totalProfit / totalSales) * 100;
+  const [salesData, setSalesData] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-  // Previous period comparison (mock data)
-  const prevTotalSales = 2150.0;
-  const prevTotalProfit = 380.0;
-  const prevTransactions = 4;
-
-  const salesGrowth = ((totalSales - prevTotalSales) / prevTotalSales) * 100;
-  const profitGrowth =
-    ((totalProfit - prevTotalProfit) / prevTotalProfit) * 100;
-  const transactionGrowth =
-    ((totalTransactions - prevTransactions) / prevTransactions) * 100;
-
-  const handleExportReport = () => {
-    console.log("Exporting report...");
-  };
+  /* ===========================
+     DATE PRESETS
+  =========================== */
 
   const handleDatePreset = (preset) => {
-    const today = new Date();
+    const now = new Date();
+
     switch (preset) {
       case "today":
-        setDateRange({ from: today, to: today });
+        setDateRange({ from: now, to: now });
         break;
-      case "yesterday":
-        const yesterday = subDays(today, 1);
-        setDateRange({ from: yesterday, to: yesterday });
+      case "yesterday": {
+        const y = subDays(now, 1);
+        setDateRange({ from: y, to: y });
         break;
+      }
       case "last7days":
-        setDateRange({ from: subDays(today, 7), to: today });
+        setDateRange({ from: subDays(now, 6), to: now });
         break;
       case "last30days":
-        setDateRange({ from: subDays(today, 30), to: today });
+        setDateRange({ from: subDays(now, 29), to: now });
         break;
       case "thisMonth":
-        setDateRange({ from: startOfMonth(today), to: endOfMonth(today) });
+        setDateRange({ from: startOfMonth(now), to: endOfMonth(now) });
         break;
       case "thisYear":
-        setDateRange({ from: startOfYear(today), to: endOfYear(today) });
+        setDateRange({ from: startOfYear(now), to: endOfYear(now) });
+        break;
+      default:
         break;
     }
   };
 
-  // Filter data based on search
+  /* ===========================
+     FETCH SALES FROM API
+  =========================== */
+
+  useEffect(() => {
+    fetchSales();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const fetchSales = async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem("token");
+
+      const res = await fetch(`${API_BASE}/api/sales`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+
+      /**
+       * API format:
+       * invoice: { invoiceNo, saleDate, sales:[{ vendorName, airlineCode, paymentType, customerName... }] }
+       *
+       * Flatten invoice -> sale rows for the detailed table
+       */
+      const flattened = (json.data || []).flatMap((inv) => {
+        const invDate = inv.saleDate ? new Date(inv.saleDate) : null;
+
+        return (inv.sales || []).map((sale) => {
+          const customerLabel = sale.customerName
+            ? `${sale.customerName}`
+            : "-";
+
+          return {
+            id: sale.id,
+            invoiceId: inv.id,
+            date: invDate,
+            invoiceNumber: inv.invoiceNo,
+            documentNumber: sale.documentNo || sale.id, // if backend adds later, it will show
+            airline: sale.airlineCode || "-",
+
+            // ✅ NEW: separate vendor & customer (previously customer was vendorName)
+            vendor: sale.vendorName || "-",
+            customer: customerLabel,
+            customerId: sale.customerId || null,
+
+            paymentMethod: sale.paymentType || "-",
+            status: sale.status || "-",
+
+            netPrice: Number(sale.netPrice || 0),
+            sellPrice: Number(sale.sellPrice || 0),
+            profit: Number(sale.profit || 0),
+
+            // placeholders (until you add them in API)
+            agent: inv.createdByName,
+            branch: "-",
+            remarks: sale.remarks || "",
+          };
+        });
+      });
+
+      setSalesData(flattened);
+    } catch (err) {
+      console.error("Failed to fetch sales", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* ===========================
+     METRICS (USING DYNAMIC DATA)
+  =========================== */
+
+  const totalSales = useMemo(
+    () =>
+      salesData.reduce((sum, sale) => sum + (Number(sale.sellPrice) || 0), 0),
+    [salesData]
+  );
+
+  const totalProfit = useMemo(
+    () => salesData.reduce((sum, sale) => sum + (Number(sale.profit) || 0), 0),
+    [salesData]
+  );
+
+  /* ===========================
+     FILTER LOGIC (NOW WORKING)
+  =========================== */
+
+  const isInDateRange = (d) => {
+    if (!d) return false;
+    if (!dateRange?.from && !dateRange?.to) return true;
+
+    const dt = new Date(d);
+    const from = dateRange?.from ? new Date(dateRange.from) : null;
+    const to = dateRange?.to ? new Date(dateRange.to) : null;
+
+    if (from) from.setHours(0, 0, 0, 0);
+    if (to) to.setHours(23, 59, 59, 999);
+
+    if (from && dt < from) return false;
+    if (to && dt > to) return false;
+    return true;
+  };
+
   const filterData = (data) => {
-    if (!searchQuery.trim()) return data;
+    let out = data;
 
-    return data.filter((item) => {
-      const query = searchQuery.toLowerCase();
+    // ✅ Date range filter (applies to sales; refunds also have date)
+    out = out.filter((item) => isInDateRange(item.date));
 
+    // ✅ Branch/Agent/Airline filters (will work once data comes from API)
+    if (selectedBranch !== "all") {
+      out = out.filter(
+        (x) => (x.branch || "").toLowerCase() === selectedBranch.toLowerCase()
+      );
+    }
+    if (selectedAgent !== "all") {
+      out = out.filter(
+        (x) => (x.agent || "").toLowerCase() === selectedAgent.toLowerCase()
+      );
+    }
+    if (selectedAirline !== "all") {
+      out = out.filter(
+        (x) => (x.airline || "").toLowerCase() === selectedAirline.toLowerCase()
+      );
+    }
+
+    // ✅ Search
+    if (!searchQuery.trim()) return out;
+
+    const query = searchQuery.toLowerCase();
+
+    return out.filter((item) => {
       switch (searchBy) {
         case "invoiceNumber":
-          return item.invoiceNumber?.toLowerCase().includes(query);
+          return (item.invoiceNumber || "").toLowerCase().includes(query);
+
         case "documentNumber":
-          return item.documentNumber?.toLowerCase().includes(query);
+          return (item.documentNumber || "").toLowerCase().includes(query);
+
         case "date":
+          if (!item.date) return false;
           return (
             format(new Date(item.date), "yyyy-MM-dd").includes(query) ||
             format(new Date(item.date), "MMM dd, yyyy")
               .toLowerCase()
               .includes(query)
           );
+
         case "remarks":
-          return item.remarks?.toLowerCase().includes(query);
-        case "all":
+          return (item.remarks || "").toLowerCase().includes(query);
+
         default:
           return (
-            item.invoiceNumber?.toLowerCase().includes(query) ||
-            item.documentNumber?.toLowerCase().includes(query) ||
-            format(new Date(item.date), "yyyy-MM-dd").includes(query) ||
-            format(new Date(item.date), "MMM dd, yyyy")
-              .toLowerCase()
-              .includes(query) ||
-            item.remarks?.toLowerCase().includes(query) ||
-            item.customer?.toLowerCase().includes(query) ||
-            item.agent?.toLowerCase().includes(query) ||
-            item.branch?.toLowerCase().includes(query)
+            (item.invoiceNumber || "").toLowerCase().includes(query) ||
+            (item.documentNumber || "").toLowerCase().includes(query) ||
+            (item.vendor || "").toLowerCase().includes(query) ||
+            (item.customer || "").toLowerCase().includes(query) ||
+            (item.paymentMethod || "").toLowerCase().includes(query) ||
+            (item.status || "").toLowerCase().includes(query) ||
+            (item.agent || "").toLowerCase().includes(query) ||
+            (item.branch || "").toLowerCase().includes(query) ||
+            (item.airline || "").toLowerCase().includes(query)
           );
       }
     });
   };
 
-  const filteredSalesData = filterData(mockSalesData);
-  const filteredRefundData = filterData(mockRefundData);
+  const filteredSalesData = useMemo(
+    () => filterData(salesData),
+    [
+      salesData,
+      searchQuery,
+      searchBy,
+      dateRange,
+      selectedBranch,
+      selectedAgent,
+      selectedAirline,
+    ]
+  );
+
+  const filteredRefundData = useMemo(
+    () => filterData(mockRefundData),
+    [
+      searchQuery,
+      searchBy,
+      dateRange,
+      selectedBranch,
+      selectedAgent,
+      selectedAirline,
+    ]
+  );
+
+  /* ===========================
+     UI (SAME STRUCTURE, DATA FIXED)
+  =========================== */
 
   return (
     <div className="w-full mx-auto p-6 space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Sales Report</h1>
-          <p className="text-gray-600 mt-1">
+          <h1 className="text-3xl font-bold">Sales Report</h1>
+          <p className="text-gray-600">
             Comprehensive sales analytics and performance metrics
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleExportReport}>
+          <Button variant="outline">
             <Download className="h-4 w-4 mr-2" />
             Export Report
           </Button>
         </div>
       </div>
-      {/* Key Metrics - Static at top
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Sales</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">${totalSales.toFixed(2)}</div>
-            <div className="flex items-center text-xs text-muted-foreground">
-              {salesGrowth >= 0 ? (
-                <TrendingUp className="h-3 w-3 text-green-500 mr-1" />
-              ) : (
-                <TrendingDown className="h-3 w-3 text-red-500 mr-1" />
-              )}
-              <span
-                className={salesGrowth >= 0 ? "text-green-500" : "text-red-500"}
-              >
-                {Math.abs(salesGrowth).toFixed(1)}%
-              </span>
-              <span className="ml-1">from last period</span>
-            </div>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Profit</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              ${totalProfit.toFixed(2)}
-            </div>
-            <div className="flex items-center text-xs text-muted-foreground">
-              {profitGrowth >= 0 ? (
-                <TrendingUp className="h-3 w-3 text-green-500 mr-1" />
-              ) : (
-                <TrendingDown className="h-3 w-3 text-red-500 mr-1" />
-              )}
-              <span
-                className={
-                  profitGrowth >= 0 ? "text-green-500" : "text-red-500"
-                }
-              >
-                {Math.abs(profitGrowth).toFixed(1)}%
-              </span>
-              <span className="ml-1">from last period</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Transactions</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalTransactions}</div>
-            <div className="flex items-center text-xs text-muted-foreground">
-              {transactionGrowth >= 0 ? (
-                <TrendingUp className="h-3 w-3 text-green-500 mr-1" />
-              ) : (
-                <TrendingDown className="h-3 w-3 text-red-500 mr-1" />
-              )}
-              <span
-                className={
-                  transactionGrowth >= 0 ? "text-green-500" : "text-red-500"
-                }
-              >
-                {Math.abs(transactionGrowth).toFixed(1)}%
-              </span>
-              <span className="ml-1">from last period</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Avg Ticket Value
-            </CardTitle>
-            <Plane className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              ${avgTicketValue.toFixed(2)}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              Profit margin: {profitMargin.toFixed(1)}%
-            </div>
-          </CardContent>
-        </Card>
-      </div> */}
       {/* Filters and Search */}
       <Card>
         <CardHeader>
@@ -473,6 +421,7 @@ export default function SalesReport() {
                       )}
                     </Button>
                   </PopoverTrigger>
+
                   <PopoverContent className="w-auto p-0" align="start">
                     <div className="p-3 border-b">
                       <div className="grid grid-cols-2 gap-2">
@@ -585,6 +534,10 @@ export default function SalesReport() {
                     setSelectedBranch("all");
                     setSelectedAgent("all");
                     setSelectedAirline("all");
+                    setDateRange({
+                      from: subDays(new Date(), 30),
+                      to: new Date(),
+                    });
                   }}
                 >
                   Clear All Filters
@@ -594,6 +547,7 @@ export default function SalesReport() {
           </div>
         </CardContent>
       </Card>
+
       {/* Main Content - Three Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-3">
@@ -605,8 +559,12 @@ export default function SalesReport() {
         <TabsContent value="detailed">
           <DetailedReportTab
             salesData={filteredSalesData}
+            loading={loading}
             searchQuery={searchQuery}
             searchBy={searchBy}
+            // handy extras if you want to show metrics in the detailed tab header
+            totalSales={totalSales}
+            totalProfit={totalProfit}
           />
         </TabsContent>
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Search,
   Trash2,
@@ -7,6 +7,7 @@ import {
   Eye,
   MoreHorizontal,
 } from "lucide-react";
+
 import { Button } from "../../shadcn/components/ui/button";
 import { Input } from "../../shadcn/components/ui/input";
 import { Label } from "../../shadcn/components/ui/label";
@@ -58,41 +59,114 @@ import {
   AlertDialogTitle,
 } from "../../shadcn/components/ui/alert-dialog";
 
-export default function UsersTab({ users, setUsers, roles }) {
+const API_BASE = import.meta.env.VITE_API_BASE_URL; // e.g. http://localhost:5000
+
+async function requestJSON(path, { method = "GET", body } = {}) {
+  const token = localStorage.getItem("token");
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok || data?.success === false) {
+    throw new Error(data?.error || data?.message || "Request failed");
+  }
+
+  return data;
+}
+
+function getStatusLabel(u) {
+  if (typeof u?.isActive === "boolean")
+    return u.isActive ? "Active" : "Inactive";
+  if (u?.status) return u.status;
+  return "Active";
+}
+
+function getUserRoleName(u) {
+  if (typeof u?.role === "string") return u.role;
+  return u?.role?.name || "";
+}
+function getUserRoleId(u) {
+  return u?.role?.id || u?.roleId || "";
+}
+
+function getUserBranchName(u) {
+  if (typeof u?.branch === "string") return u.branch;
+  return u?.branch?.name || "";
+}
+function getUserBranchId(u) {
+  return u?.branch?.id || u?.branchId || "";
+}
+
+export default function UsersTab({ users, setUsers, roles, branches }) {
   const [selectedUsers, setSelectedUsers] = useState([]);
+
   const [statusFilter, setStatusFilter] = useState("all");
-  const [roleFilter, setRoleFilter] = useState("all");
+  const [roleFilter, setRoleFilter] = useState("all"); // store roleId
   const [searchQuery, setSearchQuery] = useState("");
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+
+  // single dialog for add/edit
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [dialogMode, setDialogMode] = useState("add"); // "add" | "edit"
   const [editingUser, setEditingUser] = useState(null);
+
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deleteUserId, setDeleteUserId] = useState(null);
 
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState("");
+
   const [userForm, setUserForm] = useState({
-    name: "",
+    fullName: "",
     email: "",
-    role: "",
-    status: "Active",
+    password: "", // required for add
     phone: "",
-    department: "",
+    department: "", // optional (only if your schema supports)
+    roleId: "",
+    branchId: "",
+    isActive: true,
   });
 
-  // Filter users
-  const filteredUsers = users.filter((user) => {
-    const matchesStatus =
-      statusFilter === "all" ||
-      user.status.toLowerCase() === statusFilter.toLowerCase();
-    const matchesRole = roleFilter === "all" || user.role === roleFilter;
-    const matchesSearch =
-      user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.department.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesStatus && matchesRole && matchesSearch;
-  });
+  const filteredUsers = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+
+    return (users || []).filter((u) => {
+      const status = getStatusLabel(u).toLowerCase();
+      const roleName = getUserRoleName(u);
+      const roleId = getUserRoleId(u);
+
+      const matchesStatus = statusFilter === "all" || status === statusFilter;
+      const matchesRole =
+        roleFilter === "all" ||
+        roleId === roleFilter ||
+        roleName === roleFilter;
+
+      const name = (u.fullName || u.name || "").toLowerCase();
+      const email = (u.email || "").toLowerCase();
+      const dept = (u.department || "").toLowerCase();
+      const branch = getUserBranchName(u).toLowerCase();
+
+      const matchesSearch =
+        !q ||
+        name.includes(q) ||
+        email.includes(q) ||
+        dept.includes(q) ||
+        branch.includes(q) ||
+        roleName.toLowerCase().includes(q);
+
+      return matchesStatus && matchesRole && matchesSearch;
+    });
+  }, [users, statusFilter, roleFilter, searchQuery]);
 
   const handleSelectAll = (checked) => {
-    setSelectedUsers(checked ? filteredUsers.map((user) => user.id) : []);
+    setSelectedUsers(checked ? filteredUsers.map((u) => u.id) : []);
   };
 
   const handleSelectUser = (userId, checked) => {
@@ -103,54 +177,112 @@ export default function UsersTab({ users, setUsers, roles }) {
     );
   };
 
-  const handleAddUser = () => {
-    const newUser = {
-      id: Date.now().toString(),
-      ...userForm,
-      lastLogin: "Never",
-      createdAt: new Date().toISOString().split("T")[0],
-    };
-    setUsers([...users, newUser]);
-    setUserForm({
-      name: "",
-      email: "",
-      role: "",
-      status: "Active",
-      phone: "",
-      department: "",
-    });
-    setIsAddDialogOpen(false);
-  };
-
-  const handleEditUser = (user) => {
-    setEditingUser(user);
-    setUserForm({
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      status: user.status,
-      phone: user.phone,
-      department: user.department,
-    });
-    setIsEditDialogOpen(true);
-  };
-
-  const handleUpdateUser = () => {
-    setUsers(
-      users.map((user) =>
-        user.id === editingUser.id ? { ...user, ...userForm } : user
-      )
-    );
+  const openAddDialog = () => {
+    setDialogMode("add");
     setEditingUser(null);
+    setFormError("");
     setUserForm({
-      name: "",
+      fullName: "",
       email: "",
-      role: "",
-      status: "Active",
+      password: "",
       phone: "",
       department: "",
+      roleId: "",
+      branchId: "",
+      isActive: true,
     });
-    setIsEditDialogOpen(false);
+    setIsDialogOpen(true);
+  };
+
+  const openEditDialog = (u) => {
+    setDialogMode("edit");
+    setEditingUser(u);
+    setFormError("");
+
+    setUserForm({
+      fullName: u.fullName || u.name || "",
+      email: u.email || "",
+      password: "", // optional in edit
+      phone: u.phone || "",
+      department: u.department || "",
+      roleId: getUserRoleId(u),
+      branchId: getUserBranchId(u),
+      isActive: getStatusLabel(u) === "Active",
+    });
+
+    setIsDialogOpen(true);
+  };
+
+  const submitDialog = async () => {
+    setFormError("");
+
+    if (
+      !userForm.fullName ||
+      !userForm.email ||
+      !userForm.roleId ||
+      !userForm.branchId
+    ) {
+      setFormError("Full name, email, role and branch are required.");
+      return;
+    }
+    if (dialogMode === "add" && !userForm.password) {
+      setFormError("Password is required to create a user.");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+
+      if (dialogMode === "add") {
+        const payload = {
+          fullName: userForm.fullName,
+          email: userForm.email,
+          password: userForm.password,
+          phone: userForm.phone,
+          department: userForm.department,
+          roleId: userForm.roleId,
+          branchId: userForm.branchId,
+          isActive: userForm.isActive,
+        };
+
+        const res = await requestJSON("/api/users", {
+          method: "POST",
+          body: payload,
+        });
+        const created = res?.data;
+
+        // ✅ update list (prepend)
+        setUsers((prev) => [created, ...(prev || [])]);
+      } else {
+        const payload = {
+          fullName: userForm.fullName,
+          email: userForm.email,
+          phone: userForm.phone,
+          department: userForm.department,
+          roleId: userForm.roleId,
+          branchId: userForm.branchId,
+          isActive: userForm.isActive,
+          ...(userForm.password ? { password: userForm.password } : {}),
+        };
+
+        const res = await requestJSON(`/api/users/${editingUser.id}`, {
+          method: "PUT",
+          body: payload,
+        });
+        const updated = res?.data;
+
+        setUsers((prev) =>
+          (prev || []).map((u) => (u.id === updated.id ? updated : u))
+        );
+      }
+
+      setIsDialogOpen(false);
+      setEditingUser(null);
+    } catch (e) {
+      setFormError(e?.message || "Failed to save user");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleDelete = (id) => {
@@ -158,21 +290,56 @@ export default function UsersTab({ users, setUsers, roles }) {
     setIsDeleteDialogOpen(true);
   };
 
-  const confirmDelete = () => {
-    setUsers(users.filter((user) => user.id !== deleteUserId));
-    setSelectedUsers(selectedUsers.filter((id) => id !== deleteUserId));
-    setDeleteUserId(null);
-    setIsDeleteDialogOpen(false);
+  const confirmDelete = async () => {
+    if (!deleteUserId) return;
+
+    try {
+      setSubmitting(true);
+      await requestJSON(`/api/users/${deleteUserId}`, { method: "DELETE" });
+
+      setUsers((prev) => (prev || []).filter((u) => u.id !== deleteUserId));
+      setSelectedUsers((prev) => prev.filter((id) => id !== deleteUserId));
+      setDeleteUserId(null);
+      setIsDeleteDialogOpen(false);
+    } catch (e) {
+      // keep dialog open and show alert in console (or you can show toast)
+      console.error(e);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleBulkDelete = () => {
-    setUsers(users.filter((user) => !selectedUsers.includes(user.id)));
-    setSelectedUsers([]);
+  const handleBulkDelete = async () => {
+    if (selectedUsers.length === 0) return;
+
+    try {
+      setSubmitting(true);
+
+      // delete sequentially or in parallel
+      await Promise.all(
+        selectedUsers.map((id) =>
+          requestJSON(`/api/users/${id}`, { method: "DELETE" })
+        )
+      );
+
+      setUsers((prev) =>
+        (prev || []).filter((u) => !selectedUsers.includes(u.id))
+      );
+      setSelectedUsers([]);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const getInitials = (name) => {
-    return name
+    const safe = (name || "").trim();
+    if (!safe) return "U";
+    return safe
       .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
       .map((n) => n[0])
       .join("")
       .toUpperCase();
@@ -184,7 +351,7 @@ export default function UsersTab({ users, setUsers, roles }) {
       <div className="flex flex-col sm:flex-row gap-4 justify-between">
         <div className="flex flex-col sm:flex-row gap-4 flex-1">
           <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
             <Input
               placeholder="Search users..."
               value={searchQuery}
@@ -192,6 +359,7 @@ export default function UsersTab({ users, setUsers, roles }) {
               className="pl-10"
             />
           </div>
+
           <div className="flex gap-2">
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-32">
@@ -203,14 +371,15 @@ export default function UsersTab({ users, setUsers, roles }) {
                 <SelectItem value="inactive">Inactive</SelectItem>
               </SelectContent>
             </Select>
+
             <Select value={roleFilter} onValueChange={setRoleFilter}>
-              <SelectTrigger className="w-32">
-                <SelectValue />
+              <SelectTrigger className="w-40">
+                <SelectValue placeholder="All Roles" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Roles</SelectItem>
-                {roles.map((role) => (
-                  <SelectItem key={role.id} value={role.name}>
+                {(roles || []).map((role) => (
+                  <SelectItem key={role.id} value={role.id}>
                     {role.name}
                   </SelectItem>
                 ))}
@@ -221,37 +390,56 @@ export default function UsersTab({ users, setUsers, roles }) {
 
         <div className="flex gap-2">
           {selectedUsers.length > 0 && (
-            <Button variant="destructive" onClick={handleBulkDelete}>
+            <Button
+              variant="destructive"
+              onClick={handleBulkDelete}
+              disabled={submitting}
+            >
               <Trash2 className="h-4 w-4 mr-2" />
               Delete Selected ({selectedUsers.length})
             </Button>
           )}
-          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+
+          {/* ✅ SINGLE DIALOG */}
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
-              <Button variant={"app"}>
+              <Button variant="app" onClick={openAddDialog}>
                 <UserPlus className="h-4 w-4 mr-2" />
                 Add User
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
+
+            <DialogContent className="sm:max-w-lg">
               <DialogHeader>
-                <DialogTitle>Add New User</DialogTitle>
+                <DialogTitle>
+                  {dialogMode === "add" ? "Add New User" : "Edit User"}
+                </DialogTitle>
                 <DialogDescription>
-                  Create a new user account.
+                  {dialogMode === "add"
+                    ? "Create a new user account."
+                    : "Update user information."}
                 </DialogDescription>
               </DialogHeader>
+
               <div className="space-y-4 py-4">
+                {formError ? (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                    {formError}
+                  </div>
+                ) : null}
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Full Name</Label>
                     <Input
                       placeholder="John Smith"
-                      value={userForm.name}
+                      value={userForm.fullName}
                       onChange={(e) =>
-                        setUserForm({ ...userForm, name: e.target.value })
+                        setUserForm({ ...userForm, fullName: e.target.value })
                       }
                     />
                   </div>
+
                   <div className="space-y-2">
                     <Label>Email</Label>
                     <Input
@@ -264,56 +452,63 @@ export default function UsersTab({ users, setUsers, roles }) {
                     />
                   </div>
                 </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Role</Label>
                     <Select
-                      value={userForm.role}
+                      value={userForm.roleId}
                       onValueChange={(value) =>
-                        setUserForm({ ...userForm, role: value })
+                        setUserForm({ ...userForm, roleId: value })
                       }
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className="w-full">
                         <SelectValue placeholder="Select role" />
                       </SelectTrigger>
                       <SelectContent>
-                        {roles.map((role) => (
-                          <SelectItem key={role.id} value={role.name}>
+                        {(roles || []).map((role) => (
+                          <SelectItem key={role.id} value={role.id}>
                             {role.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
+
                   <div className="space-y-2">
-                    <Label>Status</Label>
+                    <Label>Branch</Label>
                     <Select
-                      value={userForm.status}
+                      value={userForm.branchId}
                       onValueChange={(value) =>
-                        setUserForm({ ...userForm, status: value })
+                        setUserForm({ ...userForm, branchId: value })
                       }
                     >
-                      <SelectTrigger>
-                        <SelectValue />
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select branch" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="Active">Active</SelectItem>
-                        <SelectItem value="Inactive">Inactive</SelectItem>
+                        {(branches || []).map((b) => (
+                          <SelectItem key={b.id} value={b.id}>
+                            {b.name} {b.code ? `(${b.code})` : ""}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
                 </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Phone</Label>
                     <Input
-                      placeholder="+1 234 567 8900"
+                      placeholder="+92 300 1234567"
                       value={userForm.phone}
                       onChange={(e) =>
                         setUserForm({ ...userForm, phone: e.target.value })
                       }
                     />
                   </div>
+
                   <div className="space-y-2">
                     <Label>Department</Label>
                     <Input
@@ -325,20 +520,69 @@ export default function UsersTab({ users, setUsers, roles }) {
                     />
                   </div>
                 </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>
+                      Password{" "}
+                      {dialogMode === "edit" ? (
+                        <span className="text-xs text-muted-foreground">
+                          (optional)
+                        </span>
+                      ) : null}
+                    </Label>
+                    <Input
+                      type="password"
+                      placeholder={
+                        dialogMode === "edit"
+                          ? "Leave blank to keep current"
+                          : "Enter password"
+                      }
+                      value={userForm.password}
+                      onChange={(e) =>
+                        setUserForm({ ...userForm, password: e.target.value })
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Status</Label>
+                    <Select
+                      value={userForm.isActive ? "Active" : "Inactive"}
+                      onValueChange={(v) =>
+                        setUserForm({ ...userForm, isActive: v === "Active" })
+                      }
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Active">Active</SelectItem>
+                        <SelectItem value="Inactive">Inactive</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
               </div>
+
               <DialogFooter>
                 <Button
                   variant="outline"
-                  onClick={() => setIsAddDialogOpen(false)}
+                  onClick={() => setIsDialogOpen(false)}
+                  disabled={submitting}
                 >
                   Cancel
                 </Button>
                 <Button
-                  variant={"app"}
-                  onClick={handleAddUser}
-                  disabled={!userForm.name || !userForm.email || !userForm.role}
+                  variant="app"
+                  onClick={submitDialog}
+                  disabled={submitting}
                 >
-                  Add User
+                  {submitting
+                    ? "Saving..."
+                    : dialogMode === "add"
+                    ? "Add User"
+                    : "Update User"}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -362,93 +606,98 @@ export default function UsersTab({ users, setUsers, roles }) {
               </TableHead>
               <TableHead>User</TableHead>
               <TableHead>Role</TableHead>
-              <TableHead>Department</TableHead>
+              <TableHead>Branch</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Last Login</TableHead>
               <TableHead className="w-20">Actions</TableHead>
             </TableRow>
           </TableHeader>
+
           <TableBody>
             {filteredUsers.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={7}
+                  colSpan={6}
                   className="text-center py-8 text-gray-500"
                 >
                   No users found
                 </TableCell>
               </TableRow>
             ) : (
-              filteredUsers.map((user) => (
-                <TableRow key={user.id} className="hover:bg-gray-50">
-                  <TableCell>
-                    <Checkbox
-                      checked={selectedUsers.includes(user.id)}
-                      onCheckedChange={(checked) =>
-                        handleSelectUser(user.id, checked)
-                      }
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-8 w-8">
-                        <AvatarImage src={user.avatar || "/placeholder.svg"} />
-                        <AvatarFallback>
-                          {getInitials(user.name)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <div className="font-medium">{user.name}</div>
-                        <div className="text-sm text-gray-500">
-                          {user.email}
+              filteredUsers.map((u) => {
+                const displayName = u.fullName || u.name || "";
+                const roleName = getUserRoleName(u);
+                const branchName = getUserBranchName(u);
+                const status = getStatusLabel(u);
+
+                return (
+                  <TableRow key={u.id} className="hover:bg-gray-50">
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedUsers.includes(u.id)}
+                        onCheckedChange={(checked) =>
+                          handleSelectUser(u.id, checked)
+                        }
+                      />
+                    </TableCell>
+
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-8 w-8">
+                          <AvatarImage src={u.avatar || "/placeholder.svg"} />
+                          <AvatarFallback>
+                            {getInitials(displayName)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <div className="font-medium">{displayName}</div>
+                          <div className="text-sm text-gray-500">{u.email}</div>
                         </div>
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="app">{user.role}</Badge>
-                  </TableCell>
-                  <TableCell>{user.department}</TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={
-                        user.status === "Active" ? "success" : "secondary"
-                      }
-                    >
-                      {user.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-sm text-gray-500">
-                    {user.lastLogin}
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem>
-                          <Eye className="h-4 w-4 mr-2" />
-                          View
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleEditUser(user)}>
-                          <Edit className="h-4 w-4 mr-2" />
-                          Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => handleDelete(user.id)}
-                          className="text-red-600"
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))
+                    </TableCell>
+
+                    <TableCell>
+                      <Badge variant="app">{roleName || "—"}</Badge>
+                    </TableCell>
+
+                    <TableCell className="text-sm text-gray-600">
+                      {branchName || "—"}
+                    </TableCell>
+
+                    <TableCell>
+                      <Badge
+                        variant={status === "Active" ? "success" : "secondary"}
+                      >
+                        {status}
+                      </Badge>
+                    </TableCell>
+
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => openEditDialog(u)}>
+                            <Edit className="h-4 w-4 mr-2" />
+                            Edit
+                          </DropdownMenuItem>
+
+                          <DropdownMenuItem
+                            onClick={() => handleDelete(u.id)}
+                            className="text-red-600"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
@@ -462,109 +711,6 @@ export default function UsersTab({ users, setUsers, roles }) {
           <span>{selectedUsers.length} users selected</span>
         )}
       </div>
-
-      {/* Edit User Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Edit User</DialogTitle>
-            <DialogDescription>Update user information.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Full Name</Label>
-                <Input
-                  value={userForm.name}
-                  onChange={(e) =>
-                    setUserForm({ ...userForm, name: e.target.value })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Email</Label>
-                <Input
-                  type="email"
-                  value={userForm.email}
-                  onChange={(e) =>
-                    setUserForm({ ...userForm, email: e.target.value })
-                  }
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Role</Label>
-                <Select
-                  value={userForm.role}
-                  onValueChange={(value) =>
-                    setUserForm({ ...userForm, role: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {roles.map((role) => (
-                      <SelectItem key={role.id} value={role.name}>
-                        {role.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Status</Label>
-                <Select
-                  value={userForm.status}
-                  onValueChange={(value) =>
-                    setUserForm({ ...userForm, status: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Active">Active</SelectItem>
-                    <SelectItem value="Inactive">Inactive</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Phone</Label>
-                <Input
-                  value={userForm.phone}
-                  onChange={(e) =>
-                    setUserForm({ ...userForm, phone: e.target.value })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Department</Label>
-                <Input
-                  value={userForm.department}
-                  onChange={(e) =>
-                    setUserForm({ ...userForm, department: e.target.value })
-                  }
-                />
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsEditDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button variant={"app"} onClick={handleUpdateUser}>
-              Update User
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog
@@ -580,12 +726,13 @@ export default function UsersTab({ users, setUsers, roles }) {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmDelete}
               className="bg-red-600 hover:bg-red-700"
+              disabled={submitting}
             >
-              Delete
+              {submitting ? "Deleting..." : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

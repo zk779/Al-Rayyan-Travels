@@ -56,6 +56,26 @@ import {
 } from "../../shadcn/components/ui/alert-dialog";
 import { Textarea } from "../../shadcn/components/ui/textarea";
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL; // e.g. http://localhost:5000
+
+async function api(path, { method = "GET", body } = {}) {
+  const token = localStorage.getItem("token");
+  const res = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data?.success === false) {
+    throw new Error(data?.error || data?.message || "Request failed");
+  }
+  return data;
+}
+
 export default function BranchesTab({ branches, setBranches, users }) {
   const [selectedBranches, setSelectedBranches] = useState([]);
   const [statusFilter, setStatusFilter] = useState("all");
@@ -66,7 +86,7 @@ export default function BranchesTab({ branches, setBranches, users }) {
   const [editingBranch, setEditingBranch] = useState(null);
   const [deleteBranchId, setDeleteBranchId] = useState(null);
 
-  const [branchForm, setBranchForm] = useState({
+  const initialForm = {
     name: "",
     code: "",
     address: "",
@@ -76,9 +96,11 @@ export default function BranchesTab({ branches, setBranches, users }) {
     email: "",
     manager: "",
     status: "Active",
-  });
+  };
 
-  // Filter branches
+  const [branchForm, setBranchForm] = useState(initialForm);
+
+  // Filter branches (same logic)
   const filteredBranches = branches.filter((branch) => {
     const matchesStatus =
       statusFilter === "all" ||
@@ -92,9 +114,7 @@ export default function BranchesTab({ branches, setBranches, users }) {
   });
 
   const handleSelectAll = (checked) => {
-    setSelectedBranches(
-      checked ? filteredBranches.map((branch) => branch.id) : []
-    );
+    setSelectedBranches(checked ? filteredBranches.map((b) => b.id) : []);
   };
 
   const handleSelectBranch = (branchId, checked) => {
@@ -105,26 +125,42 @@ export default function BranchesTab({ branches, setBranches, users }) {
     );
   };
 
-  const handleAddBranch = () => {
-    const newBranch = {
-      id: Date.now().toString(),
-      ...branchForm,
-      employeeCount: 0,
-      createdAt: new Date().toISOString().split("T")[0],
-    };
-    setBranches([...branches, newBranch]);
-    setBranchForm({
-      name: "",
-      code: "",
-      address: "",
-      city: "",
-      country: "",
-      phone: "",
-      email: "",
-      manager: "",
-      status: "Active",
-    });
-    setIsAddDialogOpen(false);
+  // ✅ Dynamic: Add Branch
+  const handleAddBranch = async () => {
+    try {
+      const payload = {
+        name: branchForm.name,
+        code: branchForm.code,
+        address: branchForm.address,
+        city: branchForm.city,
+        country: branchForm.country,
+        phone: branchForm.phone,
+        email: branchForm.email,
+        manager: branchForm.manager,
+        isActive: branchForm.status === "Active",
+      };
+
+      const res = await api("/api/branches", { method: "POST", body: payload });
+      const b = res?.data || {};
+
+      const newBranch = {
+        ...b,
+        status:
+          typeof b.isActive === "boolean"
+            ? b.isActive
+              ? "Active"
+              : "Inactive"
+            : branchForm.status,
+        employeeCount: b.employeeCount ?? 0,
+        manager: b.manager ?? branchForm.manager,
+      };
+
+      setBranches([...branches, newBranch]);
+      setBranchForm(initialForm);
+      setIsAddDialogOpen(false);
+    } catch (e) {
+      console.error("Add branch failed:", e.message);
+    }
   };
 
   const handleEditBranch = (branch) => {
@@ -143,25 +179,48 @@ export default function BranchesTab({ branches, setBranches, users }) {
     setIsEditDialogOpen(true);
   };
 
-  const handleUpdateBranch = () => {
-    setBranches(
-      branches.map((branch) =>
-        branch.id === editingBranch.id ? { ...branch, ...branchForm } : branch
-      )
-    );
-    setEditingBranch(null);
-    setBranchForm({
-      name: "",
-      code: "",
-      address: "",
-      city: "",
-      country: "",
-      phone: "",
-      email: "",
-      manager: "",
-      status: "Active",
-    });
-    setIsEditDialogOpen(false);
+  // ✅ Dynamic: Update Branch
+  const handleUpdateBranch = async () => {
+    try {
+      const payload = {
+        name: branchForm.name,
+        code: branchForm.code,
+        address: branchForm.address,
+        city: branchForm.city,
+        country: branchForm.country,
+        phone: branchForm.phone,
+        email: branchForm.email,
+        manager: branchForm.manager,
+        isActive: branchForm.status === "Active",
+      };
+
+      const res = await api(`/api/branches/${editingBranch.id}`, {
+        method: "PUT",
+        body: payload,
+      });
+
+      const b = res?.data || {};
+      const updated = {
+        ...b,
+        status:
+          typeof b.isActive === "boolean"
+            ? b.isActive
+              ? "Active"
+              : "Inactive"
+            : branchForm.status,
+        employeeCount: b.employeeCount ?? editingBranch.employeeCount ?? 0,
+        manager: b.manager ?? branchForm.manager,
+      };
+
+      setBranches(
+        branches.map((br) => (br.id === editingBranch.id ? updated : br))
+      );
+      setEditingBranch(null);
+      setBranchForm(initialForm);
+      setIsEditDialogOpen(false);
+    } catch (e) {
+      console.error("Update branch failed:", e.message);
+    }
   };
 
   const handleDelete = (id) => {
@@ -169,24 +228,48 @@ export default function BranchesTab({ branches, setBranches, users }) {
     setIsDeleteDialogOpen(true);
   };
 
-  const confirmDelete = () => {
-    setBranches(branches.filter((branch) => branch.id !== deleteBranchId));
-    setSelectedBranches(selectedBranches.filter((id) => id !== deleteBranchId));
-    setDeleteBranchId(null);
-    setIsDeleteDialogOpen(false);
+  // ✅ Dynamic: Delete Branch
+  const confirmDelete = async () => {
+    try {
+      await api(`/api/branches/${deleteBranchId}`, { method: "DELETE" });
+
+      setBranches(branches.filter((b) => b.id !== deleteBranchId));
+      setSelectedBranches(
+        selectedBranches.filter((id) => id !== deleteBranchId)
+      );
+      setDeleteBranchId(null);
+      setIsDeleteDialogOpen(false);
+    } catch (e) {
+      console.error("Delete branch failed:", e.message);
+    }
   };
 
-  const handleBulkDelete = () => {
-    setBranches(
-      branches.filter((branch) => !selectedBranches.includes(branch.id))
+  // ✅ Dynamic: Bulk Delete
+  const handleBulkDelete = async () => {
+    try {
+      await Promise.all(
+        selectedBranches.map((id) =>
+          api(`/api/branches/${id}`, { method: "DELETE" })
+        )
+      );
+
+      setBranches(branches.filter((b) => !selectedBranches.includes(b.id)));
+      setSelectedBranches([]);
+    } catch (e) {
+      console.error("Bulk delete failed:", e.message);
+    }
+  };
+
+  // Get available managers (same logic, but supports API shape too)
+  const availableManagers = users.filter((u) => {
+    const roleName = typeof u.role === "string" ? u.role : u.role?.name;
+    return (
+      roleName === "Manager" ||
+      roleName === "Admin" ||
+      roleName === "MANAGER" ||
+      roleName === "ADMIN"
     );
-    setSelectedBranches([]);
-  };
-
-  // Get available managers (users with Manager or Admin role)
-  const availableManagers = users.filter(
-    (user) => user.role === "Manager" || user.role === "Admin"
-  );
+  });
 
   return (
     <div className="space-y-6">
@@ -237,8 +320,9 @@ export default function BranchesTab({ branches, setBranches, users }) {
                   Create a new branch location.
                 </DialogDescription>
               </DialogHeader>
+
               <div className="space-y-4 py-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Branch Name</Label>
                     <Input
@@ -263,6 +347,7 @@ export default function BranchesTab({ branches, setBranches, users }) {
                     />
                   </div>
                 </div>
+
                 <div className="space-y-2">
                   <Label>Address</Label>
                   <Textarea
@@ -273,7 +358,8 @@ export default function BranchesTab({ branches, setBranches, users }) {
                     }
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>City</Label>
                     <Input
@@ -298,7 +384,8 @@ export default function BranchesTab({ branches, setBranches, users }) {
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Phone</Label>
                     <Input
@@ -321,7 +408,8 @@ export default function BranchesTab({ branches, setBranches, users }) {
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Manager</Label>
                     <Select
@@ -334,14 +422,20 @@ export default function BranchesTab({ branches, setBranches, users }) {
                         <SelectValue placeholder="Select manager" />
                       </SelectTrigger>
                       <SelectContent>
-                        {availableManagers.map((user) => (
-                          <SelectItem key={user.id} value={user.name}>
-                            {user.name} ({user.role})
-                          </SelectItem>
-                        ))}
+                        {availableManagers.map((u) => {
+                          const name = u.fullName || u.name;
+                          const roleName =
+                            typeof u.role === "string" ? u.role : u.role?.name;
+                          return (
+                            <SelectItem key={u.id} value={name}>
+                              {name} ({roleName})
+                            </SelectItem>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
                   </div>
+
                   <div className="space-y-2">
                     <Label>Status</Label>
                     <Select
@@ -361,6 +455,7 @@ export default function BranchesTab({ branches, setBranches, users }) {
                   </div>
                 </div>
               </div>
+
               <DialogFooter>
                 <Button
                   variant="outline"
@@ -444,6 +539,7 @@ export default function BranchesTab({ branches, setBranches, users }) {
                       </Badge>
                     </div>
                   </div>
+
                   <div className="flex items-center gap-1">
                     <Badge
                       variant={
@@ -485,6 +581,7 @@ export default function BranchesTab({ branches, setBranches, users }) {
                   </div>
                 </div>
               </CardHeader>
+
               <CardContent className="pt-0">
                 <div className="space-y-3">
                   <div className="flex items-start gap-2 text-sm">
@@ -547,8 +644,9 @@ export default function BranchesTab({ branches, setBranches, users }) {
             <DialogTitle>Edit Branch</DialogTitle>
             <DialogDescription>Update branch information.</DialogDescription>
           </DialogHeader>
+
           <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Branch Name</Label>
                 <Input
@@ -571,6 +669,7 @@ export default function BranchesTab({ branches, setBranches, users }) {
                 />
               </div>
             </div>
+
             <div className="space-y-2">
               <Label>Address</Label>
               <Textarea
@@ -580,7 +679,8 @@ export default function BranchesTab({ branches, setBranches, users }) {
                 }
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>City</Label>
                 <Input
@@ -600,7 +700,8 @@ export default function BranchesTab({ branches, setBranches, users }) {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Phone</Label>
                 <Input
@@ -621,27 +722,8 @@ export default function BranchesTab({ branches, setBranches, users }) {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Manager</Label>
-                <Select
-                  value={branchForm.manager}
-                  onValueChange={(value) =>
-                    setBranchForm({ ...branchForm, manager: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableManagers.map((user) => (
-                      <SelectItem key={user.id} value={user.name}>
-                        {user.name} ({user.role})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
               <div className="space-y-2">
                 <Label>Status</Label>
                 <Select
@@ -650,7 +732,7 @@ export default function BranchesTab({ branches, setBranches, users }) {
                     setBranchForm({ ...branchForm, status: value })
                   }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className={"w-full"}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -661,6 +743,7 @@ export default function BranchesTab({ branches, setBranches, users }) {
               </div>
             </div>
           </div>
+
           <DialogFooter>
             <Button
               variant="outline"

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Table,
   Modal,
@@ -9,85 +9,115 @@ import {
   message,
   Space,
   Select,
-  Tag,
   Tooltip,
+  Card,
+  DatePicker,
 } from "antd";
-import {
-  Edit,
-  Trash,
-  Plus,
-  Search,
-  User,
-  FileText,
-  TrendingUp,
-  TrendingDown,
-  X,
-  CheckCircle,
-} from "lucide-react";
 import dayjs from "dayjs";
+import { Edit, Trash, Plus, Search, X, Users, CheckCircle } from "lucide-react";
 
 const { Option } = Select;
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL;
+const API_URL = `${API_BASE}/api/customers`;
+
 const CustomersPage = () => {
-  const [customers, setCustomers] = useState([
-    {
-      id: 1,
-      name: "Bin Sheban Trading LLC",
-      type: "Corporate",
-      contactPerson: "Ahmed Bin Sheban",
-      phone: "+971-50-123-4567",
-      email: "ahmed@binsheban.com",
-      address: "Dubai, UAE",
-      openingBalance: 0,
-      crAmount: 2000,
-      drAmount: 8000,
-      currentBalance: 6000,
-      status: true,
-      lastBooking: "2025-01-03",
-      bookings: 15,
-    },
-    {
-      id: 2,
-      name: "Al-Rayyan Construction",
-      type: "Corporate",
-      contactPerson: "Mudassar Javed",
-      phone: "+971-55-987-6543",
-      email: "mudassar@alrayyan.com",
-      address: "Sharjah, UAE",
-      openingBalance: 0,
-      crAmount: 1000,
-      drAmount: 5000,
-      currentBalance: 4000,
-      status: true,
-      lastBooking: "2025-01-01",
-      bookings: 8,
-    },
-    {
-      id: 3,
-      name: "Emirates Steel",
-      type: "Corporate",
-      contactPerson: "Sara Al-Mansoori",
-      phone: "+971-4-555-0123",
-      email: "",
-      address: "",
-      openingBalance: 0,
-      crAmount: 0,
-      drAmount: 0,
-      currentBalance: 0,
-      status: true,
-      lastBooking: "",
-      bookings: 0,
-    },
-  ]);
+  const [customers, setCustomers] = useState([]);
+  const [loadingTable, setLoadingTable] = useState(false);
+  const [loadingForm, setLoadingForm] = useState(false);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModal, setIsEditModal] = useState(false);
   const [currentCustomer, setCurrentCustomer] = useState(null);
-  const [form] = Form.useForm();
-  const [loading, setLoading] = useState(false);
+
   const [searchText, setSearchText] = useState("");
   const [filterType, setFilterType] = useState(null);
-  const [selectedRowKeys, setSelectedRowKeys] = useState([]);
+
+  // ✅ NEW: ordering states
+  const [orderBy, setOrderBy] = useState("customerDate");
+  const [orderDir, setOrderDir] = useState("desc");
+
+  const [form] = Form.useForm();
+  const token = localStorage.getItem("token");
+
+  /* =========================
+     🔗 BACKEND API CALLS
+  ========================= */
+
+  const loadCustomers = async () => {
+    setLoadingTable(true);
+    try {
+      const query = new URLSearchParams({
+        orderBy,
+        orderDir,
+      }).toString();
+
+      const res = await fetch(`${API_URL}?${query}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) throw new Error();
+      const json = await res.json();
+      setCustomers(json.data || []);
+    } catch {
+      message.error("Failed to load customers");
+    } finally {
+      setLoadingTable(false);
+    }
+  };
+
+  const createCustomer = async (payload) => {
+    const res = await fetch(API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error();
+  };
+
+  const updateCustomer = async (id, payload) => {
+    const res = await fetch(`${API_URL}/${id}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error();
+  };
+
+  const deleteCustomer = async (id) => {
+    const res = await fetch(`${API_URL}/${id}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!res.ok) throw new Error();
+  };
+
+  const toggleStatus = async (id, isActive) => {
+    const res = await fetch(`${API_URL}/${id}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ isActive }),
+    });
+    if (!res.ok) throw new Error();
+  };
+
+  /* ========================= */
+
+  useEffect(() => {
+    loadCustomers();
+  }, [orderBy, orderDir]);
 
   const filteredData = useMemo(() => {
     let data = [...customers];
@@ -95,228 +125,158 @@ const CustomersPage = () => {
     if (searchText) {
       data = data.filter(
         (c) =>
-          c.name.toLowerCase().includes(searchText.toLowerCase()) ||
+          c.customerName.toLowerCase().includes(searchText.toLowerCase()) ||
           c.contactPerson.toLowerCase().includes(searchText.toLowerCase())
       );
     }
 
     if (filterType) {
-      data = data.filter((c) => c.type === filterType);
+      data = data.filter((c) => c.customerType === filterType);
     }
 
     return data;
   }, [customers, searchText, filterType]);
 
-  const handleFormValuesChange = (_, allValues) => {
-    const { openingBalance = 0, crAmount = 0, drAmount = 0 } = allValues;
-    const currentBalance = openingBalance + crAmount - drAmount;
-    form.setFieldsValue({ currentBalance });
-  };
+  const totalCustomers = customers.length;
+  const activeCustomers = customers.filter((c) => c.isActive).length;
 
   const showModal = (customer = null) => {
     setIsModalOpen(true);
-    if (customer) {
-      setIsEditModal(true);
-    } else {
-      setIsEditModal(false);
-    }
+    setIsEditModal(!!customer);
     setCurrentCustomer(customer);
+
     if (customer) {
       form.setFieldsValue({
-        ...customer,
-        date: customer.lastBooking ? dayjs(customer.lastBooking) : null,
+        name: customer.customerName,
+        type: customer.customerType,
+        contactPerson: customer.contactPerson,
+        phone: customer.phone,
+        email: customer.email,
+        address: customer.address,
+        openingBalance: customer.openingBalance,
+        status: customer.isActive,
+        customerDate: customer.customerDate
+          ? dayjs(customer.customerDate)
+          : null,
       });
     } else {
       form.resetFields();
-      form.setFieldsValue({ status: true });
+      form.setFieldsValue({
+        status: true,
+        customerDate: dayjs(),
+      });
     }
   };
 
-  const handleCancel = () => {
-    setIsModalOpen(false);
-    form.resetFields();
-  };
-
   const handleSubmit = async (values) => {
-    setLoading(true);
+    setLoadingForm(true);
     try {
-      const formattedValues = {
-        ...values,
-        lastBooking: values.date
-          ? values.date.format("YYYY-MM-DD")
-          : dayjs().format("YYYY-MM-DD"),
-        date: undefined,
+      const payload = {
+        customerName: values.name,
+        customerType: values.type,
+        contactPerson: values.contactPerson,
+        phone: values.phone,
+        email: values.email || null,
+        address: values.address || null,
+        openingBalance: Number(values.openingBalance || 0),
+        isActive: values.status ?? true,
+        customerDate: values.customerDate
+          ? values.customerDate.toISOString()
+          : null,
       };
 
-      const newCustomers = isEditModal
-        ? customers.map((c) =>
-            c.id === currentCustomer.id ? { ...c, ...formattedValues } : c
-          )
-        : [
-            ...customers,
-            {
-              id: Date.now(),
-              ...formattedValues,
-            },
-          ];
+      if (isEditModal) {
+        await updateCustomer(currentCustomer.id, payload);
+        message.success("Customer updated successfully");
+      } else {
+        await createCustomer(payload);
+        message.success("Customer created successfully");
+      }
 
-      setCustomers(newCustomers);
-      message.success(
-        `Customer ${isEditModal ? "updated" : "added"} successfully!`
-      );
       setIsModalOpen(false);
-    } catch (error) {
-      message.error("Failed to save customer.");
+      form.resetFields();
+      loadCustomers();
+    } catch {
+      message.error("Failed to save customer");
     } finally {
-      setLoading(false);
+      setLoadingForm(false);
     }
   };
 
   const handleDelete = (id) => {
     Modal.confirm({
-      title: "Are you sure you want to delete this customer?",
-      content: "This action cannot be undone.",
-      okText: "Delete",
+      title: "Delete this customer?",
       okType: "danger",
-      onOk: () => {
-        setCustomers(customers.filter((c) => c.id !== id));
-        message.success("Customer deleted!");
+      onOk: async () => {
+        try {
+          await deleteCustomer(id);
+          message.success("Customer deleted");
+          loadCustomers();
+        } catch {
+          message.error("Delete failed");
+        }
       },
     });
   };
 
-  const handleDeleteSelected = () => {
-    Modal.confirm({
-      title: "Delete selected customers?",
-      okText: "Delete",
-      okType: "danger",
-      onOk: () => {
-        setCustomers(customers.filter((c) => !selectedRowKeys.includes(c.id)));
-        message.success("Selected customers deleted!");
-        setSelectedRowKeys([]);
-      },
-    });
-  };
-  const handleStatusToggle = (id, checked) => {
-    const newVendors = vendors.map((vendor) =>
-      vendor.id === id ? { ...vendor, status: checked } : vendor
-    );
-    updateData(newVendors);
-    message.success(
-      `Vendor status updated to ${checked ? "Active" : "Inactive"}`
-    );
+  const handleStatusToggle = async (id, checked) => {
+    try {
+      await toggleStatus(id, checked);
+      message.success(`Customer ${checked ? "activated" : "deactivated"}`);
+      loadCustomers();
+    } catch {
+      message.error("Status update failed");
+    }
   };
 
   const columns = [
     {
-      title: "Customer Details",
-      key: "customerDetails",
-      dataIndex: "name",
-      render: (_, record) => (
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-            <span className="text-blue-600 font-semibold">
-              {record.name.charAt(0)}
-            </span>
-          </div>
-          <div>
-            <div className="font-medium">{record.name}</div>
-            <div className="text-gray-500 text-sm">{record.type}</div>
-          </div>
+      title: "Customer",
+      render: (_, r) => (
+        <div>
+          <div className="font-medium">{r.customerName}</div>
+          <div className="text-gray-500 text-sm">{r.customerType}</div>
         </div>
       ),
     },
     {
-      title: "Contact Info",
-      key: "contactInfo",
-      render: (_, record) => (
+      title: "Contact",
+      render: (_, r) => (
         <div>
-          <div>📞 {record.phone}</div>
-          <div>📧 {record.email || "N/A"}</div>
-          <div>📍 {record.address || "N/A"}</div>
-        </div>
-      ),
-    },
-    {
-      title: "Business Info",
-      key: "businessInfo",
-      render: (_, record) => (
-        <div>
-          <div>Contact: {record.contactPerson}</div>
-          <div>Bookings: {record.bookings}</div>
-          <div>Last: {record.lastBooking || "N/A"}</div>
-          {record.lastBooking && (
-            <Tooltip title="Contract Available">
-              <a href="#" className="text-blue-600">
-                📄 Contract Available
-              </a>
-            </Tooltip>
-          )}
+          <div>📞 {r.phone}</div>
+          <div>📧 {r.email || "N/A"}</div>
         </div>
       ),
     },
     {
       title: "Opening Balance",
-      dataIndex: "openingBalance",
       align: "right",
-      render: (val) => <span className="font-medium">$ {val}</span>,
-    },
-    {
-      title: "CR Amount",
-      dataIndex: "crAmount",
-      align: "right",
-      render: (val) => (
-        <span className="text-green-600 font-medium">$ {val}</span>
-      ),
-    },
-    {
-      title: "DR Amount",
-      dataIndex: "drAmount",
-      align: "right",
-      render: (val) => (
-        <span className="text-red-600 font-medium">$ {val}</span>
-      ),
+      render: (_, r) => `$ ${r.openingBalance}`,
     },
     {
       title: "Status",
-      dataIndex: "status",
-      key: "status",
-      filters: [
-        { text: "Active", value: true },
-        { text: "Inactive", value: false },
-      ],
-      filteredValue: filterType !== null ? [filterType] : null,
-      onFilter: (value, record) => record.status === value,
-      render: (status, record) => (
+      render: (_, r) => (
         <Switch
-          checked={status}
-          onChange={(checked) => handleStatusToggle(record.id, checked)}
-          checkedChildren="Active"
-          unCheckedChildren="Inactive"
+          checked={r.isActive}
+          onChange={(checked) => handleStatusToggle(r.id, checked)}
         />
       ),
     },
     {
       title: "Actions",
-      key: "actions",
-      width: 120,
-      fixed: "right",
-      render: (_, record) => (
-        <Space size="middle">
+      render: (_, r) => (
+        <Space>
           <Tooltip title="Edit">
             <Button
-              variant="link"
-              color="blue"
-              icon={<Edit className="w-4 h-4 text-blue-600" />}
-              onClick={() => showModal(record)}
+              icon={<Edit className="w-4 h-4" />}
+              onClick={() => showModal(r)}
             />
           </Tooltip>
           <Tooltip title="Delete">
             <Button
-              variant="link"
-              color="red"
-              icon={<Trash className="w-4 h-4 text-red-600" />}
-              onClick={() => handleDelete(record.id)}
+              danger
+              icon={<Trash className="w-4 h-4" />}
+              onClick={() => handleDelete(r.id)}
             />
           </Tooltip>
         </Space>
@@ -324,232 +284,169 @@ const CustomersPage = () => {
     },
   ];
 
-  const rowSelection = {
-    selectedRowKeys,
-    onChange: setSelectedRowKeys,
-  };
-
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-6">
-      {/* Stats Section */}
-      <div className="flex flex-wrap justify-between gap-3 mb-6">
-        <h1 className="text-2xl font-bold">Customers</h1>
-
-        <div className="flex gap-2">
-          <div className="flex items-center gap-4 mb-4">
-            <Input
-              placeholder="Search by name or contact person..."
-              prefix={<Search className="w-5 h-5 text-gray-400" />}
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              className="w-full sm:w-60"
-              allowClear={{
-                clearIcon: (
-                  <X
-                    onClick={() => setSearchText("")}
-                    className="w-4 h-4 text-gray-500"
-                  />
-                ),
-              }}
-            />
-
-            <Select
-              placeholder="All Types"
-              value={filterType}
-              onChange={setFilterType}
-              allowClear
-              className="w-32"
-            >
-              <Option value="Corporate">Corporate</Option>
-              <Option value="Individual">Individual</Option>
-            </Select>
-          </div>
-
-          <Button
-            type="primary"
-            icon={<Plus className="w-4 h-4" />}
-            onClick={showModal}
-            className="bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700"
-          >
-            Add New Customer
-          </Button>
-        </div>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white p-5 rounded-lg shadow flex items-center justify-between">
-          <div>
-            <div className="text-gray-500 text-sm font-medium">
-              Total Customers
-            </div>
-            <div className="text-3xl font-bold text-gray-800">
-              {customers.length}
-            </div>
-          </div>
-          <div className="flex items-center">
-            <User className="w-8 h-8 text-blue-600" />
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-lg shadow flex items-center justify-between">
-          <div>
-            <div className="text-gray-500 text-sm font-medium">
-              Total Receivables
-            </div>
-            <div className="text-3xl font-bold text-green-600">$</div>
-            <div className="text-gray-500 text-xs">Money customers owe us</div>
-          </div>
-          <div className="flex items-center">
-            <TrendingUp className="w-8 h-8 text-green-600" />
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-lg shadow flex items-center justify-between">
-          <div>
-            <div className="text-gray-500 text-sm font-medium">
-              Total Payables
-            </div>
-            <div className="text-3xl font-bold text-red-600">$</div>
-            <div className="text-gray-500 text-xs">Money we owe customers</div>
-          </div>
-          <div className="flex items-center">
-            <TrendingDown className="w-8 h-8 text-red-600" />
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-lg shadow flex items-center justify-between">
-          <div>
-            <div className="text-gray-500 text-sm font-medium">
-              Active Customers
-            </div>
-            <div className="text-3xl font-bold text-gray-800"></div>
-          </div>
-          <div className="flex items-center">
-            <CheckCircle className="w-8 h-8 text-green-600" />
-          </div>
-        </div>
-      </div>
-
-      {/* Controls and Table */}
-      <div className="bg-white p-5 rounded-xl shadow mb-6">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          <h2 className="text-lg font-semibold text-gray-800">
-            Customers List ({filteredData.length})
-          </h2>
-          {selectedRowKeys.length > 0 && (
-            <Button
-              danger
-              onClick={handleDeleteSelected}
-              icon={<Trash className="w-5 h-5 mr-2" />}
-              className="flex items-center"
-            >
-              Delete Selected
-            </Button>
-          )}
-        </div>
-
-        <Table
-          columns={columns}
-          dataSource={filteredData}
-          rowKey="id"
-          pagination={{ pageSize: 10, showQuickJumper: true }}
-          scroll={{ x: "max-content" }}
-          rowSelection={rowSelection}
-          className="mt-5 border-t"
-          bordered={false}
-        />
-      </div>
-
-      <Modal
-        title={isEditModal ? "Edit Customer" : "Add New Customer"}
-        open={isModalOpen}
-        onCancel={handleCancel}
-        footer={null}
-      >
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={handleSubmit}
-          className="space-y-4"
-          onValuesChange={handleFormValuesChange}
+    <div className="p-6 bg-gray-50 min-h-screen">
+      {/* Header */}
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-semibold">Customers</h1>
+        <Button
+          type="primary"
+          icon={<Plus className="w-4 h-4" />}
+          onClick={() => showModal()}
         >
-          <div className="grid grid-cols-2 gap-4 mb-0">
+          Add Customer
+        </Button>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+        <Card className="shadow-sm">
+          <div className="flex justify-between items-center">
+            <div>
+              <div className="text-gray-500 text-sm">Total Customers</div>
+              <div className="text-3xl font-bold">{totalCustomers}</div>
+            </div>
+            <Users className="w-10 h-10 text-blue-600" />
+          </div>
+        </Card>
+
+        <Card className="shadow-sm">
+          <div className="flex justify-between items-center">
+            <div>
+              <div className="text-gray-500 text-sm">Active Customers</div>
+              <div className="text-3xl font-bold">{activeCustomers}</div>
+            </div>
+            <CheckCircle className="w-10 h-10 text-green-600" />
+          </div>
+        </Card>
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap gap-4 mb-4 items-center">
+        <Input
+          placeholder="Search customers..."
+          prefix={<Search className="w-4 h-4" />}
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          allowClear={{
+            clearIcon: <X className="w-4 h-4" />,
+          }}
+          className="w-64"
+        />
+
+        <Select value={orderBy} onChange={setOrderBy} className="w-48">
+          <Option value="customerDate">Order by Customer Date</Option>
+          <Option value="createdAt">Order by Created At</Option>
+        </Select>
+
+        <Select value={orderDir} onChange={setOrderDir} className="w-40">
+          <Option value="desc">Descending</Option>
+          <Option value="asc">Ascending</Option>
+        </Select>
+      </div>
+
+      <Table
+        loading={loadingTable}
+        rowKey="id"
+        columns={columns}
+        dataSource={filteredData}
+        pagination={{ pageSize: 10 }}
+        className="bg-white rounded-lg shadow-sm"
+      />
+
+      {/* Modal */}
+      <Modal
+        title={
+          <div className="text-lg font-semibold">
+            {isEditModal ? "Edit Customer" : "Add New Customer"}
+          </div>
+        }
+        open={isModalOpen}
+        onCancel={() => setIsModalOpen(false)}
+        footer={null}
+        width={700}
+        centered
+      >
+        <Form layout="vertical" form={form} onFinish={handleSubmit}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Form.Item
-              label="Customer Name *"
               name="name"
-              style={{ marginBottom: "0px" }}
-              rules={[
-                { required: true, message: "Please enter customer name!" },
-              ]}
+              label="Customer Name"
+              rules={[{ required: true, message: "Customer name is required" }]}
             >
-              <Input placeholder="e.g., Bin Sheban Trading LLC" />
+              <Input placeholder="e.g. Bin Sheban Trading LLC" />
             </Form.Item>
 
             <Form.Item
-              label="Customer Type *"
               name="type"
-              rules={[{ required: true, message: "Select customer type!" }]}
+              label="Customer Type"
+              className="mb-[0px]"
+              rules={[{ required: true, message: "Select customer type" }]}
             >
-              <Select placeholder="Select customer type">
-                <Option value="Corporate">Corporate</Option>
-                <Option value="Individual">Individual</Option>
+              <Select placeholder="Select type">
+                <Option value="WALK_IN">Walk In</Option>
+                <Option value="CORPORATE">Corporate</Option>
               </Select>
             </Form.Item>
-          </div>
 
-          <div className="grid grid-cols-2 gap-4 mb-0">
             <Form.Item
-              label="Contact Person *"
               name="contactPerson"
-              rules={[{ required: true, message: "Enter contact person!" }]}
+              label="Contact Person"
+              rules={[
+                { required: true, message: "Contact person is required" },
+              ]}
             >
-              <Input placeholder="e.g., Ahmed Bin Sheban" />
+              <Input placeholder="e.g. Ahmed Bin Sheban" />
             </Form.Item>
 
+            {/* Phone */}
             <Form.Item
-              label="Phone *"
               name="phone"
-              rules={[{ required: true, message: "Enter phone number!" }]}
+              label="Phone"
+              rules={[{ required: true, message: "Phone number is required" }]}
             >
-              <Input placeholder="e.g., +971-50-123-4567" />
-            </Form.Item>
-          </div>
-          <div className="grid grid-cols-2 gap-4 mb-0">
-            <Form.Item label="Email (Optional)" name="email">
-              <Input placeholder="e.g., ahmed@binsheban.com" />
+              <Input placeholder="+971 50 123 4567" />
             </Form.Item>
 
-            <Form.Item label="Address (Optional)" name="address">
-              <Input placeholder="e.g., Dubai, UAE" />
+            <Form.Item name="email" label="Email" className="md:col-span-1">
+              <Input placeholder="example@email.com" />
             </Form.Item>
-          </div>
-          <div className="grid grid-cols-2 gap-4 mb-0">
-            <Form.Item label="Opening Balance ($)" name="openingBalance">
+            <Form.Item
+              name="customerDate"
+              label="Customer Date"
+              rules={[{ required: true, message: "Select customer date" }]}
+            >
+              <DatePicker className="w-full" />
+            </Form.Item>
+
+            <Form.Item name="address" label="Address" className="md:col-span-2">
+              <Input.TextArea rows={3} placeholder="Street, City, Country" />
+            </Form.Item>
+            <Form.Item name="openingBalance" label="Opening Balance">
               <Input type="number" placeholder="0.00" />
             </Form.Item>
 
-            <Form.Item label="Balance Type" name="balanceType">
-              <Select placeholder="Credit (CR)">
-                <Option value="Credit (CR)">Credit (CR)</Option>
-                <Option value="Debit (DR)">Debit (DR)</Option>
-              </Select>
+            <Form.Item
+              name="status"
+              label="Status"
+              valuePropName="checked"
+              className="md:col-span-1"
+            >
+              <Switch checkedChildren="Active" unCheckedChildren="Inactive" />
             </Form.Item>
           </div>
 
-          <Form.Item label="Status" name="status" valuePropName="checked">
-            <Switch checkedChildren="Active" unCheckedChildren="Inactive" />
-          </Form.Item>
-
-          <Form.Item>
+          <div className="flex justify-end gap-3 mt-6">
+            <Button onClick={() => setIsModalOpen(false)}>Cancel</Button>
             <Button
               type="primary"
               htmlType="submit"
-              loading={loading}
-              size="large"
-              className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
+              loading={loadingForm}
+              className="min-w-[120px]"
             >
               {isEditModal ? "Update Customer" : "Save Customer"}
             </Button>
-          </Form.Item>
+          </div>
         </Form>
       </Modal>
     </div>

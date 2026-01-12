@@ -78,10 +78,10 @@ export default function DetailedReportTab({
                   <TableHead>Airline</TableHead>
                   <TableHead>Customer</TableHead>
                   <TableHead>Agent</TableHead>
-                  <TableHead>Branch</TableHead>
+                  {/* <TableHead>Branch</TableHead>
                   <TableHead className="text-right">Net Price</TableHead>
                   <TableHead className="text-right">Sell Price</TableHead>
-                  <TableHead className="text-right">Profit</TableHead>
+                  <TableHead className="text-right">Profit</TableHead> */}
                   <TableHead>Payment</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Remarks</TableHead>
@@ -131,8 +131,8 @@ export default function DetailedReportTab({
                       </TableCell>
                       <TableCell>{sale.customer}</TableCell>
                       <TableCell>{sale.agent}</TableCell>
-                      <TableCell>{sale.branch}</TableCell>
-                      <TableCell className="text-right ">
+                      {/* <TableCell>{sale.branch}</TableCell> */}
+                      {/* <TableCell className="text-right ">
                         <div className="flex items-center justify-end gap-1">
                           <SaudiRiyal size={15} />
                           {sale.netPrice.toFixed(2)}
@@ -149,7 +149,7 @@ export default function DetailedReportTab({
                           <SaudiRiyal size={15} />
                           {sale.profit.toFixed(2)}
                         </div>
-                      </TableCell>
+                      </TableCell> */}
                       <TableCell>{sale.paymentMethod}</TableCell>
                       <TableCell>
                         <Badge

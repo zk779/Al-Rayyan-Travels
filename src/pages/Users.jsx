@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Users, Shield, UserCheck, Building2 } from "lucide-react";
 import {
   Card,
@@ -12,177 +12,138 @@ import {
   TabsList,
   TabsTrigger,
 } from "../../shadcn/components/ui/tabs";
+
 import UsersTab from "../components/Users-tab";
 import RolesTab from "../components/Roles-tab";
 import BranchesTab from "../components/Branches-tab";
 
-// Mock data
-export const initialRoles = [
-  {
-    id: "1",
-    name: "Admin",
-    description: "Full system access with all permissions",
-    permissions: ["read", "write", "delete", "manage_users", "manage_roles"],
-    userCount: 2,
-    createdAt: "2024-01-15",
-  },
-  {
-    id: "2",
-    name: "Manager",
-    description: "Management level access with limited admin permissions",
-    permissions: ["read", "write", "manage_bookings"],
-    userCount: 5,
-    createdAt: "2024-01-20",
-  },
-  {
-    id: "3",
-    name: "Agent",
-    description: "Standard user access for booking and customer management",
-    permissions: ["read", "write"],
-    userCount: 12,
-    createdAt: "2024-02-01",
-  },
-  {
-    id: "4",
-    name: "Viewer",
-    description: "Read-only access to system data",
-    permissions: ["read"],
-    userCount: 3,
-    createdAt: "2024-02-10",
-  },
-];
+const API_BASE = import.meta.env.VITE_API_BASE_URL; // http://localhost:5000
 
-export const initialUsers = [
-  {
-    id: "1",
-    name: "John Smith",
-    email: "john.smith@alrayyan.com",
-    role: "Admin",
-    status: "Active",
-    phone: "+1 234 567 8901",
-    department: "IT",
-    lastLogin: "2024-03-15 10:30 AM",
-    createdAt: "2024-01-15",
-  },
-  {
-    id: "2",
-    name: "Sarah Johnson",
-    email: "sarah.johnson@alrayyan.com",
-    role: "Manager",
-    status: "Active",
-    phone: "+1 234 567 8902",
-    department: "Sales",
-    lastLogin: "2024-03-15 09:15 AM",
-    createdAt: "2024-01-20",
-  },
-  {
-    id: "3",
-    name: "Mike Wilson",
-    email: "mike.wilson@alrayyan.com",
-    role: "Agent",
-    status: "Active",
-    phone: "+1 234 567 8903",
-    department: "Customer Service",
-    lastLogin: "2024-03-14 04:45 PM",
-    createdAt: "2024-02-01",
-  },
-  {
-    id: "4",
-    name: "Emily Davis",
-    email: "emily.davis@alrayyan.com",
-    role: "Agent",
-    status: "Inactive",
-    phone: "+1 234 567 8904",
-    department: "Bookings",
-    lastLogin: "2024-03-10 02:20 PM",
-    createdAt: "2024-02-05",
-  },
-  {
-    id: "5",
-    name: "David Brown",
-    email: "david.brown@alrayyan.com",
-    role: "Viewer",
-    status: "Active",
-    phone: "+1 234 567 8905",
-    department: "Finance",
-    lastLogin: "2024-03-15 08:00 AM",
-    createdAt: "2024-02-10",
-  },
-];
+async function fetchJSON(url, token) {
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
 
-export const initialBranches = [
-  {
-    id: "1",
-    name: "Main Branch",
-    code: "MB001",
-    address: "123 Business District, Downtown",
-    city: "New York",
-    country: "USA",
-    phone: "+1 555 123 4567",
-    email: "main@alrayyan.com",
-    manager: "Sarah Johnson",
-    status: "Active",
-    employeeCount: 25,
-    createdAt: "2024-01-10",
-  },
-  {
-    id: "2",
-    name: "Airport Branch",
-    code: "AB002",
-    address: "Terminal 1, JFK Airport",
-    city: "New York",
-    country: "USA",
-    phone: "+1 555 234 5678",
-    email: "airport@alrayyan.com",
-    manager: "Mike Wilson",
-    status: "Active",
-    employeeCount: 15,
-    createdAt: "2024-01-15",
-  },
-  {
-    id: "3",
-    name: "Mall Branch",
-    code: "ML003",
-    address: "Level 2, Central Mall",
-    city: "Los Angeles",
-    country: "USA",
-    phone: "+1 555 345 6789",
-    email: "mall@alrayyan.com",
-    manager: "Emily Davis",
-    status: "Active",
-    employeeCount: 12,
-    createdAt: "2024-02-01",
-  },
-  {
-    id: "4",
-    name: "Downtown Branch",
-    code: "DT004",
-    address: "456 Main Street",
-    city: "Chicago",
-    country: "USA",
-    phone: "+1 555 456 7890",
-    email: "downtown@alrayyan.com",
-    manager: "David Brown",
-    status: "Inactive",
-    employeeCount: 8,
-    createdAt: "2024-02-10",
-  },
-];
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    throw new Error(data?.error || data?.message || "Request failed");
+  }
+  return data;
+}
 
 export default function UsersMain() {
   const [activeTab, setActiveTab] = useState("users");
-  const [users, setUsers] = useState(initialUsers);
-  const [roles, setRoles] = useState(initialRoles);
-  const [branches, setBranches] = useState(initialBranches);
 
-  // Calculate statistics
+  const [users, setUsers] = useState([]);
+  const [roles, setRoles] = useState([]);
+  const [branches, setBranches] = useState([]);
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const token = useMemo(() => localStorage.getItem("token"), []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadAll() {
+      try {
+        setLoading(true);
+        setError("");
+
+        const [usersRes, rolesRes, branchesRes] = await Promise.all([
+          fetchJSON(`${API_BASE}/api/users`, token),
+          fetchJSON(`${API_BASE}/api/roles`, token),
+          fetchJSON(`${API_BASE}/api/branches`, token),
+        ]);
+
+        // ✅ expecting: { success: true, data: [...] }
+        const usersData = usersRes?.data ?? [];
+        const rolesData = rolesRes?.data ?? [];
+        const branchesData = branchesRes?.data ?? [];
+
+        // Optional: normalize fields if backend uses different keys
+        const normalizedUsers = usersData.map((u) => ({
+          id: u.id,
+          name: u.fullName ?? u.name ?? "",
+          email: u.email ?? "",
+          role: u.role?.name ?? u.role ?? "", // depends on backend
+          status: u.isActive ? "Active" : "Inactive",
+          phone: u.phone ?? "",
+          department: u.department ?? "",
+          lastLogin: u.lastLogin ?? "",
+          createdAt: u.createdAt ?? "",
+        }));
+
+        const normalizedRoles = rolesData.map((r) => ({
+          id: r.id,
+          name: r.name,
+          description: r.description ?? "",
+          permissions: r.permissions ?? [], // if you return them
+          userCount: r.userCount ?? 0, // if backend returns
+          createdAt: r.createdAt ?? "",
+        }));
+
+        const normalizedBranches = branchesData.map((b) => ({
+          id: b.id,
+          name: b.name,
+          code: b.code ?? "",
+          address: b.address ?? "",
+          city: b.city ?? "",
+          country: b.country ?? "",
+          phone: b.phone ?? "",
+          email: b.email ?? "",
+          manager: b.manager ?? "",
+          status: b.isActive === false ? "Inactive" : "Active",
+          employeeCount: b.employeeCount ?? 0,
+          createdAt: b.createdAt ?? "",
+        }));
+
+        if (!isMounted) return;
+        setUsers(normalizedUsers);
+        setRoles(normalizedRoles);
+        setBranches(normalizedBranches);
+      } catch (err) {
+        if (!isMounted) return;
+        setError(err?.message || "Failed to load data");
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
+    loadAll();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [token]);
+
+  // ✅ stats
   const totalUsers = users.length;
   const totalRoles = roles.length;
-  const activeUsers = users.filter((user) => user.status === "Active").length;
+  const activeUsers = users.filter((u) => u.status === "Active").length;
   const totalBranches = branches.length;
 
   return (
-    <div className="w-full max-w-7xl mx-auto p-6 space-y-6">
+    <div className="w-full mx-auto p-6 space-y-6">
+      {/* Loading / Error */}
+      {loading ? (
+        <div className="rounded-xl border bg-white p-4 text-sm text-gray-600">
+          Loading users, roles & branches...
+        </div>
+      ) : null}
+
+      {error ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {error}
+        </div>
+      ) : null}
+
       {/* Statistics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <Card>
@@ -250,6 +211,7 @@ export default function UsersMain() {
             Management System
           </CardTitle>
         </CardHeader>
+
         <CardContent>
           <Tabs
             value={activeTab}
@@ -263,7 +225,12 @@ export default function UsersMain() {
             </TabsList>
 
             <TabsContent value="users">
-              <UsersTab users={users} setUsers={setUsers} roles={roles} />
+              <UsersTab
+                users={users}
+                setUsers={setUsers}
+                roles={roles}
+                branches={branches}
+              />
             </TabsContent>
 
             <TabsContent value="roles">

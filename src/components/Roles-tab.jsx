@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Search, Trash2, ShieldCheck, Edit, Shield } from "lucide-react";
 import { Button } from "../../shadcn/components/ui/button";
 import { Input } from "../../shadcn/components/ui/input";
@@ -32,61 +32,217 @@ import {
 } from "../../shadcn/components/ui/alert-dialog";
 import { Textarea } from "../../shadcn/components/ui/textarea";
 
-const availablePermissions = [
-  "Sales",
-  "Vendors",
-  "Customers",
-  "Airline Codes",
-  "Dashboard",
-  "Users",
-  "Reports",
-  "Ledger",
+const API_BASE = import.meta.env.VITE_API_BASE_URL; // e.g. http://localhost:5000
+
+async function apiRequest(path, { method = "GET", body } = {}) {
+  const token = localStorage.getItem("token");
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers: {
+      ...(body ? { "Content-Type": "application/json" } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data?.success === false) {
+    throw new Error(data?.error || data?.message || "Request failed");
+  }
+  return data;
+}
+
+const MODULE_LABEL = {
+  CUSTOMER: "Customers",
+  VENDOR: "Vendors",
+  AIRLINE: "Airlines",
+  SALE: "Sales",
+  PAYMENT: "Payments",
+  REFUND: "Refunds",
+  EXPENSE: "Expenses",
+  USER: "Users",
+  ROLE: "Roles",
+  BRANCH: "Branches",
+  LEDGER: "Ledger",
+  REPORT: "Report",
+};
+
+const MODULE_ORDER = [
+  "CUSTOMER",
+  "VENDOR",
+  "AIRLINE",
+  "SALE",
+  "PAYMENT",
+  "REFUND",
+  "EXPENSE",
+  "USER",
+  "ROLE",
+  "BRANCH",
+  "LEDGER",
+  "REPORT",
 ];
 
-export default function RolesTab({ roles, setRoles }) {
+export default function RolesTab() {
+  const [roles, setRoles] = useState([]);
   const [selectedRoles, setSelectedRoles] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
+
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+
   const [editingRole, setEditingRole] = useState(null);
   const [deleteRoleId, setDeleteRoleId] = useState(null);
 
+  // permissions from API: [{id, permission, description}]
+  const [permissions, setPermissions] = useState([]);
+  const [permLoading, setPermLoading] = useState(false);
+  const [rolesLoading, setRolesLoading] = useState(false);
+
+  // ✅ roleForm.permissions now stores permissionIds (NOT names)
   const [roleForm, setRoleForm] = useState({
     name: "",
     description: "",
-    permissions: [],
+    permissions: [], // permissionIds
   });
 
-  // Filter roles
-  const filteredRoles = roles.filter(
-    (role) =>
-      role.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      role.description.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // ----- helpers for mapping between permission name <-> id -----
+  const permIdByKey = useMemo(() => {
+    const m = {};
+    for (const p of permissions) m[p.permission] = p.id;
+    return m;
+  }, [permissions]);
 
-  const handleSelectAll = (checked) => {
-    setSelectedRoles(checked ? filteredRoles.map((role) => role.id) : []);
-  };
+  const permKeyById = useMemo(() => {
+    const m = {};
+    for (const p of permissions) m[p.id] = p.permission;
+    return m;
+  }, [permissions]);
 
-  const handleSelectRole = (roleId, checked) => {
-    setSelectedRoles(
-      checked
-        ? [...selectedRoles, roleId]
-        : selectedRoles.filter((id) => id !== roleId)
-    );
-  };
+  const normalizeRole = (r) => {
+    // supports multiple backend shapes, but final output must be permissionIds
+    const idsFromDirect =
+      r?.permissionIds || r?.permissionsIds || r?.permissions; // if backend already returns ids in permissions
+    const idsFromLinks =
+      r?.permissionLinks?.map((x) => x?.permissionId).filter(Boolean) || [];
+    const keysFromLinks =
+      r?.permissionLinks
+        ?.map((x) => x?.permission?.permission || x?.permission?.name)
+        .filter(Boolean) || [];
+    const keysFromOther =
+      r?.permissionKeys || r?.permissionNames || r?.permissionKeys || [];
 
-  const handleAddRole = () => {
-    const newRole = {
-      id: Date.now().toString(),
-      ...roleForm,
-      userCount: 0,
-      createdAt: new Date().toISOString().split("T")[0],
+    let permissionIds = [];
+
+    if (Array.isArray(idsFromDirect) && idsFromDirect.length) {
+      // if it looks like ObjectId strings, accept
+      permissionIds = idsFromDirect.filter(Boolean);
+    } else if (idsFromLinks.length) {
+      permissionIds = idsFromLinks;
+    } else if (keysFromLinks.length) {
+      permissionIds = keysFromLinks.map((k) => permIdByKey[k]).filter(Boolean);
+    } else if (Array.isArray(keysFromOther) && keysFromOther.length) {
+      permissionIds = keysFromOther.map((k) => permIdByKey[k]).filter(Boolean);
+    }
+
+    const usersCount = Array.isArray(r?.users)
+      ? r.users.length
+      : r?.usersCount ?? r?.userCount ?? 0;
+
+    return {
+      id: r.id,
+      name: r.name || "",
+      description: r.description || "",
+      permissions: permissionIds, // ✅ store ids
+      userCount: usersCount,
+      createdAt: r.createdAt || new Date().toISOString(),
     };
-    setRoles([...roles, newRole]);
+  };
+
+  const refreshRoles = async () => {
+    setRolesLoading(true);
+    try {
+      const res = await apiRequest("/api/roles");
+      setRoles((res?.data || []).map(normalizeRole));
+    } finally {
+      setRolesLoading(false);
+    }
+  };
+
+  // fetch permissions first (so role normalization can map keys -> ids safely)
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        setPermLoading(true);
+        const res = await apiRequest("/api/permissions");
+        if (!mounted) return;
+        setPermissions(res?.data || []);
+      } catch (e) {
+        console.error("Failed to fetch permissions:", e.message);
+      } finally {
+        setPermLoading(false);
+      }
+    })();
+    return () => (mounted = false);
+  }, []);
+
+  // fetch roles (and re-normalize when permissions load)
+  useEffect(() => {
+    refreshRoles().catch((e) =>
+      console.error("Failed to fetch roles:", e.message)
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // when permissions arrive, re-normalize roles to ensure we have ids
+  useEffect(() => {
+    if (!permissions.length || !roles.length) return;
+    setRoles((prev) => prev.map((r) => normalizeRole(r)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [permissions.length]);
+
+  // build permissionMap: module => { READ: permissionId, CREATE: permissionId, ... }
+  const permissionMap = useMemo(() => {
+    const map = {};
+    for (const p of permissions) {
+      const key = p.permission; // e.g. CUSTOMER_CREATE
+      const [module, action] = (key || "").split("_");
+      if (!module || !action) continue;
+      map[module] ||= {};
+      map[module][action] = p.id; // ✅ store id
+    }
+    return map;
+  }, [permissions]);
+
+  const groupedModules = useMemo(() => {
+    const modules = Object.keys(permissionMap);
+    modules.sort((a, b) => MODULE_ORDER.indexOf(a) - MODULE_ORDER.indexOf(b));
+    return modules;
+  }, [permissionMap]);
+
+  const filteredRoles = useMemo(() => {
+    const q = searchQuery.toLowerCase();
+    return roles.filter(
+      (r) =>
+        (r.name || "").toLowerCase().includes(q) ||
+        (r.description || "").toLowerCase().includes(q)
+    );
+  }, [roles, searchQuery]);
+
+  const handleSelectAll = (checked) =>
+    setSelectedRoles(checked ? filteredRoles.map((r) => r.id) : []);
+
+  const handleSelectRole = (roleId, checked) =>
+    setSelectedRoles((prev) =>
+      checked ? [...prev, roleId] : prev.filter((id) => id !== roleId)
+    );
+
+  const openAdd = () => {
+    setEditingRole(null);
     setRoleForm({ name: "", description: "", permissions: [] });
-    setIsAddDialogOpen(false);
+    setIsAddDialogOpen(true);
   };
 
   const handleEditRole = (role) => {
@@ -94,20 +250,57 @@ export default function RolesTab({ roles, setRoles }) {
     setRoleForm({
       name: role.name,
       description: role.description,
-      permissions: role.permissions,
+      permissions: role.permissions || [], // ✅ ids
     });
     setIsEditDialogOpen(true);
   };
 
-  const handleUpdateRole = () => {
-    setRoles(
-      roles.map((role) =>
-        role.id === editingRole.id ? { ...role, ...roleForm } : role
-      )
-    );
-    setEditingRole(null);
-    setRoleForm({ name: "", description: "", permissions: [] });
-    setIsEditDialogOpen(false);
+  const togglePermissionId = (permId) => {
+    setRoleForm((prev) => ({
+      ...prev,
+      permissions: prev.permissions.includes(permId)
+        ? prev.permissions.filter((id) => id !== permId)
+        : [...prev.permissions, permId],
+    }));
+  };
+
+  const handleAddRole = async () => {
+    try {
+      await apiRequest("/api/roles", {
+        method: "POST",
+        body: {
+          name: roleForm.name,
+          description: roleForm.description,
+          permissionIds: roleForm.permissions, // ✅ required payload
+        },
+      });
+      setIsAddDialogOpen(false);
+      setRoleForm({ name: "", description: "", permissions: [] });
+      await refreshRoles();
+    } catch (e) {
+      console.error("Create role failed:", e.message);
+      alert(e.message);
+    }
+  };
+
+  const handleUpdateRole = async () => {
+    try {
+      await apiRequest(`/api/roles/${editingRole.id}`, {
+        method: "PUT",
+        body: {
+          name: roleForm.name,
+          description: roleForm.description,
+          permissionIds: roleForm.permissions, // ✅ required payload
+        },
+      });
+      setIsEditDialogOpen(false);
+      setEditingRole(null);
+      setRoleForm({ name: "", description: "", permissions: [] });
+      await refreshRoles();
+    } catch (e) {
+      console.error("Update role failed:", e.message);
+      alert(e.message);
+    }
   };
 
   const handleDelete = (id) => {
@@ -115,33 +308,160 @@ export default function RolesTab({ roles, setRoles }) {
     setIsDeleteDialogOpen(true);
   };
 
-  const confirmDelete = () => {
-    setRoles(roles.filter((role) => role.id !== deleteRoleId));
-    setSelectedRoles(selectedRoles.filter((id) => id !== deleteRoleId));
-    setDeleteRoleId(null);
-    setIsDeleteDialogOpen(false);
+  const confirmDelete = async () => {
+    try {
+      await apiRequest(`/api/roles/${deleteRoleId}`, { method: "DELETE" });
+      setSelectedRoles((prev) => prev.filter((id) => id !== deleteRoleId));
+      setDeleteRoleId(null);
+      setIsDeleteDialogOpen(false);
+      await refreshRoles();
+    } catch (e) {
+      console.error("Delete role failed:", e.message);
+      alert(e.message);
+    }
   };
 
-  const handleBulkDelete = () => {
-    setRoles(roles.filter((role) => !selectedRoles.includes(role.id)));
-    setSelectedRoles([]);
+  const handleBulkDelete = async () => {
+    try {
+      await Promise.all(
+        selectedRoles.map((id) =>
+          apiRequest(`/api/roles/${id}`, { method: "DELETE" })
+        )
+      );
+      setSelectedRoles([]);
+      await refreshRoles();
+    } catch (e) {
+      console.error("Bulk delete failed:", e.message);
+      alert(e.message);
+    }
   };
 
-  const togglePermission = (permission) => {
-    setRoleForm({
-      ...roleForm,
-      permissions: roleForm.permissions.includes(permission)
-        ? roleForm.permissions.filter((p) => p !== permission)
-        : [...roleForm.permissions, permission],
-    });
-  };
+  const prettyPermKey = (key) =>
+    (key || "")
+      .split("_")
+      .map((x) => x.charAt(0) + x.slice(1).toLowerCase())
+      .join(" ");
+
+  const PermissionsMatrix = () => (
+    <div className="space-y-3">
+      <Label>Permissions</Label>
+
+      {permLoading ? (
+        <div className="text-sm text-muted-foreground">
+          Loading permissions...
+        </div>
+      ) : groupedModules.length === 0 ? (
+        <div className="text-sm text-muted-foreground">
+          No permissions found.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {groupedModules.map((module) => {
+            const row = permissionMap[module] || {};
+            const title = MODULE_LABEL[module] || module;
+
+            const Action = ({ action, label }) => {
+              const permId = row[action]; // ✅ permissionId
+              const disabled = !permId;
+              const checked = permId
+                ? roleForm.permissions.includes(permId)
+                : false;
+
+              const toggle = () => {
+                if (disabled) return;
+                togglePermissionId(permId);
+              };
+
+              return (
+                <button
+                  type="button"
+                  title={label}
+                  disabled={disabled}
+                  onClick={toggle}
+                  className={[
+                    "w-full flex items-center justify-center gap-2",
+                    "rounded-xl px-2 py-2 transition",
+                    "bg-background",
+                    disabled
+                      ? "opacity-35 cursor-not-allowed"
+                      : "hover:bg-muted/50 active:scale-[0.99]",
+                    checked && !disabled
+                      ? "border-primary/40 ring-1 ring-primary/20"
+                      : "border-border",
+                  ].join(" ")}
+                >
+                  <Checkbox
+                    checked={checked}
+                    disabled={disabled}
+                    className="h-4 w-4"
+                  />
+                </button>
+              );
+            };
+
+            return (
+              <div
+                key={module}
+                className="rounded-2xl border bg-white p-4 shadow-sm"
+              >
+                <div className="text-base font-semibold">{title}</div>
+
+                <div className="mt-3 grid grid-cols-4 gap-2">
+                  <Action action="READ" label="View" />
+                  <Action action="CREATE" label="Create" />
+                  <Action action="EDIT" label="Edit" />
+                  <Action action="DELETE" label="Delete" />
+                </div>
+
+                <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
+                  <span>V</span>
+                  <span>C</span>
+                  <span>E</span>
+                  <span>D</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
+  // ✅ plain JSX (prevents focus loss)
+  const roleDialogBody = (
+    <div className="space-y-4 py-4">
+      <div className="space-y-2">
+        <Label>Role Name</Label>
+        <Input
+          placeholder="e.g., Manager"
+          value={roleForm.name}
+          onChange={(e) =>
+            setRoleForm((prev) => ({ ...prev, name: e.target.value }))
+          }
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label>Description</Label>
+        <Textarea
+          placeholder="Describe the role and its responsibilities..."
+          value={roleForm.description}
+          onChange={(e) =>
+            setRoleForm((prev) => ({ ...prev, description: e.target.value }))
+          }
+        />
+      </div>
+
+      <PermissionsMatrix />
+    </div>
+  );
 
   return (
     <div className="space-y-6">
       {/* Header Actions */}
       <div className="flex flex-col sm:flex-row gap-4 justify-between">
         <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
           <Input
             placeholder="Search roles..."
             value={searchQuery}
@@ -157,65 +477,26 @@ export default function RolesTab({ roles, setRoles }) {
               Delete Selected ({selectedRoles.length})
             </Button>
           )}
+
+          {/* Add Role */}
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
-              <Button variant="app">
+              <Button variant="app" onClick={openAdd}>
                 <ShieldCheck className="h-4 w-4 mr-2" />
                 Add Role
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-lg">
+
+            <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto  scrollbar-none">
               <DialogHeader>
                 <DialogTitle>Add New Role</DialogTitle>
                 <DialogDescription>
                   Create a new user role with specific permissions.
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label>Role Name</Label>
-                  <Input
-                    placeholder="e.g., Manager"
-                    value={roleForm.name}
-                    onChange={(e) =>
-                      setRoleForm({ ...roleForm, name: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Description</Label>
-                  <Textarea
-                    placeholder="Describe the role and its responsibilities..."
-                    value={roleForm.description}
-                    onChange={(e) =>
-                      setRoleForm({ ...roleForm, description: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Permissions</Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {availablePermissions.map((permission) => (
-                      <div
-                        key={permission}
-                        className="flex items-center space-x-2"
-                      >
-                        <Checkbox
-                          id={permission}
-                          checked={roleForm.permissions.includes(permission)}
-                          onCheckedChange={() => togglePermission(permission)}
-                        />
-                        <Label
-                          htmlFor={permission}
-                          className="text-sm capitalize"
-                        >
-                          {permission.replace("_", " ")}
-                        </Label>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
+
+              {roleDialogBody}
+
               <DialogFooter>
                 <Button
                   variant="outline"
@@ -224,7 +505,7 @@ export default function RolesTab({ roles, setRoles }) {
                   Cancel
                 </Button>
                 <Button
-                  variant={"app"}
+                  variant="app"
                   onClick={handleAddRole}
                   disabled={
                     !roleForm.name ||
@@ -263,7 +544,9 @@ export default function RolesTab({ roles, setRoles }) {
       )}
 
       {/* Roles Cards Grid */}
-      {filteredRoles.length === 0 ? (
+      {rolesLoading ? (
+        <div className="text-sm text-muted-foreground">Loading roles...</div>
+      ) : filteredRoles.length === 0 ? (
         <div className="text-center py-12">
           <Shield className="h-12 w-12 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">
@@ -299,6 +582,7 @@ export default function RolesTab({ roles, setRoles }) {
                       </p>
                     </div>
                   </div>
+
                   <div className="flex items-center gap-1">
                     <Button
                       variant="ghost"
@@ -308,6 +592,7 @@ export default function RolesTab({ roles, setRoles }) {
                     >
                       <Edit className="h-4 w-4 text-gray-500" />
                     </Button>
+
                     <Button
                       variant="ghost"
                       size="sm"
@@ -319,6 +604,7 @@ export default function RolesTab({ roles, setRoles }) {
                   </div>
                 </div>
               </CardHeader>
+
               <CardContent className="pt-0">
                 <div className="space-y-4">
                   <div>
@@ -326,17 +612,18 @@ export default function RolesTab({ roles, setRoles }) {
                       Permissions:
                     </h4>
                     <div className="flex flex-wrap gap-2">
-                      {role.permissions.map((permission) => (
-                        <Badge
-                          key={permission}
-                          variant="app"
-                          className="text-xs px-2 py-1"
-                        >
-                          {permission
-                            .replace("_", " ")
-                            .replace(/\b\w/g, (l) => l.toUpperCase())}
-                        </Badge>
-                      ))}
+                      {(role.permissions || []).map((permId) => {
+                        const key = permKeyById[permId] || permId; // show key if available
+                        return (
+                          <Badge
+                            key={permId}
+                            variant="app"
+                            className="text-xs px-2 py-1"
+                          >
+                            {prettyPermKey(key)}
+                          </Badge>
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -367,53 +654,16 @@ export default function RolesTab({ roles, setRoles }) {
 
       {/* Edit Role Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Role</DialogTitle>
             <DialogDescription>
               Update role information and permissions.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Role Name</Label>
-              <Input
-                value={roleForm.name}
-                onChange={(e) =>
-                  setRoleForm({ ...roleForm, name: e.target.value })
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Description</Label>
-              <Textarea
-                value={roleForm.description}
-                onChange={(e) =>
-                  setRoleForm({ ...roleForm, description: e.target.value })
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Permissions</Label>
-              <div className="grid grid-cols-2 gap-2">
-                {availablePermissions.map((permission) => (
-                  <div key={permission} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={`edit-${permission}`}
-                      checked={roleForm.permissions.includes(permission)}
-                      onCheckedChange={() => togglePermission(permission)}
-                    />
-                    <Label
-                      htmlFor={`edit-${permission}`}
-                      className="text-sm capitalize"
-                    >
-                      {permission.replace("_", " ")}
-                    </Label>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+
+          {roleDialogBody}
+
           <DialogFooter>
             <Button
               variant="outline"
@@ -421,7 +671,11 @@ export default function RolesTab({ roles, setRoles }) {
             >
               Cancel
             </Button>
-            <Button variant={"app"} onClick={handleUpdateRole}>
+            <Button
+              variant="app"
+              onClick={handleUpdateRole}
+              disabled={!editingRole}
+            >
               Update Role
             </Button>
           </DialogFooter>
