@@ -24,6 +24,7 @@ import { Table, Tabs } from "antd";
 import PieChartComponent from "../components/PieChart";
 import LineChartComponent from "../components/LineChartComponent";
 import LiveDateTime from "../components/liveclock";
+import Tooltip from "../components/sampleBtn";
 
 const Dashboard = () => {
   const location = useLocation();

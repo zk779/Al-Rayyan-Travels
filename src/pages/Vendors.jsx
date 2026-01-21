@@ -314,20 +314,20 @@ const VendorsPage = () => {
       render: (value) => `$${Number(value || 0)}`,
     },
     {
-      title: "CR Amount",
-      dataIndex: "crAmount",
-      key: "crAmount",
-      render: (value) => (
-        <span className="text-green-600">${Number(value || 0)}</span>
-      ),
-    },
-    {
-      title: "DR Amount",
-      dataIndex: "drAmount",
-      key: "drAmount",
-      render: (value) => (
-        <span className="text-red-600">${Number(value || 0)}</span>
-      ),
+      title: "Type",
+      dataIndex: "_category",
+      key: "_category",
+      render: (value) => {
+        const label =
+          value === "DEBIT"
+            ? "Debit (DR)"
+            : value === "CREDIT"
+            ? "Credit (CR)"
+            : value || "-";
+        const colorClass =
+          value === "DEBIT" ? "text-red-600" : "text-green-600";
+        return <span className={colorClass}>{label}</span>;
+      },
     },
     {
       title: "Current Balance",
@@ -559,17 +559,17 @@ const VendorsPage = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-0">
             <Form.Item
-              label="Email *"
+              label="Email "
               name="email"
-              rules={[{ required: true, message: "Enter email!" }]}
+              rules={[{ required: false, message: "Enter email!" }]}
             >
               <Input placeholder="Enter email address" />
             </Form.Item>
 
             <Form.Item
-              label="Address *"
+              label="Address"
               name="location"
-              rules={[{ required: true, message: "Enter address!" }]}
+              rules={[{ required: false, message: "Enter address!" }]}
             >
               <Input placeholder="Enter address" />
             </Form.Item>

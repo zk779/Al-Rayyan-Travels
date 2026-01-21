@@ -1,20 +1,41 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Table,
-  Modal,
-  Button,
-  Input,
-  Form,
-  Switch,
-  message,
-  Space,
-  Select,
-  Tooltip,
-  Card,
-  DatePicker,
+	Table,
+	Modal,
+	Button,
+	Input,
+	Form,
+	Switch,
+	message,
+	Space,
+	Select,
+	Tooltip,
+	Card,
+	DatePicker,
+	Tag,
+	Empty,
+	Badge,
 } from "antd";
 import dayjs from "dayjs";
-import { Edit, Trash, Plus, Search, X, Users, CheckCircle } from "lucide-react";
+import {
+	Edit,
+	Trash,
+	Plus,
+	Search,
+	X,
+	Users,
+	CheckCircle,
+	UserX,
+	Building2,
+	Mail,
+	Phone,
+	MapPin,
+	Calendar,
+	DollarSign,
+	Filter,
+	TrendingUp,
+	UserCheck,
+} from "lucide-react";
 
 const { Option } = Select;
 
@@ -22,435 +43,750 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL;
 const API_URL = `${API_BASE}/api/customers`;
 
 const CustomersPage = () => {
-  const [customers, setCustomers] = useState([]);
-  const [loadingTable, setLoadingTable] = useState(false);
-  const [loadingForm, setLoadingForm] = useState(false);
+	const [customers, setCustomers] = useState([]);
+	const [loadingTable, setLoadingTable] = useState(false);
+	const [loadingForm, setLoadingForm] = useState(false);
+	const [deletingId, setDeletingId] = useState(null);
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isEditModal, setIsEditModal] = useState(false);
-  const [currentCustomer, setCurrentCustomer] = useState(null);
+	const [isModalOpen, setIsModalOpen] = useState(false);
+	const [isEditModal, setIsEditModal] = useState(false);
+	const [currentCustomer, setCurrentCustomer] = useState(null);
 
-  const [searchText, setSearchText] = useState("");
-  const [filterType, setFilterType] = useState(null);
+	const [searchText, setSearchText] = useState("");
+	const [filterType, setFilterType] = useState(null);
+	const [filterStatus, setFilterStatus] = useState(null);
 
-  // ✅ NEW: ordering states
-  const [orderBy, setOrderBy] = useState("customerDate");
-  const [orderDir, setOrderDir] = useState("desc");
+	const [orderBy, setOrderBy] = useState("customerDate");
+	const [orderDir, setOrderDir] = useState("desc");
 
-  const [form] = Form.useForm();
-  const token = localStorage.getItem("token");
+	const [form] = Form.useForm();
+	const token = localStorage.getItem("token");
 
-  /* =========================
-     🔗 BACKEND API CALLS
-  ========================= */
+	/* =========================
+	🔗 BACKEND API CALLS
+	========================= */
 
-  const loadCustomers = async () => {
-    setLoadingTable(true);
-    try {
-      const query = new URLSearchParams({
-        orderBy,
-        orderDir,
-      }).toString();
+		const loadCustomers = async () => {
+			setLoadingTable(true);
+			try {
+				const query = new URLSearchParams({
+					orderBy,
+					orderDir,
+				}).toString();
 
-      const res = await fetch(`${API_URL}?${query}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      if (!res.ok) throw new Error();
-      const json = await res.json();
-      setCustomers(json.data || []);
-    } catch {
-      message.error("Failed to load customers");
-    } finally {
-      setLoadingTable(false);
-    }
-  };
+				const res = await fetch(`${API_URL}?${query}`, {
+					headers: {
+						Authorization: `Bearer ${token}`,
+					},
+				});
+				if (!res.ok) throw new Error("Failed to fetch customers");
+				const json = await res.json();
+				setCustomers(json.data || []);
+			} catch (error) {
+				message.error("Failed to load customers");
+				console.error(error);
+			} finally {
+				setLoadingTable(false);
+			}
+		};
 
-  const createCustomer = async (payload) => {
-    const res = await fetch(API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) throw new Error();
-  };
+		const createCustomer = async (payload) => {
+			const res = await fetch(API_URL, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${token}`,
+				},
+				body: JSON.stringify(payload),
+			});
+			if (!res.ok) {
+				const error = await res.json();
+				throw new Error(error.message || "Failed to create customer");
+			}
+			return res.json();
+		};
 
-  const updateCustomer = async (id, payload) => {
-    const res = await fetch(`${API_URL}/${id}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) throw new Error();
-  };
+		const updateCustomer = async (id, payload) => {
+			const res = await fetch(`${API_URL}/${id}`, {
+				method: "PUT",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${token}`,
+				},
+				body: JSON.stringify(payload),
+			});
+			if (!res.ok) {
+				const error = await res.json();
+				throw new Error(error.message || "Failed to update customer");
+			}
+			return res.json();
+		};
 
-  const deleteCustomer = async (id) => {
-    const res = await fetch(`${API_URL}/${id}`, {
-      method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-    if (!res.ok) throw new Error();
-  };
+		const deleteCustomer = async (id) => {
+			const res = await fetch(`${API_URL}/${id}`, {
+				method: "DELETE",
+				headers: {
+					Authorization: `Bearer ${token}`,
+				},
+			});
+			if (!res.ok) {
+				const error = await res.json();
+				throw new Error(error.message || "Failed to delete customer");
+			}
+			return res.json();
+		};
 
-  const toggleStatus = async (id, isActive) => {
-    const res = await fetch(`${API_URL}/${id}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ isActive }),
-    });
-    if (!res.ok) throw new Error();
-  };
+		const toggleStatus = async (id, isActive) => {
+			const res = await fetch(`${API_URL}/${id}`, {
+				method: "PUT",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${token}`,
+				},
+				body: JSON.stringify({ isActive }),
+			});
+			if (!res.ok) {
+				const error = await res.json();
+				throw new Error(error.message || "Failed to update status");
+			}
+			return res.json();
+		};
 
-  /* ========================= */
+		/* ========================= */
 
-  useEffect(() => {
-    loadCustomers();
-  }, [orderBy, orderDir]);
+		useEffect(() => {
+			loadCustomers();
+		}, [orderBy, orderDir]);
 
-  const filteredData = useMemo(() => {
-    let data = [...customers];
+		const filteredData = useMemo(() => {
+			let data = [...customers];
 
-    if (searchText) {
-      data = data.filter(
-        (c) =>
-          c.customerName.toLowerCase().includes(searchText.toLowerCase()) ||
-          c.contactPerson.toLowerCase().includes(searchText.toLowerCase())
-      );
-    }
+			if (searchText) {
+				const search = searchText.toLowerCase();
+				data = data.filter(
+					(c) =>
+						c.customerName?.toLowerCase().includes(search) ||
+						c.contactPerson?.toLowerCase().includes(search) ||
+						c.phone?.toLowerCase().includes(search) ||
+						c.email?.toLowerCase().includes(search)
+				);
+			}
 
-    if (filterType) {
-      data = data.filter((c) => c.customerType === filterType);
-    }
+			if (filterType) {
+				data = data.filter((c) => c.customerType === filterType);
+			}
 
-    return data;
-  }, [customers, searchText, filterType]);
+			if (filterStatus !== null) {
+				data = data.filter((c) => c.isActive === filterStatus);
+			}
 
-  const totalCustomers = customers.length;
-  const activeCustomers = customers.filter((c) => c.isActive).length;
+			return data;
+		}, [customers, searchText, filterType, filterStatus]);
 
-  const showModal = (customer = null) => {
-    setIsModalOpen(true);
-    setIsEditModal(!!customer);
-    setCurrentCustomer(customer);
+		const totalCustomers = customers.length;
+		const activeCustomers = customers.filter((c) => c.isActive).length;
+		const inactiveCustomers = totalCustomers - activeCustomers;
+		const corporateCustomers = customers.filter(
+			(c) => c.customerType === "CORPORATE"
+		).length;
 
-    if (customer) {
-      form.setFieldsValue({
-        name: customer.customerName,
-        type: customer.customerType,
-        contactPerson: customer.contactPerson,
-        phone: customer.phone,
-        email: customer.email,
-        address: customer.address,
-        openingBalance: customer.openingBalance,
-        status: customer.isActive,
-        customerDate: customer.customerDate
-          ? dayjs(customer.customerDate)
-          : null,
-      });
-    } else {
-      form.resetFields();
-      form.setFieldsValue({
-        status: true,
-        customerDate: dayjs(),
-      });
-    }
-  };
+		const showModal = (customer = null) => {
+			setIsModalOpen(true);
+			setIsEditModal(!!customer);
+			setCurrentCustomer(customer);
 
-  const handleSubmit = async (values) => {
-    setLoadingForm(true);
-    try {
-      const payload = {
-        customerName: values.name,
-        customerType: values.type,
-        contactPerson: values.contactPerson,
-        phone: values.phone,
-        email: values.email || null,
-        address: values.address || null,
-        openingBalance: Number(values.openingBalance || 0),
-        isActive: values.status ?? true,
-        customerDate: values.customerDate
-          ? values.customerDate.toISOString()
-          : null,
-      };
+			if (customer) {
+				form.setFieldsValue({
+					name: customer.customerName,
+					type: customer.customerType,
+					contactPerson: customer.contactPerson,
+					phone: customer.phone,
+					email: customer.email,
+					address: customer.address,
+					openingBalance: customer.openingBalance,
+					status: customer.isActive,
+					customerDate: customer.customerDate
+						? dayjs(customer.customerDate)
+						: null,
+				});
+			} else {
+				form.resetFields();
+				form.setFieldsValue({
+					status: true,
+					customerDate: dayjs(),
+					openingBalance: 0,
+				});
+			}
+		};
 
-      if (isEditModal) {
-        await updateCustomer(currentCustomer.id, payload);
-        message.success("Customer updated successfully");
-      } else {
-        await createCustomer(payload);
-        message.success("Customer created successfully");
-      }
+		const handleSubmit = async (values) => {
+			setLoadingForm(true);
+			try {
+				const payload = {
+					customerName: values.name,
+					customerType: values.type,
+					contactPerson: values.contactPerson,
+					phone: values.phone,
+					email: values.email || null,
+					address: values.address || null,
+					openingBalance: Number(values.openingBalance || 0),
+					isActive: values.status ?? true,
+					customerDate: values.customerDate
+						? values.customerDate.toISOString()
+						: null,
+				};
 
-      setIsModalOpen(false);
-      form.resetFields();
-      loadCustomers();
-    } catch {
-      message.error("Failed to save customer");
-    } finally {
-      setLoadingForm(false);
-    }
-  };
+				if (isEditModal) {
+					await updateCustomer(currentCustomer.id, payload);
+					message.success("Customer updated successfully!");
+				} else {
+					await createCustomer(payload);
+					message.success("Customer created successfully!");
+				}
 
-  const handleDelete = (id) => {
-    Modal.confirm({
-      title: "Delete this customer?",
-      okType: "danger",
-      onOk: async () => {
-        try {
-          await deleteCustomer(id);
-          message.success("Customer deleted");
-          loadCustomers();
-        } catch {
-          message.error("Delete failed");
-        }
-      },
-    });
-  };
+				setIsModalOpen(false);
+				form.resetFields();
+				loadCustomers();
+			} catch (error) {
+				message.error(error.message || "Failed to save customer");
+			} finally {
+				setLoadingForm(false);
+			}
+		};
 
-  const handleStatusToggle = async (id, checked) => {
-    try {
-      await toggleStatus(id, checked);
-      message.success(`Customer ${checked ? "activated" : "deactivated"}`);
-      loadCustomers();
-    } catch {
-      message.error("Status update failed");
-    }
-  };
+		const handleDelete = (record) => {
+			Modal.confirm({
+				title: "Delete Customer",
+				content: (
+					<div>
+						<p>
+							Are you sure you want to delete{" "}
+							<strong>{record.customerName}</strong>?
+						</p>
+						<p className="text-red-500 text-sm mt-2">
+							This action cannot be undone.
+						</p>
+					</div>
+				),
+				okText: "Delete",
+				okType: "danger",
+				cancelText: "Cancel",
+				onOk: async () => {
+					setDeletingId(record.id);
+					try {
+						await deleteCustomer(record.id);
+						message.success("Customer deleted successfully!");
+						loadCustomers();
+					} catch (error) {
+						message.error(error.message || "Failed to delete customer");
+					} finally {
+						setDeletingId(null);
+					}
+				},
+			});
+		};
 
-  const columns = [
-    {
-      title: "Customer",
-      render: (_, r) => (
-        <div>
-          <div className="font-medium">{r.customerName}</div>
-          <div className="text-gray-500 text-sm">{r.customerType}</div>
-        </div>
-      ),
-    },
-    {
-      title: "Contact",
-      render: (_, r) => (
-        <div>
-          <div>📞 {r.phone}</div>
-          <div>📧 {r.email || "N/A"}</div>
-        </div>
-      ),
-    },
-    {
-      title: "Opening Balance",
-      align: "right",
-      render: (_, r) => `$ ${r.openingBalance}`,
-    },
-    {
-      title: "Status",
-      render: (_, r) => (
-        <Switch
-          checked={r.isActive}
-          onChange={(checked) => handleStatusToggle(r.id, checked)}
-        />
-      ),
-    },
-    {
-      title: "Actions",
-      render: (_, r) => (
-        <Space>
-          <Tooltip title="Edit">
-            <Button
-              icon={<Edit className="w-4 h-4" />}
-              onClick={() => showModal(r)}
-            />
-          </Tooltip>
-          <Tooltip title="Delete">
-            <Button
-              danger
-              icon={<Trash className="w-4 h-4" />}
-              onClick={() => handleDelete(r.id)}
-            />
-          </Tooltip>
-        </Space>
-      ),
-    },
-  ];
+		const handleStatusToggle = async (id, checked) => {
+			// 1️⃣ Optimistically update UI
+			setCustomers((prev) =>
+				prev.map((c) => (c.id === id ? { ...c, isActive: checked } : c))
+			);
 
-  return (
-    <div className="p-6 bg-gray-50 min-h-screen">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-semibold">Customers</h1>
-        <Button
-          type="primary"
-          icon={<Plus className="w-4 h-4" />}
-          onClick={() => showModal()}
-        >
-          Add Customer
-        </Button>
-      </div>
+			try {
+				// 2️⃣ Background API call
+				await toggleStatus(id, checked);
+				message.success(`Customer ${checked ? "activated" : "deactivated"}`);
+			} catch (error) {
+				// 3️⃣ Rollback on failure
+				setCustomers((prev) =>
+					prev.map((c) => (c.id === id ? { ...c, isActive: !checked } : c))
+				);
+				message.error(error.message || "Failed to update status");
+			}
+		};
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-        <Card className="shadow-sm">
-          <div className="flex justify-between items-center">
-            <div>
-              <div className="text-gray-500 text-sm">Total Customers</div>
-              <div className="text-3xl font-bold">{totalCustomers}</div>
-            </div>
-            <Users className="w-10 h-10 text-blue-600" />
-          </div>
-        </Card>
+		const clearFilters = () => {
+			setSearchText("");
+			setFilterType(null);
+			setFilterStatus(null);
+		};
 
-        <Card className="shadow-sm">
-          <div className="flex justify-between items-center">
-            <div>
-              <div className="text-gray-500 text-sm">Active Customers</div>
-              <div className="text-3xl font-bold">{activeCustomers}</div>
-            </div>
-            <CheckCircle className="w-10 h-10 text-green-600" />
-          </div>
-        </Card>
-      </div>
+		const columns = [
+			{
+				title: "Customer Details",
+				width: "30%",
+				render: (_, record) => (
+					<div className="py-2">
+						<div className="flex items-start gap-3">
+							<div className="bg-gradient-to-br from-blue-500 to-blue-600 p-3 rounded-lg">
+								{record.customerType === "CORPORATE" ? (
+									<Building2 className="w-5 h-5 text-white" />
+								) : (
+									<Users className="w-5 h-5 text-white" />
+								)}
+							</div>
+							<div>
+								<div className="font-semibold text-gray-900 text-base mb-1">
+									{record.customerName}
+								</div>
+								<Tag
+									color={record.customerType === "CORPORATE" ? "blue" : "green"}
+									className="text-xs"
+								>
+									{record.customerType === "CORPORATE" ? "Corporate" : "Walk In"}
+								</Tag>
+								<div className="text-sm text-gray-600 mt-2">
+									<UserCheck className="w-3 h-3 inline mr-1" />
+									{record.contactPerson}
+								</div>
+							</div>
+						</div>
+					</div>
+				),
+			},
+			{
+				title: "Contact Information",
+				width: "25%",
+				render: (_, record) => (
+					<div className="space-y-2">
+						<div className="flex items-center gap-2 text-sm text-gray-700">
+							<Phone className="w-4 h-4 text-blue-600" />
+							{record.phone}
+						</div>
+						{record.email && (
+							<div className="flex items-center gap-2 text-sm text-gray-600">
+								<Mail className="w-4 h-4 text-green-600" />
+								{record.email}
+							</div>
+						)}
+						{record.address && (
+							<div className="flex items-start gap-2 text-sm text-gray-500">
+								<MapPin className="w-4 h-4 text-orange-600 mt-0.5 flex-shrink-0" />
+								<span className="line-clamp-2">{record.address}</span>
+							</div>
+						)}
+					</div>
+				),
+			},
+			{
+				title: "Opening Balance",
+				align: "right",
+				width: "15%",
+				render: (_, record) => (
+					<div className="text-right">
+						<div className="text-lg font-bold text-indigo-600">
+							${Number(record.openingBalance || 0).toFixed(2)}
+						</div>
+						{record.customerDate && (
+							<div className="text-xs text-gray-500 mt-1 flex items-center justify-end gap-1">
+								<Calendar className="w-3 h-3" />
+								{dayjs(record.customerDate).format("MMM DD, YYYY")}
+							</div>
+						)}
+					</div>
+				),
+			},
+			{
+				title: "Current Balance",
+				align: "right",
+				width: "15%",
+				render: (_, record) => (
+					<div className="text-right">
+						<div className="text-lg font-bold text-rose-600">
+							${Number(record.account.balance || 0).toFixed(2)}
+						</div>
+						<div className="text-xs text-gray-500 mt-1 flex items-center justify-end gap-1">
+							<TrendingUp className="w-3 h-3" />
+							Up to date
+						</div>
+					</div>
+				),
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-4 mb-4 items-center">
-        <Input
-          placeholder="Search customers..."
-          prefix={<Search className="w-4 h-4" />}
-          value={searchText}
-          onChange={(e) => setSearchText(e.target.value)}
-          allowClear={{
-            clearIcon: <X className="w-4 h-4" />,
-          }}
-          className="w-64"
-        />
+			},
+			{
+				title: "Status",
+				align: "center",
+				width: "12%",
+				render: (_, record) => (
+					<div className="flex flex-col items-center gap-2">
+						<Switch
+							checked={record.isActive}
+							onChange={(checked) => handleStatusToggle(record.id, checked)}
+							checkedChildren="Active"
+							unCheckedChildren="Inactive"
+						/>
 
-        <Select value={orderBy} onChange={setOrderBy} className="w-48">
-          <Option value="customerDate">Order by Customer Date</Option>
-          <Option value="createdAt">Order by Created At</Option>
-        </Select>
+						<Badge
+							status={record.isActive ? "success" : "default"}
+							text={record.isActive ? "Active" : "Inactive"}
+						/>
+					</div>
+				),
+			},
+			{
+				title: "Actions",
+				align: "center",
+				width: "12%",
+				render: (_, record) => (
+					<Space>
+						<Tooltip title="Edit Customer">
+							<Button
+								icon={<Edit className="w-4 h-4" />}
+								onClick={() => showModal(record)}
+								className="hover:bg-blue-50 hover:border-blue-300"
+							/>
+						</Tooltip>
+						<Tooltip title="Delete Customer">
+							<Button
+								danger
+								icon={<Trash className="w-4 h-4" />}
+								onClick={() => handleDelete(record)}
+								loading={deletingId === record.id}
+								className="hover:bg-red-50"
+							/>
+						</Tooltip>
+					</Space>
+				),
+			},
+		];
 
-        <Select value={orderDir} onChange={setOrderDir} className="w-40">
-          <Option value="desc">Descending</Option>
-          <Option value="asc">Ascending</Option>
-        </Select>
-      </div>
+		const hasActiveFilters = searchText || filterType || filterStatus !== null;
 
-      <Table
-        loading={loadingTable}
-        rowKey="id"
-        columns={columns}
-        dataSource={filteredData}
-        pagination={{ pageSize: 10 }}
-        className="bg-white rounded-lg shadow-sm"
-      />
+		return (
+			<div className="p-4 md:p-6  min-h-screen">
+				{/* Header */}
+				<div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+					<div>
+						<h1 className="text-3xl font-bold text-gray-900 mb-1">
+							Customers Management
+						</h1>
+						<p className="text-gray-600">Manage and track all your customers</p>
+					</div>
+					<Button
+						type="primary"
+						size="large"
+						icon={<Plus className="w-5 h-5" />}
+						onClick={() => showModal()}
+						className="bg-gradient-to-r from-blue-600 to-indigo-600 border-none hover:from-blue-700 hover:to-indigo-700 shadow-lg"
+					>
+						Add New Customer
+					</Button>
+				</div>
 
-      {/* Modal */}
-      <Modal
-        title={
-          <div className="text-lg font-semibold">
-            {isEditModal ? "Edit Customer" : "Add New Customer"}
-          </div>
-        }
-        open={isModalOpen}
-        onCancel={() => setIsModalOpen(false)}
-        footer={null}
-        width={700}
-        centered
-      >
-        <Form layout="vertical" form={form} onFinish={handleSubmit}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Form.Item
-              name="name"
-              label="Customer Name"
-              rules={[{ required: true, message: "Customer name is required" }]}
-            >
-              <Input placeholder="e.g. Bin Sheban Trading LLC" />
-            </Form.Item>
+				{/* KPI Cards */}
+				<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+					<Card className="shadow-lg border-l-4 border-l-blue-500 hover:shadow-xl transition-shadow">
+						<div className="flex justify-between items-center">
+							<div>
+								<div className="text-gray-600 text-sm font-medium mb-1">
+									Total Customers
+								</div>
+								<div className="text-3xl font-bold text-gray-900">
+									{totalCustomers}
+								</div>
+							</div>
+							<div className="bg-gradient-to-br from-blue-500 to-blue-600 p-4 rounded-xl">
+								<Users className="w-8 h-8 text-white" />
+							</div>
+						</div>
+					</Card>
 
-            <Form.Item
-              name="type"
-              label="Customer Type"
-              className="mb-[0px]"
-              rules={[{ required: true, message: "Select customer type" }]}
-            >
-              <Select placeholder="Select type">
-                <Option value="WALK_IN">Walk In</Option>
-                <Option value="CORPORATE">Corporate</Option>
-              </Select>
-            </Form.Item>
+					<Card className="shadow-lg border-l-4 border-l-green-500 hover:shadow-xl transition-shadow">
+						<div className="flex justify-between items-center">
+							<div>
+								<div className="text-gray-600 text-sm font-medium mb-1">
+									Active Customers
+								</div>
+								<div className="text-3xl font-bold text-green-600">
+									{activeCustomers}
+								</div>
+							</div>
+							<div className="bg-gradient-to-br from-green-500 to-green-600 p-4 rounded-xl">
+								<CheckCircle className="w-8 h-8 text-white" />
+							</div>
+						</div>
+					</Card>
 
-            <Form.Item
-              name="contactPerson"
-              label="Contact Person"
-              rules={[
-                { required: true, message: "Contact person is required" },
-              ]}
-            >
-              <Input placeholder="e.g. Ahmed Bin Sheban" />
-            </Form.Item>
+					<Card className="shadow-lg border-l-4 border-l-purple-500 hover:shadow-xl transition-shadow">
+						<div className="flex justify-between items-center">
+							<div>
+								<div className="text-gray-600 text-sm font-medium mb-1">
+									Corporate
+								</div>
+								<div className="text-3xl font-bold text-purple-600">
+									{corporateCustomers}
+								</div>
+							</div>
+							<div className="bg-gradient-to-br from-purple-500 to-purple-600 p-4 rounded-xl">
+								<Building2 className="w-8 h-8 text-white" />
+							</div>
+						</div>
+					</Card>
+				</div>
 
-            {/* Phone */}
-            <Form.Item
-              name="phone"
-              label="Phone"
-              rules={[{ required: true, message: "Phone number is required" }]}
-            >
-              <Input placeholder="+971 50 123 4567" />
-            </Form.Item>
+				{/* Filters Section */}
+				<Card className="shadow-lg mb-6">
+					<div className="flex flex-wrap gap-4 items-center">
+						<div className="flex items-center gap-2 text-gray-700 font-semibold">
+							<Filter className="w-5 h-5" />
+							Filters:
+						</div>
 
-            <Form.Item name="email" label="Email" className="md:col-span-1">
-              <Input placeholder="example@email.com" />
-            </Form.Item>
-            <Form.Item
-              name="customerDate"
-              label="Customer Date"
-              rules={[{ required: true, message: "Select customer date" }]}
-            >
-              <DatePicker className="w-full" />
-            </Form.Item>
+						<Input
+							placeholder="Search by name, contact, phone, email..."
+							prefix={<Search className="w-4 h-4 text-gray-400" />}
+							value={searchText}
+							onChange={(e) => setSearchText(e.target.value)}
+							allowClear={{
+								clearIcon: <X className="w-4 h-4" />,
+							}}
+							className="w-full sm:w-80"
+							size="large"
+						/>
 
-            <Form.Item name="address" label="Address" className="md:col-span-2">
-              <Input.TextArea rows={3} placeholder="Street, City, Country" />
-            </Form.Item>
-            <Form.Item name="openingBalance" label="Opening Balance">
-              <Input type="number" placeholder="0.00" />
-            </Form.Item>
+						<Select
+							placeholder="Customer Type"
+							value={filterType}
+							onChange={setFilterType}
+							allowClear
+							className="w-40"
+							size="large"
+						>
+							<Option value="WALK_IN">Walk In</Option>
+							<Option value="CORPORATE">Corporate</Option>
+						</Select>
 
-            <Form.Item
-              name="status"
-              label="Status"
-              valuePropName="checked"
-              className="md:col-span-1"
-            >
-              <Switch checkedChildren="Active" unCheckedChildren="Inactive" />
-            </Form.Item>
-          </div>
+						<Select
+							placeholder="Status"
+							value={filterStatus}
+							onChange={setFilterStatus}
+							allowClear
+							className="w-36"
+							size="large"
+						>
+							<Option value={true}>Active</Option>
+							<Option value={false}>Inactive</Option>
+						</Select>
 
-          <div className="flex justify-end gap-3 mt-6">
-            <Button onClick={() => setIsModalOpen(false)}>Cancel</Button>
-            <Button
-              type="primary"
-              htmlType="submit"
-              loading={loadingForm}
-              className="min-w-[120px]"
-            >
-              {isEditModal ? "Update Customer" : "Save Customer"}
-            </Button>
-          </div>
-        </Form>
-      </Modal>
-    </div>
-  );
+						<Select
+							value={orderBy}
+							onChange={setOrderBy}
+							className="w-48"
+							size="large"
+						>
+							<Option value="customerDate">Order by Date</Option>
+							<Option value="createdAt">Order by Created</Option>
+							<Option value="customerName">Order by Name</Option>
+						</Select>
+
+						<Select
+							value={orderDir}
+							onChange={setOrderDir}
+							className="w-36"
+							size="large"
+						>
+							<Option value="desc">Descending</Option>
+							<Option value="asc">Ascending</Option>
+						</Select>
+
+						{hasActiveFilters && (
+							<Button
+								onClick={clearFilters}
+								icon={<X className="w-4 h-4" />}
+								danger
+							>
+								Clear Filters
+							</Button>
+						)}
+					</div>
+				</Card>
+
+				{/* Table */}
+				<Card className="shadow-lg">
+					<Table
+						loading={loadingTable}
+						rowKey="id"
+						columns={columns}
+						dataSource={filteredData}
+						pagination={{
+							pageSize: 10,
+							showSizeChanger: true,
+							showTotal: (total) => `Total ${total} customers`,
+						}}
+						locale={{
+							emptyText: (
+								<Empty
+									description={
+										hasActiveFilters
+											? "No customers match your filters"
+											: "No customers yet. Add your first customer!"
+									}
+								/>
+							),
+						}}
+						className="custom-table"
+					/>
+				</Card>
+
+				{/* Modal */}
+				<Modal
+					title={
+						<div className="flex items-center gap-3 text-xl font-bold">
+							<div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-2 rounded-lg">
+								{isEditModal ? (
+									<Edit className="w-6 h-6 text-white" />
+								) : (
+									<Plus className="w-6 h-6 text-white" />
+								)}
+							</div>
+							{isEditModal ? "Edit Customer" : "Add New Customer"}
+						</div>
+					}
+					open={isModalOpen}
+					onCancel={() => {
+						setIsModalOpen(false);
+						form.resetFields();
+					}}
+					footer={null}
+					width={800}
+					centered
+				>
+					<Form
+						layout="vertical"
+						form={form}
+						onFinish={handleSubmit}
+						className="mt-6"
+					>
+						<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+							<Form.Item
+								name="name"
+								label={<span className="font-semibold">Customer Name</span>}
+								rules={[{ required: true, message: "Customer name is required" }]}
+							>
+								<Input
+									placeholder="e.g. Bin Sheban Trading LLC"
+									size="large"
+									prefix={<Building2 className="w-4 h-4 text-gray-400" />}
+								/>
+							</Form.Item>
+
+							<Form.Item
+								name="type"
+								label={<span className="font-semibold">Customer Type</span>}
+								rules={[{ required: true, message: "Select customer type" }]}
+							>
+								<Select placeholder="Select type" size="large">
+									<Option value="WALK_IN">Walk In Customer</Option>
+									<Option value="CORPORATE">Corporate Client</Option>
+								</Select>
+							</Form.Item>
+
+							<Form.Item
+								name="contactPerson"
+								label={<span className="font-semibold">Contact Person</span>}
+								rules={[
+									{ required: true, message: "Contact person is required" },
+								]}
+							>
+								<Input
+									placeholder="e.g. Ahmed Bin Sheban"
+									size="large"
+									prefix={<UserCheck className="w-4 h-4 text-gray-400" />}
+								/>
+							</Form.Item>
+
+							<Form.Item
+								name="phone"
+								label={<span className="font-semibold">Phone Number</span>}
+								rules={[{ required: true, message: "Phone number is required" }]}
+							>
+								<Input
+									placeholder="+971 50 123 4567"
+									size="large"
+									prefix={<Phone className="w-4 h-4 text-gray-400" />}
+								/>
+							</Form.Item>
+
+							<Form.Item
+								name="email"
+								label={<span className="font-semibold">Email Address</span>}
+							>
+								<Input
+									placeholder="example@email.com"
+									size="large"
+									prefix={<Mail className="w-4 h-4 text-gray-400" />}
+								/>
+							</Form.Item>
+
+							<Form.Item
+								name="customerDate"
+								label={<span className="font-semibold">Customer Date</span>}
+								rules={[{ required: true, message: "Select customer date" }]}
+							>
+								<DatePicker className="w-full" size="large" format="YYYY-MM-DD" />
+							</Form.Item>
+
+							<Form.Item
+								name="openingBalance"
+								label={<span className="font-semibold">Opening Balance</span>}
+							>
+								<Input
+									type="number"
+									placeholder="0.00"
+									size="large"
+									prefix={<DollarSign className="w-4 h-4 text-gray-400" />}
+								/>
+							</Form.Item>
+
+							<Form.Item
+								name="status"
+								label={<span className="font-semibold">Status</span>}
+								valuePropName="checked"
+							>
+								<Switch
+									checkedChildren="Active"
+									unCheckedChildren="Inactive"
+									size="default"
+								/>
+							</Form.Item>
+
+							<Form.Item
+								name="address"
+								label={<span className="font-semibold">Address</span>}
+								className="md:col-span-2"
+							>
+								<Input.TextArea
+									rows={3}
+									placeholder="Street, City, Country"
+									size="large"
+								/>
+							</Form.Item>
+						</div>
+
+						<div className="flex justify-end gap-3 mt-6 pt-4 border-t">
+							<Button
+								size="large"
+								onClick={() => {
+									setIsModalOpen(false);
+									form.resetFields();
+								}}
+							>
+								Cancel
+							</Button>
+							<Button
+								type="primary"
+								htmlType="submit"
+								loading={loadingForm}
+								size="large"
+								className="min-w-[140px] bg-gradient-to-r from-blue-600 to-indigo-600 border-none"
+							>
+								{isEditModal ? "Update Customer" : "Save Customer"}
+							</Button>
+						</div>
+					</Form>
+				</Modal>
+			</div>
+		);
 };
 
 export default CustomersPage;
