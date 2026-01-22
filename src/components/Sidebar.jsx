@@ -40,7 +40,7 @@ import LogoLight from "../assets/logo-light.png";
 const baseItem =
 	"group flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-300 relative";
 
-const lightBg = "bg-gradient-to-br from-slate-50 to-gray-100";
+const lightBg = "bg-gradient-to-b from-gray-50 to-gray-200 border border-gray-900/10";
 const darkBg = "bg-gradient-to-br from-slate-800 to-gray-600";
 
 const lightText = "text-gray-800";
