@@ -472,7 +472,7 @@ useEffect(() => {
 								<CardContent className="space-y-3">
 									{/* Row 1: Basic Information */}
 									<div
-										className={`grid grid-cols-1 md:grid-cols-5 gap-3`}
+										className={`grid grid-cols-1 md:grid-cols-6 gap-3`}
 									>
 										{/* Airline */}
 										<div className="space-y-1">
@@ -528,6 +528,21 @@ useEffect(() => {
 												className="h-8 text-sm"
 											/>
 										</div>
+										{/* {showPaxName && ( */}
+											<div className="space-y-1">
+												<Label className="text-xs font-medium text-slate-600">
+													Passenger Name
+												</Label>
+												<Input
+													value={item.paxName}
+													onChange={(e) =>
+														updateSale(item.id, "paxName", e.target.value)
+													}
+													placeholder="John Doe"
+													className="h-8 text-sm"
+												/>
+											</div>
+										{/* )} */}
 
 
 
@@ -624,22 +639,6 @@ useEffect(() => {
 													placeholder="Select"
 													menuPortalTarget={document.body}
 													styles={compactSelectStyles}
-												/>
-											</div>
-										)}
-										{/* PAX Name - Only for CASH or BANK_TRANSFER */}
-										{showPaxName && (
-											<div className="space-y-1">
-												<Label className="text-xs font-medium text-slate-600">
-													Passenger Name
-												</Label>
-												<Input
-													value={item.paxName}
-													onChange={(e) =>
-														updateSale(item.id, "paxName", e.target.value)
-													}
-													placeholder="John Doe"
-													className="h-8 text-sm"
 												/>
 											</div>
 										)}
