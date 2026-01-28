@@ -74,13 +74,13 @@ export default function DetailedReportTab({
 		);
 	};
 
-		const navigate = useNavigate();
+	const navigate = useNavigate();
 
-const handleEdit = (invoiceId) => {
-	if (!invoiceId) return;
+	const handleEdit = (invoiceId) => {
+		if (!invoiceId) return;
 
-	navigate(`/edit-services/${invoiceId}`);
-};
+		navigate(`/edit-services/${invoiceId}`);
+	};
 
 	function truncateText(text, wordLimit) {
 		if (!text) return "";
@@ -141,7 +141,7 @@ const handleEdit = (invoiceId) => {
 		);
 	};
 
-		console.log(salesData);
+	console.log(salesData);
 
 	if (loading) {
 		return (
@@ -222,7 +222,7 @@ const handleEdit = (invoiceId) => {
 															format(new Date(sale.date), "MMM dd, yyyy"),
 															searchQuery,
 															"date"
-															)
+														)
 														: "N/A"}
 												</TableCell>
 												<TableCell className="font-mono text-sm">
@@ -247,8 +247,8 @@ const handleEdit = (invoiceId) => {
 												<TableCell className="max-w-[140px] truncate" title={sale.vendor}>
 													{sale.vendor || "-"}
 												</TableCell>
-												<TableCell className="max-w-[140px] truncate" title={sale.customer}>
-													{sale.customer}
+												<TableCell className={`max-w-[140px] truncate ${sale.customer ? 'text-green-600' : 'text-blue-500'}`} title={sale.customer}>
+													{sale.customer ? sale.customer : "Walkin Customer"}
 												</TableCell>
 												<TableCell className="max-w-[120px] truncate" title={sale.agent}>
 													{sale.agent}
@@ -265,18 +265,24 @@ const handleEdit = (invoiceId) => {
 														{sale.netPrice?.toFixed(2) || "0.00"}
 													</div>
 												</TableCell> */}
-												<TableCell className={`text-right font-semibold ${(sale.sellPrice || 0) < 0 ? 'text-red-600' : ''}`}>
+												<TableCell
+													className={`text-right font-semibold ${isRefund || (sale.sellPrice || 0) < 0 ? 'text-red-600' : ''
+														}`}
+												>
 													<div className="flex items-center justify-end gap-1">
 														<SaudiRiyal size={15} />
-														{sale.sellPrice?.toFixed(2) || "0.00"}
+														{isRefund
+															? `-${sale.Refund.refundableAmount.toFixed(2)}`
+															: sale.sellPrice?.toFixed(2) || '0.00'}
 													</div>
 												</TableCell>
+
 												{/* <TableCell className={`text-right font-bold ${isProfitable ? 'text-green-600' : 'text-red-600'}`}>
-													<div className="flex items-center justify-end gap-1">
-														<SaudiRiyal size={15} />
-														{sale.profit?.toFixed(2) || "0.00"}
-													</div>
-												</TableCell> */}
+		<div className="flex items-center justify-end gap-1">
+			<SaudiRiyal size={15} />
+			{sale.profit?.toFixed(2) || "0.00"}
+		</div>
+	</TableCell> */}
 												<TableCell>
 													<div className="flex flex-col gap-1">
 														{getStatusBadge(sale.status)}

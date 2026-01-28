@@ -144,7 +144,7 @@ export default function SalesReport() {
 				const invDate = inv.saleDate ? new Date(inv.saleDate) : null;
 
 				return (inv.sales || []).map((sale) => {
-					const customerLabel = sale.customerName ? `${sale.customerName}` : "-";
+					const customerLabel = sale.customerName ? `${sale.customerName}` : "";
 
 					return {
 						id: String(sale.id),
@@ -166,6 +166,7 @@ export default function SalesReport() {
 						branch: "-",
 						remarks: sale.remarks || "",
 						isRefund: !!sale.isRefund,
+						Refund: sale.refund || null,
 					};
 				});
 			});
