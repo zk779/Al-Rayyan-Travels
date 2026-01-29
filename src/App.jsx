@@ -21,6 +21,7 @@ import ProtectedRoutes from "./ProtectedRoutes";
 import NewPayments from "./pages/NewPayments";
 import EditSaleComponent from "./pages/EditServices";
 import PaymentPage from "./pages/Payments";
+import InvoicePrint from "./pages/InvoicePrint";
 
 function App() {
 	return (
@@ -43,6 +44,9 @@ function App() {
 									<Route path="new-services" element={<NewServices />} />
 									<Route path="edit-services/:saleId" element={<EditSaleComponent />} />
 									<Route path="manage-payments" element={<PaymentPage />} />
+
+									<Route path ="invoice-print/:saleId" element ={<InvoicePrint />} />
+
 									<Route path="ledger" element={<LedgerComponent />} />
 									<Route path="customers" element={<CustomersPage />} />
 									<Route path="users" element={<UsersPage />} />

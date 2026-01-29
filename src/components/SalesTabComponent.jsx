@@ -12,6 +12,7 @@ import {
 	MapPin,
 	X,
 	Eye,
+	SaudiRiyal,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -616,10 +617,6 @@ useEffect(() => {
 
 									{/* Row 2: Financial Information */}
 									<div className={`grid grid-cols-2 ${isCredit ? "md:grid-cols-7" : "md:grid-cols-6"} gap-3`}>
-
-
-
-
 										{/* Customer (Only for CREDIT) */}
 										{isCredit && (
 											<div className="space-y-1">
@@ -646,7 +643,7 @@ useEffect(() => {
 										{/* Net Price */}
 										<div className="space-y-1">
 											<Label className="text-xs font-medium text-slate-600">
-												Net ($)
+												Net <SaudiRiyal size={15} />
 											</Label>
 											<Input
 												type="number"
@@ -662,7 +659,7 @@ useEffect(() => {
 										{/* Sell Price */}
 										<div className="space-y-1">
 											<Label className="text-xs font-medium text-slate-600">
-												Sell ($)
+												Sell <SaudiRiyal size={15} />
 											</Label>
 											<Input
 												type="number"
@@ -678,7 +675,7 @@ useEffect(() => {
 										{/* Paid Amount */}
 										<div className="space-y-1">
 											<Label className="text-xs font-medium text-slate-600">
-												Paid ($)
+												Paid <SaudiRiyal size={15} />
 											</Label>
 											<Input
 												type="number"
@@ -694,25 +691,33 @@ useEffect(() => {
 										{/* Profit (Read-only) */}
 										<div className="space-y-1">
 											<Label className="text-xs font-medium text-green-700">
-												Profit ($)
+												Profit <SaudiRiyal size={15} />
 											</Label>
 											<div className="flex items-center gap-1 px-2 h-8 bg-green-50 border border-green-200 rounded text-xs font-semibold text-green-700">
 												<Calculator className="h-3 w-3" />${profit}
 											</div>
 										</div>
-
-										{/* VAT (Read-only) */}
 										<div className="space-y-1">
 											<Label className="text-xs font-medium text-blue-700">
-												VAT 15% ($)
+												VAT 15% <SaudiRiyal size={15} />
+											</Label>
+											<div className="flex items-center gap-1 px-2 h-8 bg-blue-50 border border-blue-200 rounded text-xs font-semibold text-blue-700">
+												<Calculator className="h-3 w-3" />${item.vatAmount || "0.00"}
+											</div>
+										</div>
+
+										{/* VAT (Read-only) */}
+										{/* <div className="space-y-1">
+											<Label className="text-xs font-medium text-blue-700">
+												VAT 15% <SaudiRiyal size={15} />
 											</Label>
 											<Input
 												type="text"
 												value={`$${item.vatAmount || "0.00"}`}
-												readOnly
-												className="h-8 text-sm bg-blue-50 border-blue-200 font-semibold text-blue-700 cursor-not-allowed"
+												// readOnly
+												className="h-8 text-sm bg-blue-400 border-blue-200 font-semibold text-blue-700"
 											/>
-										</div>
+										</div> */}
 
 										{/* Remarks */}
 										<div className="space-y-1 md:col-span-2 lg:col-span-1">
@@ -760,8 +765,8 @@ useEffect(() => {
 								<div className="text-sm text-blue-600 mb-1 font-medium">
 									Net Total
 								</div>
-								<div className="text-3xl font-bold text-blue-700">
-									${totals.net.toFixed(2)}
+								<div className="flex items-center gap-1 text-3xl font-bold text-blue-700">
+									<SaudiRiyal size={18} />{totals.net.toFixed(2)}
 								</div>
 							</div>
 
@@ -770,8 +775,8 @@ useEffect(() => {
 								<div className="text-sm text-purple-600 mb-1 font-medium">
 									Sell Total
 								</div>
-								<div className="text-3xl font-bold text-purple-700">
-									${totals.sell.toFixed(2)}
+								<div className="flex items-center gap-1 text-3xl font-bold text-purple-700">
+									<SaudiRiyal size={18} />{totals.sell.toFixed(2)}
 								</div>
 							</div>
 
@@ -780,8 +785,8 @@ useEffect(() => {
 								<div className="text-sm text-green-600 mb-1 font-medium">
 									Total Profit
 								</div>
-								<div className="text-3xl font-bold text-green-700">
-									${totals.profit.toFixed(2)}
+								<div className="flex items-center gap-1 text-3xl font-bold text-green-700">
+									<SaudiRiyal size={18} />{totals.profit.toFixed(2)}
 								</div>
 							</div>
 
@@ -790,8 +795,8 @@ useEffect(() => {
 								<div className="text-sm text-indigo-600 mb-1 font-medium">
 									Total VAT (15%)
 								</div>
-								<div className="text-3xl font-bold text-indigo-700">
-									${totals.vat.toFixed(2)}
+								<div className="flex items-center gap-1 text-3xl font-bold text-indigo-700">
+									<SaudiRiyal size={18} />{totals.vat.toFixed(2)}
 								</div>
 							</div>
 						</div>

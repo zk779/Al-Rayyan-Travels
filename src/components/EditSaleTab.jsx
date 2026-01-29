@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import Select from "react-select";
-import { Trash2, Receipt, Calculator } from "lucide-react";
+import AsyncSelect from "react-select/async";
+import { Trash2, Receipt, Calculator, MapPin, Eye, X } from "lucide-react";
 
 // shadcn
 import { Button } from "../../shadcn/components/ui/button";
@@ -13,28 +14,44 @@ import {
 	CardTitle,
 } from "../../shadcn/components/ui/card";
 import { Input } from "../../shadcn/components/ui/input";
+import { Label } from "../../shadcn/components/ui/label";
+import {
+	Dialog,
+	DialogContent,
+	DialogHeader,
+	DialogTitle,
+} from "../../shadcn/components/ui/dialog";
+import { Badge } from "../../shadcn/components/ui/badge";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
 /* =========================
-	REACT-SELECT PORTAL STYLES
+	COMPACT SELECT STYLES
 ========================= */
-const selectPortalStyles = {
-	menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-	menu: (base) => ({ ...base, zIndex: 9999 }),
-	control: (base) => ({
+const compactSelectStyles = {
+	control: (base, state) => ({
 		...base,
-		minHeight: 38,
-		height: 38,
+		minHeight: 32,
+		height: 32,
+		borderColor: state.isFocused ? '#3b82f6' : '#e5e7eb',
+		boxShadow: 'none',
+		fontSize: '13px',
 	}),
 	valueContainer: (base) => ({
 		...base,
-		padding: "0 8px",
+		height: 32,
+		padding: '0 6px',
+	}),
+	input: (base) => ({
+		...base,
+		margin: 0,
+		padding: 0,
 	}),
 	indicatorsContainer: (base) => ({
 		...base,
-		height: 38,
+		height: 32,
 	}),
+	menuPortal: (base) => ({ ...base, zIndex: 9999 }),
 };
 
 /* =========================
@@ -55,6 +72,9 @@ const normalizeSalesPayload = (sales) =>
 				? s.customerId || null
 				: null,
 		remarks: s.remarks || null,
+		paxName: s.paxName || null, // ✅ MANDATORY
+		destinations: s.destinations || [],
+		vatAmount: Number(s.vatAmount || 0),
 	}));
 
 export default function EditSalesTab({ sales, setSales }) {
@@ -62,6 +82,7 @@ export default function EditSalesTab({ sales, setSales }) {
 		LOCAL UI STATE
 	========================= */
 	const [uiSales, setUiSales] = useState([]);
+	const [destinationDialog, setDestinationDialog] = useState({ open: false, saleId: null });
 
 	/* =========================
 		INIT FROM PARENT (ONCE)
@@ -101,7 +122,36 @@ export default function EditSalesTab({ sales, setSales }) {
 		fetch(`${API_BASE}/api/customers?isActive=true`, { headers })
 			.then((r) => r.json())
 			.then((j) => setCustomers(j.data || []));
-	}, []);
+	}, [headers]);
+
+	/* =========================
+		DESTINATIONS ASYNC SEARCH
+	========================= */
+	const loadDestinationOptions = useCallback(
+		(inputValue) => {
+			if (!inputValue || inputValue.length < 2) {
+				return Promise.resolve([]);
+			}
+
+			return fetch(`${API_BASE}/api/destinations/search?q=${encodeURIComponent(inputValue)}&limit=20`, { headers })
+				.then((r) => r.json())
+				.then((j) => {
+					if (j.success && j.data) {
+						return j.data.map((airport) => ({
+							value: airport.iata,
+							label: `${airport.iata} - ${airport.city}, ${airport.country}`,
+							airport,
+						}));
+					}
+					return [];
+				})
+				.catch((err) => {
+					console.error("Failed to fetch destinations:", err);
+					return [];
+				});
+		},
+		[headers]
+	);
 
 	/* =========================
 		LOOKUPS
@@ -111,6 +161,19 @@ export default function EditSalesTab({ sales, setSales }) {
 		vendors.forEach((v) => (map[v.id] = v));
 		return map;
 	}, [vendors]);
+
+	/* =========================
+		VAT CALCULATION HELPER
+	========================= */
+	const calculateVAT = (profit) => {
+		const profitNum = Number(profit) || 0;
+		if (profitNum <= 0) return "0.00";
+		
+		const baseAmount = profitNum / 1.15;
+		const vatAmount = baseAmount * 0.15;
+		
+		return vatAmount.toFixed(2);
+	};
 
 	/* =========================
 		UPDATE / DELETE
@@ -148,6 +211,29 @@ export default function EditSalesTab({ sales, setSales }) {
 					};
 				}
 
+				// Payment type change logic
+				if (field === "paymentType") {
+					const isCredit = String(value).toUpperCase() === "CREDIT";
+					return {
+						...item,
+						paymentType: value,
+						customerId: isCredit ? item.customerId : "",
+						paidAmount: isCredit ? item.paidAmount : item.sellPrice || "",
+						// ✅ PAX name stays - it's independent
+					};
+				}
+
+				// Recalculate VAT when net or sell price changes
+				if (field === "netPrice" || field === "sellPrice") {
+					const updatedItem = { ...item, [field]: value };
+					const net = Number(updatedItem.netPrice) || 0;
+					const sell = Number(updatedItem.sellPrice) || 0;
+					const profit = sell - net;
+					const vatAmount = calculateVAT(profit);
+					
+					return { ...updatedItem, vatAmount };
+				}
+
 				return { ...item, [field]: value };
 			});
 
@@ -164,6 +250,20 @@ export default function EditSalesTab({ sales, setSales }) {
 		});
 	};
 
+	const removeDestination = (saleId, destValue) => {
+		setUiSales((prev) => {
+			const next = prev.map((item) => {
+				if (item.id !== saleId) return item;
+				return {
+					...item,
+					destinations: item.destinations.filter((d) => d.value !== destValue),
+				};
+			});
+			setSales(normalizeSalesPayload(next));
+			return next;
+		});
+	};
+
 	/* =========================
 		CALCULATIONS
 	========================= */
@@ -175,9 +275,10 @@ export default function EditSalesTab({ sales, setSales }) {
 			acc.net += Number(s.netPrice || 0);
 			acc.sell += Number(s.sellPrice || 0);
 			acc.profit += calculateProfit(s.netPrice, s.sellPrice);
+			acc.vat += Number(s.vatAmount || 0);
 			return acc;
 		},
-		{ net: 0, sell: 0, profit: 0 }
+		{ net: 0, sell: 0, profit: 0, vat: 0 }
 	);
 
 	/* =========================
@@ -205,208 +306,405 @@ export default function EditSalesTab({ sales, setSales }) {
 	];
 
 	/* =========================
+		DESTINATION DIALOG
+	========================= */
+	const openDestinationDialog = (saleId) => {
+		setDestinationDialog({ open: true, saleId });
+	};
+
+	const currentSaleForDialog = uiSales.find((s) => s.id === destinationDialog.saleId);
+
+	/* =========================
 		UI
 	========================= */
 	return (
-		<div className="space-y-6">
-			<Card>
-				<CardHeader>
-					<CardTitle className="text-base flex items-center gap-2">
-						<Receipt className="h-4 w-4" />
-						Edit Sales
+		<div className="space-y-4">
+			<h3 className="text-lg font-semibold">Edit Sales Items</h3>
+
+			{/* Sales Cards - 2 Row Layout */}
+			<div className="space-y-3">
+				{uiSales.map((item, index) => {
+					const isCredit = String(item.paymentType).toUpperCase() === "CREDIT";
+					const profit = calculateProfit(item.netPrice, item.sellPrice);
+
+					return (
+						<Card
+							key={item.id}
+							className="border-l-4 border-l-gray-500 shadow-sm"
+						>
+							<CardHeader className="pb-3">
+								<div className="flex items-center justify-between">
+									<CardTitle className="text-base flex items-center gap-2">
+										<Receipt className="h-4 w-4" />
+										Sale #{index + 1}
+									</CardTitle>
+									<Button
+										variant="ghost"
+										size="sm"
+										onClick={() => removeSale(item.id)}
+									>
+										<Trash2 className="h-4 w-4 text-red-500" />
+									</Button>
+								</div>
+							</CardHeader>
+
+							<CardContent className="space-y-3">
+								{/* Row 1: Basic Information - Always 4 columns */}
+								<div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+									{/* Airline */}
+									<div className="space-y-1">
+										<Label className="text-xs font-medium text-slate-600">
+											Airline <span className="text-red-500">*</span>
+										</Label>
+										<Select
+											options={airlineOptions}
+											value={airlineOptions.find(
+												(o) => o.value === item.airlineId
+											)}
+											onChange={(o) =>
+												updateSale(item.id, "airlineId", o?.value)
+											}
+											placeholder="Select airline"
+											menuPortalTarget={document.body}
+											styles={compactSelectStyles}
+										/>
+									</div>
+									{/* Vendor */}
+									<div className="space-y-1">
+										<Label className="text-xs font-medium text-slate-600">
+											Vendor <span className="text-red-500">*</span>
+										</Label>
+										<Select
+											options={vendorOptions}
+											value={vendorOptions.find(
+												(o) => o.value === item.vendorId
+											)}
+											onChange={(o) =>
+												updateSale(item.id, "vendorId", o?.value)
+											}
+											placeholder="Select"
+											menuPortalTarget={document.body}
+											styles={compactSelectStyles}
+										/>
+									</div>
+
+									{/* Document Number */}
+									<div className="space-y-1">
+										<Label className="text-xs font-medium text-slate-600">
+											Document No <span className="text-red-500">*</span>
+										</Label>
+										<Input
+											value={item.documentNo}
+											onChange={(e) =>
+												updateSale(item.id, "documentNo", e.target.value)
+											}
+											placeholder="e.g. 123"
+											className="h-8 text-sm"
+										/>
+									</div>
+
+									{/* ✅ PAX Name - ALWAYS VISIBLE & MANDATORY */}
+									<div className="space-y-1">
+										<Label className="text-xs font-medium text-slate-600">
+											Passenger Name <span className="text-red-500">*</span>
+										</Label>
+										<Input
+											value={item.paxName || ""}
+											onChange={(e) =>
+												updateSale(item.id, "paxName", e.target.value)
+											}
+											placeholder="John Doe"
+											className="h-8 text-sm"
+										/>
+									</div>
+
+									{/* Destinations */}
+									<div className="space-y-1">
+										<Label className="text-xs font-medium text-slate-600">Destinations</Label>
+										<div className="flex items-center gap-2">
+											{item.destinations?.length > 0 ? (
+												<div className="flex w-full gap-1">
+													<Badge variant="secondary" className="w-3/4 text-xs px-2 py-1 h-8 flex items-center gap-1">
+														<MapPin className="h-3 w-3" />
+														{item.destinations.length} selected
+													</Badge>
+													<Button
+														variant="outline"
+														size="sm"
+														onClick={() => openDestinationDialog(item.id)}
+														className="w-1/4 h-8 px-2 text-xs"
+														title="View/Edit Destinations"
+													>
+														<Eye className="h-3 w-3" />
+													</Button>
+												</div>
+											) : (
+												<Button
+													variant="outline"
+													size="sm"
+													onClick={() => openDestinationDialog(item.id)}
+													className="h-8 text-xs px-3 border-dashed w-full"
+												>
+													<MapPin className="h-3 w-3 mr-1.5" />
+													Add Destinations
+												</Button>
+											)}
+										</div>
+
+									</div>
+										{/* Payment Method */}
+									<div className="space-y-1">
+										<Label className="text-xs font-medium text-slate-600">
+											Payment <span className="text-red-500">*</span>
+										</Label>
+										<Select
+											options={paymentOptions}
+											value={paymentOptions.find(
+												(p) =>
+													p.value ===
+													String(item.paymentType).toUpperCase()
+											)}
+											onChange={(o) =>
+												updateSale(item.id, "paymentType", o?.value)
+											}
+											placeholder="Method"
+											menuPortalTarget={document.body}
+											styles={compactSelectStyles}
+										/>
+									</div>
+								</div>
+
+								{/* Row 2: Financial Information */}
+								<div className={`grid grid-cols-2 ${isCredit ? "md:grid-cols-7" : "md:grid-cols-6"} gap-3`}>
+
+									{/* ✅ Customer (Only for CREDIT) - Corporate Customer */}
+									{isCredit && (
+										<div className="space-y-1">
+											<Label className="text-xs font-medium text-slate-600">
+												Customer <span className="text-red-500">*</span>
+											</Label>
+											<Select
+												options={customerOptions}
+												value={customerOptions.find(
+													(o) => o.value === item.customerId
+												)}
+												onChange={(o) =>
+													updateSale(item.id, "customerId", o?.value)
+												}
+												placeholder="Select"
+												menuPortalTarget={document.body}
+												styles={compactSelectStyles}
+											/>
+										</div>
+									)}
+
+									{/* Net Price */}
+									<div className="space-y-1">
+										<Label className="text-xs font-medium text-slate-600">Net ($)</Label>
+										<Input
+											type="number"
+											value={item.netPrice}
+											onChange={(e) =>
+												updateSale(item.id, "netPrice", e.target.value)
+											}
+											placeholder="0.00"
+											className="h-8 text-sm"
+										/>
+									</div>
+
+									{/* Sell Price */}
+									<div className="space-y-1">
+										<Label className="text-xs font-medium text-slate-600">Sell ($)</Label>
+										<Input
+											type="number"
+											value={item.sellPrice}
+											onChange={(e) =>
+												updateSale(item.id, "sellPrice", e.target.value)
+											}
+											placeholder="0.00"
+											className="h-8 text-sm"
+										/>
+									</div>
+
+									{/* Paid Amount */}
+									<div className="space-y-1">
+										<Label className="text-xs font-medium text-slate-600">Paid ($)</Label>
+										<Input
+											type="number"
+											value={item.paidAmount}
+											onChange={(e) =>
+												updateSale(item.id, "paidAmount", e.target.value)
+											}
+											placeholder="0.00"
+											className="h-8 text-sm"
+										/>
+									</div>
+
+									{/* Profit (Read-only) */}
+									<div className="space-y-1">
+										<Label className="text-xs font-medium text-green-700">Profit ($)</Label>
+										<div className="flex items-center gap-1 px-2 h-8 bg-green-50 border border-green-200 rounded text-xs font-semibold text-green-700">
+											<Calculator className="h-3 w-3" />
+											${profit.toFixed(2)}
+										</div>
+									</div>
+
+									{/* VAT (Read-only) */}
+									<div className="space-y-1">
+										<Label className="text-xs font-medium text-blue-700">VAT 15% ($)</Label>
+										<Input
+											type="text"
+											value={`$${Number(item.vatAmount || 0).toFixed(2)}`}
+											readOnly
+											className="h-8 text-sm bg-blue-50 border-blue-200 font-semibold text-blue-700 cursor-not-allowed"
+										/>
+									</div>
+
+									{/* Remarks */}
+									<div className="space-y-1 md:col-span-2 lg:col-span-1">
+										<Label className="text-xs font-medium text-slate-600">Remarks</Label>
+										<Input
+											value={item.remarks || ""}
+											onChange={(e) =>
+												updateSale(item.id, "remarks", e.target.value)
+											}
+											placeholder="Note"
+											className="h-8 text-sm"
+										/>
+									</div>
+								</div>
+							</CardContent>
+						</Card>
+					);
+				})}
+			</div>
+
+			{/* Summary Section */}
+			<Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-l-4 border-l-blue-500 shadow-md">
+				<CardHeader className="pb-3">
+					<CardTitle className="text-lg flex items-center gap-2 text-blue-800">
+						<Calculator className="h-5 w-5" />
+						Financial Summary
 					</CardTitle>
 				</CardHeader>
-
-				<CardContent className="overflow-x-auto">
-					{uiSales.map((item) => {
-						const isCredit =
-							String(item.paymentType).toUpperCase() === "CREDIT";
-
-						return (
-							<table
-								key={item.id}
-								className="w-full table-auto border-separate border-spacing-0 text-sm mb-6"
-							>
-								<thead>
-									<tr className="bg-gray-50 border-b">
-										<th>Airline</th>
-										<th>Doc</th>
-										<th>Vendor</th>
-										<th>Payment</th>
-										{isCredit && <th>Customer</th>}
-										<th>Net</th>
-										<th>Sell</th>
-										<th>Paid</th>
-										<th>Profit</th>
-										<th>Remarks</th>
-										<th />
-									</tr>
-								</thead>
-								<tbody>
-									<tr>
-										<td>
-											<Select
-												options={airlineOptions}
-												value={airlineOptions.find(
-													(o) => o.value === item.airlineId
-												)}
-												onChange={(o) =>
-													updateSale(item.id, "airlineId", o?.value)
-												}
-												menuPortalTarget={document.body}
-												styles={selectPortalStyles}
-											/>
-										</td>
-
-										<td>
-											<Input
-												value={item.documentNo}
-												onChange={(e) =>
-													updateSale(item.id, "documentNo", e.target.value)
-												}
-											/>
-										</td>
-
-										<td>
-											<Select
-												options={vendorOptions}
-												value={vendorOptions.find(
-													(o) => o.value === item.vendorId
-												)}
-												onChange={(o) =>
-													updateSale(item.id, "vendorId", o?.value)
-												}
-												menuPortalTarget={document.body}
-												styles={selectPortalStyles}
-											/>
-										</td>
-
-										<td>
-											<Select
-												options={paymentOptions}
-												value={paymentOptions.find(
-													(p) =>
-														p.value ===
-														String(item.paymentType).toUpperCase()
-												)}
-												onChange={(o) =>
-													updateSale(item.id, "paymentType", o?.value)
-												}
-												menuPortalTarget={document.body}
-												styles={selectPortalStyles}
-											/>
-										</td>
-
-										{isCredit && (
-											<td>
-												<Select
-													options={customerOptions}
-													value={customerOptions.find(
-														(o) => o.value === item.customerId
-													)}
-													onChange={(o) =>
-														updateSale(item.id, "customerId", o?.value)
-													}
-													menuPortalTarget={document.body}
-													styles={{
-														...selectPortalStyles,
-														container: (base) => ({
-															...base,
-															minWidth: 200,
-														}),
-														menu: (base) => ({
-															...base,
-															width: 240,
-														}),
-													}}
-												/>
-											</td>
-										)}
-
-										<td>
-											<Input
-												type="number"
-												value={item.netPrice}
-												onChange={(e) =>
-													updateSale(item.id, "netPrice", e.target.value)
-												}
-											/>
-										</td>
-
-										<td>
-											<Input
-												type="number"
-												value={item.sellPrice}
-												onChange={(e) =>
-													updateSale(item.id, "sellPrice", e.target.value)
-												}
-											/>
-										</td>
-
-										<td>
-											<Input
-												type="number"
-												value={item.paidAmount}
-												onChange={(e) =>
-													updateSale(item.id, "paidAmount", e.target.value)
-												}
-											/>
-										</td>
-
-										<td>
-											<div className="flex items-center gap-1 px-2 py-2 bg-green-50 border border-green-200 rounded text-xs font-semibold text-green-700">
-												<Calculator className="h-3 w-3" />$
-												{calculateProfit(item.netPrice, item.sellPrice)}
-											</div>
-										</td>
-
-										<td>
-											<Input
-												value={item.remarks || ""}
-												onChange={(e) =>
-													updateSale(item.id, "remarks", e.target.value)
-												}
-											/>
-										</td>
-
-										<td>
-											<Button
-												variant="ghost"
-												onClick={() => removeSale(item.id)}
-											>
-												<Trash2 className="h-4 w-4 text-red-500" />
-											</Button>
-										</td>
-									</tr>
-								</tbody>
-							</table>
-						);
-					})}
-				</CardContent>
-			</Card>
-
-			<Card>
-				<CardContent className="grid grid-cols-4 text-center">
-					<div>
-						<div className="text-xl font-bold">{uiSales.length}</div>
-						<div className="text-sm">Items</div>
-					</div>
-					<div>
-						<div className="text-xl font-bold">${totals.net}</div>
-						<div className="text-sm">Net</div>
-					</div>
-					<div>
-						<div className="text-xl font-bold">${totals.sell}</div>
-						<div className="text-sm">Sell</div>
-					</div>
-					<div>
-						<div className="text-xl font-bold text-green-600">
-							${totals.profit}
+				<CardContent>
+					<div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+						{/* Total Items */}
+						<div className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
+							<div className="text-sm text-slate-600 mb-1 font-medium">Total Items</div>
+							<div className="text-3xl font-bold text-slate-800">{uiSales.length}</div>
 						</div>
-						<div className="text-sm">Profit</div>
+
+						{/* Net Total */}
+						<div className="bg-white rounded-lg p-4 shadow-sm border border-blue-200">
+							<div className="text-sm text-blue-600 mb-1 font-medium">Net Total</div>
+							<div className="text-3xl font-bold text-blue-700">${totals.net.toFixed(2)}</div>
+						</div>
+
+						{/* Sell Total */}
+						<div className="bg-white rounded-lg p-4 shadow-sm border border-purple-200">
+							<div className="text-sm text-purple-600 mb-1 font-medium">Sell Total</div>
+							<div className="text-3xl font-bold text-purple-700">${totals.sell.toFixed(2)}</div>
+						</div>
+
+						{/* Total Profit */}
+						<div className="bg-white rounded-lg p-4 shadow-sm border border-green-200">
+							<div className="text-sm text-green-600 mb-1 font-medium">Total Profit</div>
+							<div className="text-3xl font-bold text-green-700">${totals.profit.toFixed(2)}</div>
+						</div>
+
+						{/* Total VAT */}
+						<div className="bg-white rounded-lg p-4 shadow-sm border border-indigo-200">
+							<div className="text-sm text-indigo-600 mb-1 font-medium">Total VAT (15%)</div>
+							<div className="text-3xl font-bold text-indigo-700">${totals.vat.toFixed(2)}</div>
+						</div>
 					</div>
 				</CardContent>
 			</Card>
+
+			{/* Destination Management Dialog */}
+			<Dialog open={destinationDialog.open} onOpenChange={(open) => setDestinationDialog({ open, saleId: null })}>
+				<DialogContent className="max-w-2xl">
+					<DialogHeader>
+						<DialogTitle className="flex items-center gap-2">
+							<MapPin className="h-5 w-5 text-blue-600" />
+							Manage Destinations
+						</DialogTitle>
+					</DialogHeader>
+					
+					{currentSaleForDialog && (
+						<div className="space-y-4">
+							{/* Add New Destination */}
+							<div className="space-y-2">
+								<Label className="text-sm font-semibold">Add Destination</Label>
+								<AsyncSelect
+									cacheOptions
+									defaultOptions={false}
+									loadOptions={loadDestinationOptions}
+									value={null}
+									onChange={(selected) => {
+										if (selected) {
+											updateSale(
+												currentSaleForDialog.id,
+												"destinations",
+												[...(currentSaleForDialog.destinations || []), selected]
+											);
+										}
+									}}
+									placeholder="Type to search (e.g., LHR, Dubai, New York)..."
+									className="text-sm"
+									menuPortalTarget={document.body}
+									styles={{
+										control: (base, state) => ({
+											...base,
+											minHeight: 40,
+											borderColor: state.isFocused ? '#3b82f6' : '#e5e7eb',
+										}),
+										menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+									}}
+									noOptionsMessage={({ inputValue }) =>
+										inputValue.length < 2
+											? "Type at least 2 characters to search"
+											: "No destinations found"
+									}
+								/>
+							</div>
+
+							{/* Current Destinations */}
+							<div className="space-y-2">
+								<Label className="text-sm font-semibold">Selected Destinations ({currentSaleForDialog.destinations?.length || 0})</Label>
+								{currentSaleForDialog.destinations?.length > 0 ? (
+									<div className="space-y-2 max-h-64 overflow-y-auto border rounded-lg p-3 bg-slate-50">
+										{currentSaleForDialog.destinations.map((dest, idx) => (
+											<div
+												key={`${dest.value}-${idx}`}
+												className="flex items-center justify-between p-2.5 bg-white border border-slate-200 rounded-md hover:border-blue-300 transition-colors"
+											>
+												<div className="flex items-center gap-2">
+													<MapPin className="h-4 w-4 text-blue-600" />
+													<span className="text-sm font-medium">{dest.label}</span>
+												</div>
+												<Button
+													variant="ghost"
+													size="sm"
+													onClick={() => removeDestination(currentSaleForDialog.id, dest.value)}
+													className="h-7 w-7 p-0 hover:bg-red-50 text-red-500"
+												>
+													<X className="h-4 w-4" />
+												</Button>
+											</div>
+										))}
+									</div>
+								) : (
+									<div className="text-center py-8 text-slate-400 text-sm border-2 border-dashed rounded-lg">
+										No destinations added yet. Use the search above to add destinations.
+									</div>
+								)}
+							</div>
+						</div>
+					)}
+				</DialogContent>
+			</Dialog>
 		</div>
 	);
 }

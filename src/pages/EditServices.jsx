@@ -21,6 +21,7 @@ import { Input } from "../../shadcn/components/ui/input";
 import EditSalesTab from "../components/EditSaleTab";
 import EditRefundTab from "../components/EditRefundTab";
 import Loader from "../components/Loading";
+import SubmitButton from "../components/SubmitButton";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
@@ -216,10 +217,8 @@ export default function EditSaleComponent() {
 					</Tabs>
 
 					{/* ACTION */}
-					<div className="flex justify-end pt-4">
-						<Button onClick={handleUpdate} disabled={loading}>
-							{loading ? "Updating..." : "Update Sale"}
-						</Button>
+					<div className="flex justify-center pt-4">
+			            <SubmitButton onClick={handleUpdate} disabled={loading} />
 					</div>
 				</CardContent>
 			</Card>

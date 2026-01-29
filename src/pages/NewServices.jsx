@@ -19,6 +19,7 @@ import { Input } from "../../shadcn/components/ui/input";
 
 import SalesTabComponent from "../components/SalesTabComponent";
 import RefundTabComponent from "../components/RefundTabComponent";
+import SubmitButton from "../components/SubmitButton";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
@@ -150,10 +151,8 @@ export default function NewSaleComponent() {
           {/* ======================
               SINGLE SUBMIT BUTTON
           ====================== */}
-          <div className="flex justify-end pt-4">
-            <Button onClick={handleSubmit} disabled={loading}>
-              {loading ? "Submitting..." : "Submit Sales & Refunds"}
-            </Button>
+          <div className="flex justify-center pt-4">
+            <SubmitButton onClick={handleSubmit} disabled={loading} />
           </div>
         </CardContent>
       </Card>

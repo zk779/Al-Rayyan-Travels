@@ -12,6 +12,7 @@ import {
 	FileText,
 	CreditCard,
 	SaudiRiyal,
+	Printer,
 } from "lucide-react";
 
 import {
@@ -80,6 +81,10 @@ export default function DetailedReportTab({
 		if (!invoiceId) return;
 
 		navigate(`/edit-services/${invoiceId}`);
+	};
+	const GenerateInvoice = (id) => {
+		if (!id) return;
+		navigate(`/invoice-print/${id}`);
 	};
 
 	function truncateText(text, wordLimit) {
@@ -247,7 +252,7 @@ export default function DetailedReportTab({
 												<TableCell className="max-w-[140px] truncate" title={sale.vendor}>
 													{sale.vendor || "-"}
 												</TableCell>
-												<TableCell className={`max-w-[140px] truncate ${sale.customer ? 'text-green-600' : 'text-blue-500'}`} title={sale.customer}>
+												<TableCell className={`max-w-[140px] truncate ${sale.customer ? 'text-blue-600' : 'text-emerald-600'}`} title={sale.customer}>
 													{sale.customer ? sale.customer : "Walkin Customer"}
 												</TableCell>
 												<TableCell className="max-w-[120px] truncate" title={sale.agent}>
@@ -313,7 +318,12 @@ export default function DetailedReportTab({
 															</DropdownMenuItem>
 															<DropdownMenuItem onClick={() => handleEdit(sale.invoiceId)}>
 																<Edit className="mr-2 h-4 w-4" />
-																Edit
+																Edit Invoice
+															</DropdownMenuItem>
+															<DropdownMenuSeparator />
+															<DropdownMenuItem onClick={() => GenerateInvoice(sale.id)}>
+																<Printer className="mr-2 h-4 w-4" />
+																Generate Invoice
 															</DropdownMenuItem>
 															<DropdownMenuSeparator />
 															<DropdownMenuItem

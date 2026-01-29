@@ -10,9 +10,10 @@ const Layout = () => {
   const { isDarkMode } = useContext(ThemeContext);
   const location = useLocation();
 
-  // ✅ Routes where we DON'T want sidebar + header
-  const HIDE_SIDEBAR_ROUTES = ["/", "/login"]; // add more like "/register", "/forgot-password" if needed
-  const hideSidebarAndHeader = HIDE_SIDEBAR_ROUTES.includes(location.pathname);
+const hideSidebarAndHeader =
+  location.pathname === "/" ||
+  location.pathname === "/login" ||
+  location.pathname.startsWith("/invoice-print/");
 
   // Determine margin-left class based on sidebar state and current route
   let sidebarMarginClass = hideSidebarAndHeader ? "ml-0" : "ml-64"; // Default expanded
