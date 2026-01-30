@@ -1,13 +1,15 @@
-import { useState } from "react";
-import { Lock, Mail, Eye, EyeOff } from "lucide-react";
+import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Lock, Mail, Eye, EyeOff, Loader2, UserCheck, ShieldCheck } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 import logo from "../assets/logo-dark.png";
 import logoLight from "../assets/logo-light.png";
 import Hero from "../assets/home/hero.jpg";
+import { Sparkles } from "../../shadcn/components/ui/sparkles";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL; // e.g. http://localhost:9000
+const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -16,23 +18,33 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
-
+  const [rememberMe, setRememberMe] = useState(false);
+  const [savedProfile, setSavedProfile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const profile = localStorage.getItem("rememberedProfile");
+    if (profile) {
+      const parsed = JSON.parse(profile);
+      setSavedProfile(parsed);
+      setEmail(parsed.email);
+      setRememberMe(true);
+    }
+  }, []);
+
+  const handleClearProfile = () => {
+    localStorage.removeItem("rememberedProfile");
+    setSavedProfile(null);
+    setEmail("");
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
-
-    if (!email || !password) {
-      setError("Email and password are required.");
-      return;
-    }
+    setLoading(true);
 
     try {
-      setLoading(true);
-
-      // ✅ Adjust endpoint if needed: /auth/login, /api/auth/login etc.
       const res = await fetch(`${API_BASE}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -42,196 +54,248 @@ export default function LoginPage() {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok || !data?.success) {
-        setError(data?.error || data?.message || "Login failed.");
-        return;
+        throw new Error(data?.message || "Invalid credentials");
       }
 
-      // ✅ store in context + localStorage
-      login({ token: data.token, user: data.user });
+      if (rememberMe) {
+        localStorage.setItem("rememberedProfile", JSON.stringify({
+          email: data.user.email,
+          name: data.user.name,
+          lastLogin: new Date().toISOString()
+        }));
+      } else {
+        localStorage.removeItem("rememberedProfile");
+      }
 
-      // ✅ redirect
+      login({ token: data.token, user: data.user });
       navigate("/dashboard", { replace: true });
     } catch (err) {
-      setError(err?.message || "Login failed.");
+      setError(err.message);
+      setPassword("");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen w-full bg-[#0b1220] text-white">
-      {/* Background */}
-      <div
-        className="fixed inset-0 -z-10 bg-cover bg-center"
-        style={{ backgroundImage: "url('/images/auth-bg.jpg')" }}
+    <div className="min-h-screen w-full bg-[#0b1220] text-white font-sans selection:bg-sky-500/30 overflow-x-hidden relative">
+      <div className="fixed inset-0 -z-20 bg-[url('/images/auth-bg.jpg')] bg-cover bg-center opacity-20" />
+      <div className="fixed inset-0 -z-10 bg-gradient-to-b from-[#0b1220]/40 via-[#0b1220] to-[#0b1220]" />
+      
+      <Sparkles
+        density={800}
+        speed={1.2}
+        size={1.2}
+        direction='top'
+        opacitySpeed={2}
+        color='#32A7FF'
+        className='absolute inset-x-0 bottom-0 h-full w-full'
       />
-      <div className="fixed inset-0 -z-10 bg-gradient-to-r from-[#0b1220]/95 via-[#0b1220]/80 to-[#0b1220]/60" />
-      <div className="fixed inset-0 -z-10 [background:radial-gradient(ellipse_at_top_left,rgba(59,130,246,0.12),transparent_55%),radial-gradient(ellipse_at_bottom_right,rgba(255,255,255,0.06),transparent_60%)]" />
 
-      <div className="mx-auto flex min-h-screen max-w-[1280px] flex-col px-6">
-        <header className="flex items-center justify-between py-6">
-          <Link to="/" className="flex items-center gap-3">
-            <div className="max-w-16 rounded-md border border-sky-600 shadow-[0_30px_30px_rgba(59,130,246,0.35)]">
-              <img src={logo} alt="Al Rayyan Travels" className="z-10" />
-            </div>
-            <div>
-              <div className="text-lg font-semibold tracking-tight">
-                Al Rayyan
+      <div className="mx-auto flex min-h-screen max-w-[1400px] flex-col px-6 relative z-10">
+        <header className="flex items-center py-8">
+          <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
+            <Link to="/" className="flex items-center gap-4 group">
+              <div className="relative">
+                <div className="absolute inset-0 bg-sky-500 blur-xl opacity-20 group-hover:opacity-40 transition-opacity" />
+                <div className="relative p-2.5 bg-white/5 rounded-xl border border-white/10 group-hover:border-sky-500/50 transition-all duration-500 backdrop-blur-md">
+                  <img src={logo} alt="Logo" className="w-9 h-9 object-contain" />
+                </div>
               </div>
-              <div className="opacity-70">Travels.</div>
-            </div>
-          </Link>
+              <div className="flex flex-col">
+                <span className="text-xl font-black tracking-tight leading-none uppercase">Al Rayyan</span>
+                <span className="text-xs text-sky-400 font-bold tracking-[0.3em] mt-1">TRAVELS</span>
+              </div>
+            </Link>
+          </motion.div>
         </header>
 
-        <main className="grid flex-1 grid-cols-1 items-center gap-10 pb-10 lg:grid-cols-2">
-          {/* Left */}
-          <div className="relative">
-            <svg
-              className="pointer-events-none absolute -right-14 top-0 hidden h-[620px] w-[260px] opacity-25 lg:block"
-              viewBox="0 0 260 620"
-              fill="none"
-            >
-              <path
+        {/* Height synchronized using items-stretch */}
+        <main className="relative grid flex-1 items-stretch gap-12 lg:grid-cols-2 pb-20 pt-4">
+          
+          <motion.div 
+            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden lg:block w-[400px] h-[600px] pointer-events-none z-0"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 0.15 }}
+            transition={{ duration: 1.5 }}
+          >
+            <svg viewBox="0 0 260 620" className="w-full h-full rotate-[10deg]">
+              <motion.path
                 d="M210 10 C 140 70, 250 180, 160 250 C 80 320, 210 420, 90 500 C 10 560, 90 610, 40 610"
                 stroke="white"
                 strokeWidth="2"
-                strokeDasharray="6 10"
+                strokeDasharray="8 12"
+                fill="transparent"
+                initial={{ pathLength: 0 }}
+                animate={{ pathLength: 1 }}
+                transition={{ duration: 2.5, ease: "easeInOut" }}
               />
             </svg>
+          </motion.div>
 
-            <div className="max-w-xl">
-              <p className="text-xs font-semibold tracking-[0.22em] text-white/60 text-center md:text-left">
-                WELCOME BACK
-              </p>
+          {/* Left Hero Section - Expanded Width/Height */}
+          <motion.section 
+            initial={{ opacity: 0, x: -30 }} 
+            animate={{ opacity: 1, x: 0 }}
+            className="relative z-10 flex flex-col"
+          >
+            <div className="inline-flex w-fit items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 text-sky-400 text-[10px] font-black tracking-[0.2em] uppercase backdrop-blur-md">
+              <ShieldCheck className="w-3 h-3" /> Secure Access Portal
+            </div>
+            
+            <h1 className="text-6xl font-black leading-[1.05] mb-8 tracking-tighter">
+              Manage your <br />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-sky-400 to-indigo-400">
+                Global Travels.
+              </span>
+            </h1>
 
-              <h1 className="mt-4 text-4xl font-extrabold tracking-tight sm:text-5xl text-center md:text-left">
-                Log in to your account<span className="text-sky-400">.</span>
-              </h1>
-
-              <div className="mt-10 rounded-2xl border border-white/10 bg-white/[0.06] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:p-7">
-                <form className="space-y-4" onSubmit={handleSubmit}>
-                  {/* Email */}
-                  <div className="space-y-2">
-                    <label className="text-xs font-semibold text-white/60">
-                      Email
-                    </label>
-                    <div className="group flex h-12 items-center gap-3 rounded-xl border border-white/10 bg-white/10 px-4 focus-within:border-sky-400/40 focus-within:bg-white/[0.12]">
-                      <span className="text-white/60 group-focus-within:text-sky-300">
-                        <Mail className="h-4 w-4" />
-                      </span>
-                      <input
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        name="email"
-                        type="email"
-                        autoComplete="email"
-                        placeholder="abcx@gmail.com"
-                        className="h-full w-full bg-transparent text-sm text-white placeholder:text-white/35 outline-none"
-                      />
-                    </div>
+            {/* Container now fills vertical space */}
+            <div className="relative group max-w-lg">
+              <div className="relative rounded-[2.5rem] overflow-hidden border border-white/10 shadow-2xl">
+                  <img src={Hero} alt="" className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#0b1220] via-transparent to-transparent opacity-60" />
+                  <div className="absolute bottom-0 right-5 flex items-center gap-2 opacity-90">
+                    <img src={logoLight} alt="" width={100} className="z-10" />
                   </div>
-
-                  {/* Password + toggle */}
-                  <div className="space-y-2">
-                    <label className="text-xs font-semibold text-white/60">
-                      Password
-                    </label>
-                    <div className="group flex h-12 items-center gap-3 rounded-xl border border-white/10 bg-white/10 px-4 focus-within:border-sky-400/40 focus-within:bg-white/[0.12]">
-                      <span className="text-white/60 group-focus-within:text-sky-300">
-                        <Lock className="h-4 w-4" />
-                      </span>
-
-                      <input
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        name="password"
-                        type={showPass ? "text" : "password"}
-                        autoComplete="current-password"
-                        placeholder="••••••••"
-                        className="h-full w-full bg-transparent text-sm text-white placeholder:text-white/35 outline-none"
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() => setShowPass((s) => !s)}
-                        className="text-white/40 hover:text-white/75 transition"
-                        aria-label={
-                          showPass ? "Hide password" : "Show password"
-                        }
-                      >
-                        {showPass ? (
-                          <EyeOff className="h-4 w-4" />
-                        ) : (
-                          <Eye className="h-4 w-4" />
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-1">
-                    <label className="flex items-center gap-2 text-sm text-white/70">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 rounded border-white/20 bg-white/10 text-sky-500 focus:ring-sky-500/40"
-                      />
-                      Remember me
-                    </label>
-
-                    <Link
-                      to="/forgot-password"
-                      className="text-sm font-semibold text-white/70 hover:text-white"
-                    >
-                      Forgot password?
-                    </Link>
-                  </div>
-
-                  {/* Error */}
-                  {error ? (
-                    <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-                      {error}
-                    </div>
-                  ) : null}
-
-                  <div className="grid grid-cols-1 gap-3 pt-4">
-                    <button
-                      type="submit"
-                      disabled={loading}
-                      className="h-12 rounded-xl bg-sky-500 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(14,165,233,0.35)] hover:bg-sky-400 active:bg-sky-600 disabled:opacity-60"
-                    >
-                      {loading ? "Logging in..." : "Log in"}
-                    </button>
-                  </div>
-
-                  <div className="pt-4 text-center text-xs text-white/50">
-                    By logging in, you agree to our{" "}
-                    <Link
-                      to="/terms"
-                      className="text-white/70 hover:text-white"
-                    >
-                      Terms
-                    </Link>{" "}
-                    &{" "}
-                    <Link
-                      to="/privacy"
-                      className="text-white/70 hover:text-white"
-                    >
-                      Privacy
-                    </Link>
-                    .
-                  </div>
-                </form>
               </div>
             </div>
-          </div>
+          </motion.section>
 
-          {/* Right */}
-          <div className="relative hidden w-full overflow-hidden rounded-3xl border border-white/10 bg-white/[0.04] shadow-[0_30px_90px_rgba(0,0,0,0.55)] backdrop-blur-xl lg:block">
-            <div className="absolute inset-0 bg-gradient-to-tr from-[#0b1220]/70 via-transparent to-[#0b1220]/10" />
-            <img src={Hero} alt="" className="h-full w-full object-cover" />
-            <div className="absolute bottom-2 right-8 flex items-center gap-2 opacity-90">
-              <img src={logoLight} alt="" width={100} className="z-10" />
+          {/* Right Login Card - Height synchronized with Left */}
+          <motion.section 
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="relative z-10"
+          >
+            <div className="bg-[#111827]/60 border border-white/10 backdrop-blur-xl rounded-[2.5rem] p-8 md:p-12 shadow-2xl relative overflow-hidden group/card">
+              <div className="absolute -top-24 -right-24 w-64 h-64 bg-sky-500/10 blur-[100px]" />
+              
+              <div className="mb-10 relative">
+                <h2 className="text-3xl font-bold tracking-tight">Welcome Back</h2>
+                <p className="text-white/40 text-sm font-medium mt-2">Sign in to manage your bookings and clients.</p>
+              </div>
+
+              <form onSubmit={handleSubmit} className="space-y-6 relative">
+                <AnimatePresence mode="wait">
+                  {savedProfile ? (
+                    <motion.div 
+                      key="saved"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="flex items-center justify-between p-5 rounded-2xl bg-white/5 border border-white/10"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-xl bg-sky-500 flex items-center justify-center text-white font-black shadow-lg shadow-sky-500/20">
+                          {savedProfile.email[0].toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold tracking-tight">{savedProfile.email}</p>
+                          <p className="text-[10px] text-sky-400 uppercase tracking-widest font-black">Remembered Account</p>
+                        </div>
+                      </div>
+                      <button 
+                        type="button" 
+                        onClick={handleClearProfile}
+                        className="text-[10px] font-black uppercase tracking-tighter text-white/20 hover:text-red-400 transition-colors"
+                      >
+                        Switch
+                      </button>
+                    </motion.div>
+                  ) : (
+                    <motion.div 
+                      key="new"
+                      className="space-y-2"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                    >
+                      <label className="text-[11px] font-black text-white/30 uppercase tracking-[0.2em] ml-2">Email Address</label>
+                      <div className="relative group">
+                        <Mail className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 group-focus-within:text-sky-400 transition-colors" />
+                        <input 
+                          type="email"
+                          required
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          placeholder="agent@alrayyan.com"
+                          className="w-full h-16 bg-white/5 border border-white/10 rounded-2xl pl-14 pr-4 text-sm outline-none focus:border-sky-500/50 transition-all"
+                        />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center px-2">
+                    <label className="text-[11px] font-black text-white/30 uppercase tracking-[0.2em]">Password</label>
+                    <Link to="/forgot" className="text-[11px] font-black text-sky-400 hover:text-sky-300 uppercase tracking-widest">Forgot?</Link>
+                  </div>
+                  <div className="relative group">
+                    <Lock className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 group-focus-within:text-sky-400 transition-colors" />
+                    <input 
+                      type={showPass ? "text" : "password"}
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full h-16 bg-white/5 border border-white/10 rounded-2xl pl-14 pr-14 text-sm outline-none focus:border-sky-500/50 transition-all"
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => setShowPass(!showPass)}
+                      className="absolute right-5 top-1/2 -translate-y-1/2 text-white/20 hover:text-sky-400 transition-colors"
+                    >
+                      {showPass ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 px-2">
+                  <button
+                    type="button"
+                    onClick={() => setRememberMe(!rememberMe)}
+                    className="flex items-center gap-3 text-xs font-bold transition-all group"
+                  >
+                    <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all duration-300 ${rememberMe ? 'bg-sky-500 border-sky-500 shadow-lg shadow-sky-500/30' : 'border-white/10 group-hover:border-white/30'}`}>
+                      {rememberMe && <UserCheck className="w-3.5 h-3.5 text-white" />}
+                    </div>
+                    <span className={rememberMe ? 'text-white' : 'text-white/40 group-hover:text-white/60'}>Trust this device</span>
+                  </button>
+                </div>
+
+                {error && (
+                  <motion.div 
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400 text-xs font-bold"
+                  >
+                    {error}
+                  </motion.div>
+                )}
+
+                <motion.button
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.99 }}
+                  type="submit"
+                  disabled={loading}
+                  className="w-full h-16 bg-sky-500 hover:bg-sky-400 disabled:opacity-50 rounded-2xl font-black text-sm tracking-widest uppercase shadow-xl shadow-sky-500/20 transition-all flex items-center justify-center gap-4"
+                >
+                  {loading ? (
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                  ) : (
+                    "Authorize Session"
+                  )}
+                </motion.button>
+              </form>
+
+              <div className="mt-10 pt-6 border-t border-white/5">
+                <Link to="/signup" className="block text-center text-sm font-black text-white/40 hover:text-sky-400 transition-colors uppercase tracking-widest">
+                  Contact Admin for Access
+                </Link>
+              </div>
             </div>
-          </div>
+          </motion.section>
         </main>
       </div>
     </div>

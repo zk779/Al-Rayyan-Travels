@@ -39,6 +39,7 @@ import {
 	DialogTitle,
 } from "../../shadcn/components/ui/dialog";
 import { Badge } from "../../shadcn/components/ui/badge";
+import ManageDestinationsDialog from "./ManageDestinationsDialog";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
@@ -804,101 +805,14 @@ useEffect(() => {
 				</Card>
 
 				{/* Destination Management Dialog */}
-				<Dialog
-					open={destinationDialog.open}
-					onOpenChange={(open) => setDestinationDialog({ open, saleId: null })}
-				>
-					<DialogContent className="max-w-2xl">
-						<DialogHeader>
-							<DialogTitle className="flex items-center gap-2">
-								<MapPin className="h-5 w-5 text-blue-600" />
-								Manage Destinations
-							</DialogTitle>
-						</DialogHeader>
-
-						{currentSaleForDialog && (
-							<div className="space-y-4">
-								{/* Add New Destination */}
-								<div className="space-y-2">
-									<Label className="text-sm font-semibold">Add Destination</Label>
-									<AsyncSelect
-										cacheOptions
-										defaultOptions={false}
-										loadOptions={loadDestinationOptions}
-										value={null}
-										onChange={(selected) => {
-											if (selected) {
-												updateSale(currentSaleForDialog.id, "destinations", [
-													...(currentSaleForDialog.destinations || []),
-													selected,
-												]);
-											}
-										}}
-										placeholder="Type to search (e.g., LHR, Dubai, New York)..."
-										className="text-sm"
-										menuPortalTarget={document.body}
-										styles={{
-											control: (base, state) => ({
-												...base,
-												minHeight: 40,
-												borderColor: state.isFocused ? "#3b82f6" : "#e5e7eb",
-											}),
-											menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-										}}
-										noOptionsMessage={({ inputValue }) =>
-											inputValue.length < 2
-												? "Type at least 2 characters to search"
-												: "No destinations found"
-										}
-									/>
-								</div>
-
-								{/* Current Destinations */}
-								<div className="space-y-2">
-									<Label className="text-sm font-semibold">
-										Selected Destinations (
-										{currentSaleForDialog.destinations?.length || 0})
-									</Label>
-									{currentSaleForDialog.destinations?.length > 0 ? (
-										<div className="space-y-2 max-h-64 overflow-y-auto border rounded-lg p-3 bg-slate-50">
-											{currentSaleForDialog.destinations.map((dest) => (
-												<div
-													key={dest.value}
-													className="flex items-center justify-between p-2.5 bg-white border border-slate-200 rounded-md hover:border-blue-300 transition-colors"
-												>
-													<div className="flex items-center gap-2">
-														<MapPin className="h-4 w-4 text-blue-600" />
-														<span className="text-sm font-medium">
-															{dest.label}
-														</span>
-													</div>
-													<Button
-														variant="ghost"
-														size="sm"
-														onClick={() =>
-															removeDestination(
-																currentSaleForDialog.id,
-																dest.value,
-															)
-														}
-														className="h-7 w-7 p-0 hover:bg-red-50 text-red-500"
-													>
-														<X className="h-4 w-4" />
-													</Button>
-												</div>
-											))}
-										</div>
-									) : (
-										<div className="text-center py-8 text-slate-400 text-sm border-2 border-dashed rounded-lg">
-											No destinations added yet. Use the search above to add
-											destinations.
-										</div>
-									)}
-								</div>
-							</div>
-						)}
-					</DialogContent>
-				</Dialog>
+				<ManageDestinationsDialog
+				  destinationDialog={destinationDialog}
+				  setDestinationDialog={setDestinationDialog}
+				  currentSaleForDialog={currentSaleForDialog}
+				  updateSale={updateSale}
+				  removeDestination={removeDestination}
+				  loadDestinationOptions={loadDestinationOptions}
+				/>
 			</div>
 		);
 }
