@@ -95,7 +95,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-[#0b1220] text-white font-sans selection:bg-sky-500/30 overflow-x-hidden relative">
+    <div className="min-h-screen w-full bg-black bg-[radial-gradient(200%_120%_at_50%_10%,rgba(52,99,135,0)_55%,rgba(50,132,237,1)_100%)] text-white font-sans selection:bg-sky-500/30 overflow-x-hidden relative">
       <div className="fixed inset-0 -z-20 bg-[url('/images/auth-bg.jpg')] bg-cover bg-center opacity-20" />
       <div className="fixed inset-0 -z-10 bg-gradient-to-b from-[#0b1220]/40 via-[#0b1220] to-[#0b1220]" />
       
