@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, memo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Lock, Mail, Eye, EyeOff, Loader2, UserCheck, ShieldCheck } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
@@ -10,6 +10,23 @@ import Hero from "../assets/home/hero.jpg";
 import { Sparkles } from "../../shadcn/components/ui/sparkles";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
+
+// FIXED: Memoizing the Sparkles component prevents it from re-rendering 
+// when the parent's email/password state changes.
+const StaticSparkles = memo(() => (
+  <Sparkles
+    key="login-sparkles-static"
+    density={800}
+    speed={1.2}
+    size={1.2}
+    direction="top"
+    opacitySpeed={2}
+    color="#32A7FF"
+    className="absolute inset-x-0 bottom-0 h-full w-full"
+  />
+));
+
+StaticSparkles.displayName = "StaticSparkles";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -82,15 +99,8 @@ export default function LoginPage() {
       <div className="fixed inset-0 -z-20 bg-[url('/images/auth-bg.jpg')] bg-cover bg-center opacity-20" />
       <div className="fixed inset-0 -z-10 bg-gradient-to-b from-[#0b1220]/40 via-[#0b1220] to-[#0b1220]" />
       
-      <Sparkles
-        density={800}
-        speed={1.2}
-        size={1.2}
-        direction='top'
-        opacitySpeed={2}
-        color='#32A7FF'
-        className='absolute inset-x-0 bottom-0 h-full w-full'
-      />
+      {/* FIXED BACKGROUND: Sparkles now stay steady during typing */}
+      <StaticSparkles />
 
       <div className="mx-auto flex min-h-screen max-w-[1400px] flex-col px-6 relative z-10">
         <header className="flex items-center py-8">
@@ -110,7 +120,6 @@ export default function LoginPage() {
           </motion.div>
         </header>
 
-        {/* Height synchronized using items-stretch */}
         <main className="relative grid flex-1 items-stretch gap-12 lg:grid-cols-2 pb-20 pt-4">
           
           <motion.div 
@@ -133,7 +142,7 @@ export default function LoginPage() {
             </svg>
           </motion.div>
 
-          {/* Left Hero Section - Expanded Width/Height */}
+          {/* Left Hero Section: Synchronized height and larger image */}
           <motion.section 
             initial={{ opacity: 0, x: -30 }} 
             animate={{ opacity: 1, x: 0 }}
@@ -227,10 +236,6 @@ export default function LoginPage() {
                 </AnimatePresence>
 
                 <div className="space-y-2">
-                  <div className="flex justify-between items-center px-2">
-                    <label className="text-[11px] font-black text-white/30 uppercase tracking-[0.2em]">Password</label>
-                    <Link to="/forgot" className="text-[11px] font-black text-sky-400 hover:text-sky-300 uppercase tracking-widest">Forgot?</Link>
-                  </div>
                   <div className="relative group">
                     <Lock className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 group-focus-within:text-sky-400 transition-colors" />
                     <input 

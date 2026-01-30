@@ -1,7 +1,8 @@
 'use client';
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useState, useMemo } from 'react'; // Added useMemo
 import Particles, { initParticlesEngine } from '@tsparticles/react';
 import { loadSlim } from '@tsparticles/slim';
+
 export function Sparkles({
   className,
   size = 1.2,
@@ -20,6 +21,7 @@ export function Sparkles({
   options = {},
 }) {
   const [isReady, setIsReady] = useState(false);
+
   useEffect(() => {
     initParticlesEngine(async (engine) => {
       await loadSlim(engine);
@@ -27,8 +29,11 @@ export function Sparkles({
       setIsReady(true);
     });
   }, []);
+
   const id = useId();
-  const defaultOptions = {
+
+  // Wrap the options in useMemo so they only change if the props change
+  const defaultOptions = useMemo(() => ({
     background: {
       color: {
         value: background,
@@ -38,7 +43,7 @@ export function Sparkles({
       enable: false,
       zIndex: 1,
     },
-    fpsLimit: 300,
+    fpsLimit: 120, // Reduced from 300 for better performance
     interactivity: {
       events: {
         onClick: {
@@ -60,10 +65,6 @@ export function Sparkles({
         push: {
           quantity: 4,
         },
-        repulse: {
-          distance: 200,
-          duration: 0.4,
-        },
       },
     },
     particles: {
@@ -78,26 +79,6 @@ export function Sparkles({
           max: speed,
         },
         straight: true,
-      },
-      collisions: {
-        absorb: {
-          speed: 2,
-        },
-        bounce: {
-          horizontal: {
-            value: 1,
-          },
-          vertical: {
-            value: 1,
-          },
-        },
-        enable: false,
-        maxSpeed: 50,
-        mode: 'bounce',
-        overlap: {
-          enable: true,
-          retries: 0,
-        },
       },
       number: {
         value: density,
@@ -121,7 +102,8 @@ export function Sparkles({
       },
     },
     detectRetina: true,
-  };
+  }), [background, hover, mousemove, color, direction, minSpeed, speed, density, minOpacity, opacity, opacitySpeed, minSize, size]);
+
   return (
     isReady && (
       <Particles id={id} options={defaultOptions} className={className} />
