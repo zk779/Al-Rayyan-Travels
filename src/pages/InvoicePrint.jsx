@@ -258,13 +258,13 @@ const InvoicePrint = () => {
                                     <div className="px-4 flex item-center gap-1">
                                         <span className="text-xs text-gray-600 block">Customer VAT ID</span>
                                         <span className="text-xs font-semibold text-gray-900 font-mono">
-                                            {invoiceData.customer?.vat || "N/A"}
+                                            {invoiceData.customer?.customerVatId || "N/A"}
                                         </span>
                                     </div>
                                     <div className="px-4 text-right flex items-center gap-1" dir="rtl">
                                         <span className="text-xs text-gray-600 block">الرقم الضريبي للعميل:</span>
                                         <span className="text-xs font-semibold text-gray-900 font-mono">
-                                            {invoiceData.customer?.vat || "غير متوفر"}
+                                            {invoiceData.customer?.customerVatId || "غير متوفر"}
                                         </span>
                                     </div>
                                     <div className="px-4 py-3 flex item-center gap-1">
