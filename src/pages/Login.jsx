@@ -178,7 +178,7 @@ export default function LoginPage() {
             className="relative z-10"
           >
             <div className="bg-[#111827]/60 border border-white/10 backdrop-blur-xl rounded-[2.5rem] p-8 md:p-12 shadow-2xl relative overflow-hidden group/card">
-              <div className="absolute -top-24 -right-24 w-64 h-64 bg-sky-500/10 blur-[100px]" />
+              <div className="absolute -top-24 -right-10 w-64 h-64 bg-sky-500/20 blur-[100px]" />
               
               <div className="mb-10 relative">
                 <h2 className="text-3xl font-bold tracking-tight">Welcome Back</h2>
