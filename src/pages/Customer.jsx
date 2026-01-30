@@ -35,6 +35,7 @@ import {
 	Filter,
 	TrendingUp,
 	UserCheck,
+	SaudiRiyal,
 } from "lucide-react";
 
 const { Option } = Select;
@@ -199,6 +200,7 @@ const CustomersPage = () => {
 				form.setFieldsValue({
 					name: customer.customerName,
 					type: customer.customerType,
+					customerVatId: customer.customerVatId,
 					contactPerson: customer.contactPerson,
 					phone: customer.phone,
 					email: customer.email,
@@ -225,6 +227,7 @@ const CustomersPage = () => {
 				const payload = {
 					customerName: values.name,
 					customerType: values.type,
+					customerVatId: values.customerVatId,
 					contactPerson: values.contactPerson,
 					phone: values.phone,
 					email: values.email || null,
@@ -657,7 +660,7 @@ const CustomersPage = () => {
 						onFinish={handleSubmit}
 						className="mt-6"
 					>
-						<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+						<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 							<Form.Item
 								name="name"
 								label={<span className="font-semibold">Customer Name</span>}
@@ -681,6 +684,16 @@ const CustomersPage = () => {
 								</Select>
 							</Form.Item>
 
+							<Form.Item
+								name="customerVatId"
+								label={<span className="font-semibold">Customer VAT ID</span>}
+							>
+								<Input
+									placeholder="e.g. 7421158960"
+									size="large"
+									prefix={<SaudiRiyal className="w-4 h-4 text-gray-400" />}
+								/>
+							</Form.Item>
 							<Form.Item
 								name="contactPerson"
 								label={<span className="font-semibold">Contact Person</span>}
@@ -753,7 +766,7 @@ const CustomersPage = () => {
 							<Form.Item
 								name="address"
 								label={<span className="font-semibold">Address</span>}
-								className="md:col-span-2"
+								className="md:col-span-3"
 							>
 								<Input.TextArea
 									rows={3}
