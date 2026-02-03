@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
+import ZATCAQRCode from "../components/ZATCAQRGenerator";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
@@ -152,6 +153,25 @@ const InvoicePrint = () => {
     const serviceCharges = invoiceData.profit || 0;
     const vatAmount = invoiceData.vatAmount || 0;
     const rowTotal = baseFare + serviceCharges + vatAmount;
+
+    // Prepare ZATCA QR data
+    const grandTotalforQR = parseFloat(rowTotal) || 0;
+    const vatTotalforQR = parseFloat(vatAmount) || 0;
+    const timestampForQR = (() => {
+        const createdAt = invoiceData.invoice?.createdAt;
+        if (!createdAt) return new Date().toISOString();
+        
+        const dateObj = new Date(createdAt);
+        return dateObj.toISOString();
+    })();
+
+    const zatcaInvoiceData = {
+        sellerName: companyData.name,
+        vatNumber: companyData.trn,
+        totalWithVat: grandTotalforQR,
+        vatTotal: vatTotalforQR,
+        timestamp: timestampForQR,
+    };
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -365,8 +385,8 @@ const InvoicePrint = () => {
                     </div>
 
                     {/* Summary Section */}
-                    <div className="flex justify-end mb-3">
-                        <div className="w-96">
+                    <div className="flex flex-row-reverse justify-between mb-3">
+                        <div className="">
                             <div className="border-1 border-gray-300 rounded-lg overflow-hidden shadow-sm">
                                 <table className="w-full text-xs">
                                     <tbody>
@@ -397,26 +417,15 @@ const InvoicePrint = () => {
 
                             </div>
                         </div>
+                        {/* ZATCA QR Code Section */}
+                    <div className="mb-3 flex justify-center">
+                        <div className="border-1 border-gray-300 rounded-lg p-2 bg-gray-50">
+                            <ZATCAQRCode invoiceData={zatcaInvoiceData} />
+                        </div>
+                    </div>
                     </div>
 
-                    {/* Remarks Section
-                    {invoiceData.remarks && (
-                        <div className="mb-3">
-                            <div className="bg-amber-50 border-l-4 border-amber-400 p-4 rounded shadow-sm">
-                                <div className="flex items-start">
-                                    <div className="flex-shrink-0">
-                                        <svg className="h-5 w-5 text-amber-600" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                                        </svg>
-                                    </div>
-                                    <div className="ml-3">
-                                        <p className="text-xs font-semibold text-amber-900">Remarks</p>
-                                        <p className="text-xs text-amber-800 mt-1">{invoiceData.remarks}</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )} */}
+                    
 
                     {/* Terms & Conditions */}
                     <div className="border-t-2 border-gray-300 pt-5 mt-8">
