@@ -1,5 +1,5 @@
 import React from "react";
-import hero from "../../assets/home/hero.jpg"; // Adjust the path as necessary
+import hero from "../../assets/home/Cover-Art.png"; // Adjust the path as necessary
 import {
   ArrowBigDown,
   ArrowBigDownDash,
