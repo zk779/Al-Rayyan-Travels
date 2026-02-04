@@ -149,10 +149,13 @@ const InvoicePrint = () => {
         );
     }
 
-    const baseFare = invoiceData.sellPrice || 0;
-    const serviceCharges = invoiceData.profit || 0;
-    const vatAmount = invoiceData.vatAmount || 0;
-    const rowTotal = baseFare + serviceCharges + vatAmount;
+    const grossAmount = invoiceData.sellPrice || 0; // 150
+    const netAmount = grossAmount / 1.15;
+    const vat = grossAmount - netAmount;
+
+    const baseFare = netAmount || 0;
+    const vatAmount = vat || 0;
+    const rowTotal = baseFare + vatAmount;
 
     // Prepare ZATCA QR data
     const grandTotalforQR = parseFloat(rowTotal) || 0;
@@ -348,10 +351,10 @@ const InvoicePrint = () => {
                                             <div className="leading-tight">Base Fare</div>
                                             <div className="font-normal text-[10px] opacity-90 mt-0.5" dir="rtl">الأجرة الأساسية</div>
                                         </th>
-                                        <th className="border-r border-gray-700 px-3 py-3 text-right font-semibold">
+                                        {/* <th className="border-r border-gray-700 px-3 py-3 text-right font-semibold">
                                             <div className="leading-tight">Service Charges</div>
                                             <div className="font-normal text-[10px] opacity-90 mt-0.5" dir="rtl">رسوم الخدمة</div>
-                                        </th>
+                                        </th> */}
                                         <th className="border-r border-gray-700 px-3 py-3 text-right font-semibold">
                                             <div className="leading-tight">VAT (15%)</div>
                                             <div className="font-normal text-[10px] opacity-90 mt-0.5" dir="rtl">ضريبة</div>
@@ -375,7 +378,7 @@ const InvoicePrint = () => {
                                         <td className="border-r border-gray-300 px-3 py-3 font-medium">{formatDestinations(invoiceData.destinations)}</td>
                                         <td className="border-r border-gray-300 px-3 py-3">{invoiceData.vendor?.vendorName || 'N/A'}</td>
                                         <td className="border-r border-gray-300 px-3 py-3 text-right font-semibold">{baseFare.toFixed(2)}</td>
-                                        <td className="border-r border-gray-300 px-3 py-3 text-right font-semibold text-green-700">{serviceCharges.toFixed(2)}</td>
+                                        {/* <td className="border-r border-gray-300 px-3 py-3 text-right font-semibold text-green-700">{serviceCharges.toFixed(2)}</td> */}
                                         <td className="border-r border-gray-300 px-3 py-3 text-right font-semibold text-blue-700">{vatAmount.toFixed(2)}</td>
                                         <td className="px-3 py-3 text-right font-bold text-gray-900">{rowTotal.toFixed(2)}</td>
                                     </tr>
@@ -391,16 +394,16 @@ const InvoicePrint = () => {
                                 <table className="w-full text-xs">
                                     <tbody>
                                         <tr className="border-b border-gray-300">
-                                            <td className="py-2.5 px-4 text-gray-700 font-medium">Base Fare / الأجرة الأساسية</td>
-                                            <td className="py-2.5 px-4 text-right font-semibold text-gray-900">SAR {baseFare.toFixed(2)}</td>
+                                            <td className="py-4 px-4 text-gray-700 font-medium">Base Fare / الأجرة الأساسية</td>
+                                            <td className="py-4 px-4 text-right font-semibold text-gray-900">SAR {baseFare.toFixed(2)}</td>
                                         </tr>
-                                        <tr className="border-b border-gray-300 bg-gray-50">
+                                        {/* <tr className="border-b border-gray-300 bg-gray-50">
                                             <td className="py-2.5 px-4 text-gray-700 font-medium">Service Charges / رسوم الخدمة</td>
                                             <td className="py-2.5 px-4 text-right font-semibold text-green-700">SAR {serviceCharges.toFixed(2)}</td>
-                                        </tr>
+                                        </tr> */}
                                         <tr className="border-b-2 border-gray-400 bg-gray-50">
-                                            <td className="py-2.5 px-4 font-semibold text-gray-900">VAT @ 15% / ضريبة القيمة المضافة</td>
-                                            <td className="py-2.5 px-4 text-right font-bold text-blue-700">SAR {vatAmount.toFixed(2)}</td>
+                                            <td className="py-4 px-4 font-semibold text-gray-900">VAT @ 15% / ضريبة القيمة المضافة</td>
+                                            <td className="py-4 px-4 text-right font-bold text-blue-700">SAR {vatAmount.toFixed(2)}</td>
                                         </tr>
                                         <tr className="bg-gradient-to-tl from-gray-600 to-gray-700 text-white">
                                             <td className="py-4 px-4 font-bold text-sm uppercase tracking-wide">

@@ -556,19 +556,47 @@ export default function SalesTabComponent({ sales, setSales }) {
 										<Receipt className="h-4 w-4" />
 										Sale #{index + 1}
 									</CardTitle>
+									{/* Route Type (Read-only) */}
+									<div className="flex gap-2">
+										<Label className="text-md font-medium text-indigo-700 flex items-center gap-1">
+											<Route className="h-3 w-3" />
+											Route Type :
+										</Label>
+										<Select
+											options={routeTypeOptions}
+											value={
+												routeTypeOptions.find(
+													(o) => o.value === item.routeType,
+												) || null
+											}
+											// isDisabled
+											placeholder="Based on Destinations"
+											menuPortalTarget={document.body}
+											styles={{
+												...compactSelectStyles,
+												control: (base) => ({
+													...compactSelectStyles.control(base),
+													backgroundColor: "#eef2ff",
+													borderColor: "#c7d2fe",
+												}),
+											}}
+										/>
+									<div className="border"></div>
 									<Button
 										variant="ghost"
 										size="sm"
 										onClick={() => removeSaleRow(item.id)}
-									>
+										>
 										<Trash2 className="h-4 w-4 text-red-500" />
 									</Button>
+									
+										</div>
 								</div>
 							</CardHeader>
 
 							<CardContent className="space-y-3">
 								{/* Row 1: Basic Information */}
-								<div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+								<div className={`grid grid-cols-1 ${isCredit ? "md:grid-cols-7" : "md:grid-cols-6"} gap-3`}>
 									{/* Airline */}
 									<div className="space-y-1">
 										<Label className="text-xs font-medium text-slate-600">
@@ -679,54 +707,6 @@ export default function SalesTabComponent({ sales, setSales }) {
 											)}
 										</div>
 									</div>
-									{/* Route Type (Read-only) */}
-									<div className="space-y-1">
-										<Label className="text-xs font-medium text-indigo-700 flex items-center gap-1">
-											<Route className="h-3 w-3" />
-											Route Type
-										</Label>
-										<Select
-											options={routeTypeOptions}
-											value={
-												routeTypeOptions.find(
-													(o) => o.value === item.routeType,
-												) || null
-											}
-											// isDisabled
-											placeholder="Based on Destinations"
-											menuPortalTarget={document.body}
-											styles={{
-												...compactSelectStyles,
-												control: (base) => ({
-													...compactSelectStyles.control(base),
-													backgroundColor: "#eef2ff",
-													borderColor: "#c7d2fe",
-												}),
-											}}
-										/>
-									</div>
-
-									
-								</div>
-
-								{/* Row 2: Route Type + Financial Information */}
-								<div
-									className={`grid grid-cols-2 ${
-										isCredit
-											? item.routeType === "DOMESTIC"
-												? "md:grid-cols-9"
-												: item.routeType === "ZERO_VAT"
-												? "md:grid-cols-8"
-												: "md:grid-cols-8"
-											: item.routeType === "DOMESTIC"
-											? "md:grid-cols-8"
-											: item.routeType === "ZERO_VAT"
-											? "md:grid-cols-7"
-											: "md:grid-cols-7"
-									} gap-3`}
-								>
-
-									{/* Payment Method */}
 									<div className="space-y-1">
 										<Label className="text-xs font-medium text-slate-600">
 											Payment *
@@ -772,6 +752,22 @@ export default function SalesTabComponent({ sales, setSales }) {
 											/>
 										</div>
 									)}
+									
+								</div>
+
+								{/* Row 2: Route Type + Financial Information */}
+								<div
+									className={`grid grid-cols-2 ${
+										item.routeType === "DOMESTIC"
+											? "md:grid-cols-7"
+											: item.routeType === "ZERO_VAT"
+											? "md:grid-cols-6"
+											: "md:grid-cols-6"
+									} gap-3`}
+								>
+
+									{/* Payment Method */}
+									
 
 									
 
