@@ -71,6 +71,7 @@ export default function SalesTabComponent({ sales, setSales }) {
 		id: crypto.randomUUID(),
 		airlineId: "",
 		documentNo: "",
+		pnr: "",
 		vendorId: "",
 		customerId: "",
 		netPrice: "",
@@ -90,6 +91,7 @@ export default function SalesTabComponent({ sales, setSales }) {
 		return (
 			!s.airlineId &&
 			!s.documentNo &&
+			!s.pnr &&
 			!s.vendorId &&
 			!s.customerId &&
 			!s.netPrice &&
@@ -404,8 +406,13 @@ export default function SalesTabComponent({ sales, setSales }) {
 	/* =========================
 	CALCULATIONS
 	========================= */
-	const calculateProfit = (net, sell) =>
-		net && sell ? (sell - net).toFixed(2) : "0.00";
+	const calculateProfit = (net, sell, vat) => {
+		const netNum = Number(net) || 0;
+		const sellNum = Number(sell) || 0;
+		const vatNum = Number(vat) || 0;
+		const profit = sellNum - netNum - vatNum;
+		return profit.toFixed(2);
+	};
 
 	const totals = uiSales.reduce(
 		(acc, item) => {
@@ -414,11 +421,12 @@ export default function SalesTabComponent({ sales, setSales }) {
 			const vat = Number(item.vatAmount) || 0;
 			const paxVat = Number(item.paxVat) || 0;
 			const misc = Number(item.miscCharges) || 0;
+			const profit = sell - net - vat;
 
 			return {
 				net: acc.net + net,
 				sell: acc.sell + sell,
-				profit: acc.profit + (sell - net),
+				profit: acc.profit + profit,
 				vat: acc.vat + vat,
 				paxVat: acc.paxVat + paxVat,
 				misc: acc.misc + misc,
@@ -459,7 +467,6 @@ export default function SalesTabComponent({ sales, setSales }) {
 			...base,
 			minHeight: 32,
 			height: 32,
-			// borderColor: state.isFocused ? "#3b82f6" : "#e5e7eb",
 			boxShadow: "none",
 			fontSize: "13px",
 		}),
@@ -542,7 +549,7 @@ export default function SalesTabComponent({ sales, setSales }) {
 			<div className="space-y-3">
 				{uiSales.map((item, index) => {
 					const isCredit = String(item.paymentType).toUpperCase() === "CREDIT";
-					const profit = calculateProfit(item.netPrice, item.sellPrice);
+					const profit = calculateProfit(item.netPrice, item.sellPrice, item.vatAmount);
 
 					return (
 						<Card
@@ -569,7 +576,6 @@ export default function SalesTabComponent({ sales, setSales }) {
 													(o) => o.value === item.routeType,
 												) || null
 											}
-											// isDisabled
 											placeholder="Based on Destinations"
 											menuPortalTarget={document.body}
 											styles={{
@@ -596,7 +602,7 @@ export default function SalesTabComponent({ sales, setSales }) {
 
 							<CardContent className="space-y-3">
 								{/* Row 1: Basic Information */}
-								<div className={`grid grid-cols-1 ${isCredit ? "md:grid-cols-7" : "md:grid-cols-6"} gap-3`}>
+								<div className={`grid grid-cols-1 ${isCredit ? "md:grid-cols-8" : "md:grid-cols-7"} gap-3`}>
 									{/* Airline */}
 									<div className="space-y-1">
 										<Label className="text-xs font-medium text-slate-600">
@@ -661,6 +667,20 @@ export default function SalesTabComponent({ sales, setSales }) {
 												updateSale(item.id, "paxName", e.target.value)
 											}
 											placeholder="John Doe"
+											className="h-8 text-sm"
+										/>
+									</div>
+									{/* PNR */}
+									<div className="space-y-1">
+										<Label className="text-xs font-medium text-slate-600">
+											PNR
+										</Label>
+										<Input
+											value={item.pnr}
+											onChange={(e) =>
+												updateSale(item.id, "pnr", e.target.value)
+											}
+											placeholder="PNR Code"
 											className="h-8 text-sm"
 										/>
 									</div>
@@ -755,7 +775,7 @@ export default function SalesTabComponent({ sales, setSales }) {
 									
 								</div>
 
-								{/* Row 2: Route Type + Financial Information */}
+								{/* Row 2: Financial Information */}
 								<div
 									className={`grid grid-cols-2 ${
 										item.routeType === "DOMESTIC"
@@ -765,11 +785,6 @@ export default function SalesTabComponent({ sales, setSales }) {
 											: "md:grid-cols-6"
 									} gap-3`}
 								>
-
-									{/* Payment Method */}
-									
-
-									
 
 									{/* Net Price */}
 									<div className="space-y-1">
@@ -832,16 +847,6 @@ export default function SalesTabComponent({ sales, setSales }) {
 										/>
 									</div>
 
-									{/* Profit (Read-only) */}
-									<div className="space-y-1">
-										<Label className="text-xs font-medium text-green-700">
-											Profit <SaudiRiyal size={15} />
-										</Label>
-										<div className="flex items-center gap-1 px-2 h-8 bg-green-50 border border-green-200 rounded text-xs font-semibold text-green-700">
-											<Calculator className="h-3 w-3" />${profit}
-										</div>
-									</div>
-
 									{/* VAT or MISC based on Route Type */}
 									{item.routeType === "ZERO_VAT" ? (
 										<div className="space-y-1">
@@ -869,6 +874,16 @@ export default function SalesTabComponent({ sales, setSales }) {
 											</div>
 										</div>
 									)}
+
+									{/* Profit (Read-only) - VAT deducted */}
+									<div className="space-y-1">
+										<Label className="text-xs font-medium text-green-700">
+											Profit <SaudiRiyal size={15} />
+										</Label>
+										<div className="flex items-center gap-1 px-2 h-8 bg-green-50 border border-green-200 rounded text-xs font-semibold text-green-700">
+											<Calculator className="h-3 w-3" />${profit}
+										</div>
+									</div>
 
 									{/* Remarks */}
 									<div className="space-y-1 md:col-span-2 lg:col-span-1">
@@ -933,17 +948,6 @@ export default function SalesTabComponent({ sales, setSales }) {
 				</div>
 			</div>
 
-			{/* Total Profit */}
-			<div className="bg-white rounded-lg p-4 shadow-sm border border-green-200">
-				<div className="text-sm text-green-600 mb-1 font-medium">
-					Total Profit
-				</div>
-				<div className="flex items-center gap-1 text-3xl font-bold text-green-700">
-					<SaudiRiyal size={18} />
-					{totals.profit.toFixed(2)}
-				</div>
-			</div>
-
 			{/* Total PAX VAT - Show if any sale is DOMESTIC */}
 			{uiSales.some((s) => s.routeType === "DOMESTIC") && (
 				<div className="bg-white rounded-lg p-4 shadow-sm border border-orange-200">
@@ -980,6 +984,17 @@ export default function SalesTabComponent({ sales, setSales }) {
 					</div>
 				</div>
 			)}
+
+			{/* Total Profit (VAT Deducted) */}
+			<div className="bg-white rounded-lg p-4 shadow-sm border border-green-200">
+				<div className="text-sm text-green-600 mb-1 font-medium">
+					Total Profit
+				</div>
+				<div className="flex items-center gap-1 text-3xl font-bold text-green-700">
+					<SaudiRiyal size={18} />
+					{totals.profit.toFixed(2)}
+				</div>
+			</div>
 		</div>
 	</CardContent>
 </Card>

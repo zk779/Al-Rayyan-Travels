@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import Select from "react-select";
 import AsyncSelect from "react-select/async";
-import { Trash2, Receipt, Calculator, MapPin, Eye, X } from "lucide-react";
+import { Trash2, Receipt, Calculator, MapPin, Eye, X, Route, SaudiRiyal } from "lucide-react";
 
 // shadcn
 import { Button } from "../../shadcn/components/ui/button";
@@ -34,7 +34,7 @@ const compactSelectStyles = {
 		...base,
 		minHeight: 32,
 		height: 32,
-		borderColor: state.isFocused ? '#3b82f6' : '#e5e7eb',
+		// borderColor: state.isFocused ? '#3b82f6' : '#e5e7eb',
 		boxShadow: 'none',
 		fontSize: '13px',
 	}),
@@ -64,6 +64,13 @@ const normalizeSalesPayload = (sales) =>
 		airlineId: s.airlineId,
 		vendorId: s.vendorId,
 		documentNo: s.documentNo,
+		pnr: s.pnr || null,
+		routeType: s.routeType || null,
+		tripType: s.tripType || "Oneway",
+		departDate: s.departDate || null,
+		arrivalDate: s.arrivalDate || null,
+		paxVat: Number(s.paxVat || 0),
+		miscCharges: Number(s.miscCharges || 0),
 		netPrice: Number(s.netPrice || 0),
 		sellPrice: Number(s.sellPrice || 0),
 		paidAmount: Number(s.paidAmount || 0),
@@ -73,7 +80,7 @@ const normalizeSalesPayload = (sales) =>
 				? s.customerId || null
 				: null,
 		remarks: s.remarks || null,
-		paxName: s.paxName || null, // ✅ MANDATORY
+		paxName: s.paxName || null,
 		destinations: s.destinations || [],
 		vatAmount: Number(s.vatAmount || 0),
 	}));
@@ -84,6 +91,15 @@ export default function EditSalesTab({ sales, setSales }) {
 	========================= */
 	const [uiSales, setUiSales] = useState([]);
 	const [destinationDialog, setDestinationDialog] = useState({ open: false, saleId: null });
+
+	/* =========================
+	ROUTE TYPE OPTIONS
+	========================= */
+	const routeTypeOptions = [
+		{ value: "DOMESTIC", label: "Domestic (KSA Only)" },
+		{ value: "MIXED", label: "Domestic/International (Mixed)" },
+		{ value: "ZERO_VAT", label: "Zero VAT Route (Non-KSA)" },
+	];
 
 	/* =========================
 		INIT FROM PARENT (ONCE)
@@ -155,6 +171,22 @@ export default function EditSalesTab({ sales, setSales }) {
 	);
 
 	/* =========================
+	ROUTE TYPE AUTO-DETECTION
+	========================= */
+	const detectRouteType = (destinations) => {
+		if (!destinations || destinations.length === 0) return "";
+
+		const hasKSA = destinations.some((d) => d.airport?.country === "SA");
+		const hasNonKSA = destinations.some((d) => d.airport?.country !== "SA");
+
+		if (hasKSA && !hasNonKSA) return "DOMESTIC";
+		if (hasKSA && hasNonKSA) return "MIXED";
+		if (!hasKSA && hasNonKSA) return "ZERO_VAT";
+
+		return "";
+	};
+
+	/* =========================
 		LOOKUPS
 	========================= */
 	const vendorMap = useMemo(() => {
@@ -164,15 +196,25 @@ export default function EditSalesTab({ sales, setSales }) {
 	}, [vendors]);
 
 	/* =========================
-		VAT CALCULATION HELPER
+	VAT CALCULATION HELPERS
 	========================= */
 	const calculateVAT = (profit) => {
 		const profitNum = Number(profit) || 0;
 		if (profitNum <= 0) return "0.00";
-		
+
 		const baseAmount = profitNum / 1.15;
 		const vatAmount = baseAmount * 0.15;
-		
+
+		return vatAmount.toFixed(2);
+	};
+
+	const calculatePaxVAT = (netPrice) => {
+		const net = Number(netPrice) || 0;
+		if (net <= 0) return "0.00";
+
+		const baseAmount = net / 1.15;
+		const vatAmount = baseAmount * 0.15;
+
 		return vatAmount.toFixed(2);
 	};
 
@@ -220,8 +262,32 @@ export default function EditSalesTab({ sales, setSales }) {
 						paymentType: value,
 						customerId: isCredit ? item.customerId : "",
 						paidAmount: isCredit ? item.paidAmount : item.sellPrice || "",
-						// ✅ PAX name stays - it's independent
+						paxName: isCredit ? "" : item.paxName,
 					};
+				}
+
+				// Destinations change - auto-detect route type
+				if (field === "destinations") {
+					const newRouteType = detectRouteType(value);
+					const updatedItem = {
+						...item,
+						destinations: value,
+						routeType: newRouteType,
+					};
+
+					// Calculate PAX VAT for DOMESTIC routes
+					if (newRouteType === "DOMESTIC") {
+						updatedItem.paxVat = calculatePaxVAT(updatedItem.netPrice);
+						updatedItem.miscCharges = "";
+					} else if (newRouteType === "ZERO_VAT") {
+						updatedItem.paxVat = "";
+						updatedItem.vatAmount = "0.00";
+					} else {
+						updatedItem.paxVat = "";
+						updatedItem.miscCharges = "";
+					}
+
+					return updatedItem;
 				}
 
 				// Recalculate VAT when net or sell price changes
@@ -230,9 +296,20 @@ export default function EditSalesTab({ sales, setSales }) {
 					const net = Number(updatedItem.netPrice) || 0;
 					const sell = Number(updatedItem.sellPrice) || 0;
 					const profit = sell - net;
-					const vatAmount = calculateVAT(profit);
-					
-					return { ...updatedItem, vatAmount };
+
+					// Update PAX VAT if DOMESTIC
+					if (updatedItem.routeType === "DOMESTIC") {
+						updatedItem.paxVat = calculatePaxVAT(updatedItem.netPrice);
+					}
+
+					// Update Profit VAT only if not ZERO_VAT
+					if (updatedItem.routeType !== "ZERO_VAT") {
+						updatedItem.vatAmount = calculateVAT(profit);
+					} else {
+						updatedItem.vatAmount = "0.00";
+					}
+
+					return updatedItem;
 				}
 
 				return { ...item, [field]: value };
@@ -255,10 +332,30 @@ export default function EditSalesTab({ sales, setSales }) {
 		setUiSales((prev) => {
 			const next = prev.map((item) => {
 				if (item.id !== saleId) return item;
-				return {
+				const newDestinations = item.destinations.filter(
+					(d) => d.value !== destValue,
+				);
+				const newRouteType = detectRouteType(newDestinations);
+
+				const updated = {
 					...item,
-					destinations: item.destinations.filter((d) => d.value !== destValue),
+					destinations: newDestinations,
+					routeType: newRouteType,
 				};
+
+				// Recalculate based on new route type
+				if (newRouteType === "DOMESTIC") {
+					updated.paxVat = calculatePaxVAT(updated.netPrice);
+					updated.miscCharges = "";
+				} else if (newRouteType === "ZERO_VAT") {
+					updated.paxVat = "";
+					updated.vatAmount = "0.00";
+				} else {
+					updated.paxVat = "";
+					updated.miscCharges = "";
+				}
+
+				return updated;
 			});
 			setSales(normalizeSalesPayload(next));
 			return next;
@@ -268,18 +365,33 @@ export default function EditSalesTab({ sales, setSales }) {
 	/* =========================
 		CALCULATIONS
 	========================= */
-	const calculateProfit = (net, sell) =>
-		Number(sell || 0) - Number(net || 0);
+	const calculateProfit = (net, sell, vat) => {
+		const netNum = Number(net) || 0;
+		const sellNum = Number(sell) || 0;
+		const vatNum = Number(vat) || 0;
+		const profit = sellNum - netNum - vatNum;
+		return profit.toFixed(2);
+	};
 
 	const totals = uiSales.reduce(
-		(acc, s) => {
-			acc.net += Number(s.netPrice || 0);
-			acc.sell += Number(s.sellPrice || 0);
-			acc.profit += calculateProfit(s.netPrice, s.sellPrice);
-			acc.vat += Number(s.vatAmount || 0);
-			return acc;
+		(acc, item) => {
+			const net = Number(item.netPrice) || 0;
+			const sell = Number(item.sellPrice) || 0;
+			const vat = Number(item.vatAmount) || 0;
+			const paxVat = Number(item.paxVat) || 0;
+			const misc = Number(item.miscCharges) || 0;
+			const profit = sell - net - vat;
+
+			return {
+				net: acc.net + net,
+				sell: acc.sell + sell,
+				profit: acc.profit + profit,
+				vat: acc.vat + vat,
+				paxVat: acc.paxVat + paxVat,
+				misc: acc.misc + misc,
+			};
 		},
-		{ net: 0, sell: 0, profit: 0, vat: 0 }
+		{ net: 0, sell: 0, profit: 0, vat: 0, paxVat: 0, misc: 0 },
 	);
 
 	/* =========================
@@ -322,11 +434,11 @@ export default function EditSalesTab({ sales, setSales }) {
 		<div className="space-y-4">
 			<h3 className="text-lg font-semibold">Edit Sales Items</h3>
 
-			{/* Sales Cards - 2 Row Layout */}
+			{/* Sales Cards */}
 			<div className="space-y-3">
 				{uiSales.map((item, index) => {
 					const isCredit = String(item.paymentType).toUpperCase() === "CREDIT";
-					const profit = calculateProfit(item.netPrice, item.sellPrice);
+					const profit = calculateProfit(item.netPrice, item.sellPrice, item.vatAmount);
 
 					return (
 						<Card
@@ -339,23 +451,50 @@ export default function EditSalesTab({ sales, setSales }) {
 										<Receipt className="h-4 w-4" />
 										Sale #{index + 1}
 									</CardTitle>
-									<Button
-										variant="ghost"
-										size="sm"
-										onClick={() => removeSale(item.id)}
-									>
-										<Trash2 className="h-4 w-4 text-red-500" />
-									</Button>
+									{/* Route Type (Read-only) */}
+									<div className="flex gap-2">
+										<Label className="text-md font-medium text-indigo-700 flex items-center gap-1">
+											<Route className="h-3 w-3" />
+											Route Type :
+										</Label>
+										<Select
+											options={routeTypeOptions}
+											value={
+												routeTypeOptions.find(
+													(o) => o.value === item.routeType,
+												) || null
+											}
+											placeholder="Based on Destinations"
+											menuPortalTarget={document.body}
+											styles={{
+												...compactSelectStyles,
+												control: (base) => ({
+													...compactSelectStyles.control(base),
+													backgroundColor: "#eef2ff",
+													borderColor: "#c7d2fe",
+												}),
+											}}
+											isDisabled
+										/>
+										<div className="border"></div>
+										<Button
+											variant="ghost"
+											size="sm"
+											onClick={() => removeSale(item.id)}
+										>
+											<Trash2 className="h-4 w-4 text-red-500" />
+										</Button>
+									</div>
 								</div>
 							</CardHeader>
 
 							<CardContent className="space-y-3">
-								{/* Row 1: Basic Information - Always 4 columns */}
-								<div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+								{/* Row 1: Basic Information */}
+								<div className={`grid grid-cols-1 ${isCredit ? "md:grid-cols-8" : "md:grid-cols-7"} gap-3`}>
 									{/* Airline */}
 									<div className="space-y-1">
 										<Label className="text-xs font-medium text-slate-600">
-											Airline <span className="text-red-500">*</span>
+											Airline *
 										</Label>
 										<Select
 											options={airlineOptions}
@@ -370,10 +509,11 @@ export default function EditSalesTab({ sales, setSales }) {
 											styles={compactSelectStyles}
 										/>
 									</div>
+
 									{/* Vendor */}
 									<div className="space-y-1">
 										<Label className="text-xs font-medium text-slate-600">
-											Vendor <span className="text-red-500">*</span>
+											Vendor *
 										</Label>
 										<Select
 											options={vendorOptions}
@@ -392,7 +532,7 @@ export default function EditSalesTab({ sales, setSales }) {
 									{/* Document Number */}
 									<div className="space-y-1">
 										<Label className="text-xs font-medium text-slate-600">
-											Document No <span className="text-red-500">*</span>
+											Document No *
 										</Label>
 										<Input
 											value={item.documentNo}
@@ -404,10 +544,10 @@ export default function EditSalesTab({ sales, setSales }) {
 										/>
 									</div>
 
-									{/* ✅ PAX Name - ALWAYS VISIBLE & MANDATORY */}
+									{/* Passenger Name */}
 									<div className="space-y-1">
 										<Label className="text-xs font-medium text-slate-600">
-											Passenger Name <span className="text-red-500">*</span>
+											Passenger Name
 										</Label>
 										<Input
 											value={item.paxName || ""}
@@ -419,30 +559,53 @@ export default function EditSalesTab({ sales, setSales }) {
 										/>
 									</div>
 
+									{/* PNR */}
+									<div className="space-y-1">
+										<Label className="text-xs font-medium text-slate-600">
+											PNR
+										</Label>
+										<Input
+											value={item.pnr || ""}
+											onChange={(e) =>
+												updateSale(item.id, "pnr", e.target.value)
+											}
+											placeholder="PNR Code"
+											className="h-8 text-sm"
+										/>
+									</div>
+
 									{/* Destinations */}
 									<div className="space-y-1">
-										<Label className="text-xs font-medium text-slate-600">Destinations</Label>
+										<Label className="text-xs font-medium text-slate-600">
+											Destinations
+										</Label>
 										<div className="flex items-center gap-2">
 											{item.destinations?.length > 0 ? (
-												<div className="flex w-full gap-1">
-													<Badge variant="secondary" className="w-3/4 text-xs px-2 py-1 h-8 flex items-center gap-1">
-														<MapPin className="h-3 w-3" />
-														{item.destinations.length} selected
-													</Badge>
-													<Button
-														variant="outline"
-														size="sm"
-														onClick={() => openDestinationDialog(item.id)}
-														className="w-1/4 h-8 px-2 text-xs"
-														title="View/Edit Destinations"
-													>
-														<Eye className="h-3 w-3" />
-													</Button>
-												</div>
+												<>
+													<div className="flex gap-2 w-full">
+														<Badge
+															variant="secondary"
+															size="sm"
+															className="text-xs px-2 w-2/3 py-1 h-8 flex items-center gap-1"
+														>
+															<MapPin className="h-3 w-3" />
+															{item.destinations.length} selected
+														</Badge>
+														<Button
+															variant="outline"
+															size="xs"
+															onClick={() => openDestinationDialog(item.id)}
+															className="h-8 px-2 w-1/3 text-xs"
+															title="View/Edit Destinations"
+														>
+															<Eye className="h-3 w-3" />
+														</Button>
+													</div>
+												</>
 											) : (
 												<Button
 													variant="outline"
-													size="sm"
+													size="xs"
 													onClick={() => openDestinationDialog(item.id)}
 													className="h-8 text-xs px-3 border-dashed w-full"
 												>
@@ -451,12 +614,12 @@ export default function EditSalesTab({ sales, setSales }) {
 												</Button>
 											)}
 										</div>
-
 									</div>
-										{/* Payment Method */}
+
+									{/* Payment Method */}
 									<div className="space-y-1">
 										<Label className="text-xs font-medium text-slate-600">
-											Payment <span className="text-red-500">*</span>
+											Payment *
 										</Label>
 										<Select
 											options={paymentOptions}
@@ -473,16 +636,12 @@ export default function EditSalesTab({ sales, setSales }) {
 											styles={compactSelectStyles}
 										/>
 									</div>
-								</div>
 
-								{/* Row 2: Financial Information */}
-								<div className={`grid grid-cols-2 ${isCredit ? "md:grid-cols-7" : "md:grid-cols-6"} gap-3`}>
-
-									{/* ✅ Customer (Only for CREDIT) - Corporate Customer */}
+									{/* Customer (Only for CREDIT) */}
 									{isCredit && (
 										<div className="space-y-1">
 											<Label className="text-xs font-medium text-slate-600">
-												Customer <span className="text-red-500">*</span>
+												Customer *
 											</Label>
 											<Select
 												options={customerOptions}
@@ -498,10 +657,23 @@ export default function EditSalesTab({ sales, setSales }) {
 											/>
 										</div>
 									)}
+								</div>
 
+								{/* Row 2: Financial Information */}
+								<div
+									className={`grid grid-cols-2 ${
+										item.routeType === "DOMESTIC"
+											? "md:grid-cols-7"
+											: item.routeType === "ZERO_VAT"
+											? "md:grid-cols-6"
+											: "md:grid-cols-6"
+									} gap-3`}
+								>
 									{/* Net Price */}
 									<div className="space-y-1">
-										<Label className="text-xs font-medium text-slate-600">Net ($)</Label>
+										<Label className="text-xs font-medium text-slate-600">
+											Net <SaudiRiyal size={15} />
+										</Label>
 										<Input
 											type="number"
 											value={item.netPrice}
@@ -513,9 +685,24 @@ export default function EditSalesTab({ sales, setSales }) {
 										/>
 									</div>
 
+									{/* PAX VAT (Only for DOMESTIC) */}
+									{item.routeType === "DOMESTIC" && (
+										<div className="space-y-1">
+											<Label className="text-xs font-medium text-orange-700">
+												PAX VAT 15% <SaudiRiyal size={15} />
+											</Label>
+											<div className="flex items-center gap-1 px-2 h-8 bg-orange-50 border border-orange-200 rounded text-xs font-semibold text-orange-700">
+												<Calculator className="h-3 w-3" />$
+												{item.paxVat || "0.00"}
+											</div>
+										</div>
+									)}
+
 									{/* Sell Price */}
 									<div className="space-y-1">
-										<Label className="text-xs font-medium text-slate-600">Sell ($)</Label>
+										<Label className="text-xs font-medium text-slate-600">
+											Sell <SaudiRiyal size={15} />
+										</Label>
 										<Input
 											type="number"
 											value={item.sellPrice}
@@ -529,7 +716,9 @@ export default function EditSalesTab({ sales, setSales }) {
 
 									{/* Paid Amount */}
 									<div className="space-y-1">
-										<Label className="text-xs font-medium text-slate-600">Paid ($)</Label>
+										<Label className="text-xs font-medium text-slate-600">
+											Paid <SaudiRiyal size={15} />
+										</Label>
 										<Input
 											type="number"
 											value={item.paidAmount}
@@ -541,29 +730,49 @@ export default function EditSalesTab({ sales, setSales }) {
 										/>
 									</div>
 
-									{/* Profit (Read-only) */}
-									<div className="space-y-1">
-										<Label className="text-xs font-medium text-green-700">Profit ($)</Label>
-										<div className="flex items-center gap-1 px-2 h-8 bg-green-50 border border-green-200 rounded text-xs font-semibold text-green-700">
-											<Calculator className="h-3 w-3" />
-											${profit.toFixed(2)}
+									{/* VAT or MISC based on Route Type */}
+									{item.routeType === "ZERO_VAT" ? (
+										<div className="space-y-1">
+											<Label className="text-xs font-medium text-slate-600">
+												MISC <SaudiRiyal size={15} />
+											</Label>
+											<Input
+												type="number"
+												value={item.miscCharges}
+												onChange={(e) =>
+													updateSale(item.id, "miscCharges", e.target.value)
+												}
+												placeholder="0.00"
+												className="h-8 text-sm"
+											/>
 										</div>
-									</div>
+									) : (
+										<div className="space-y-1">
+											<Label className="text-xs font-medium text-blue-700">
+												VAT 15% <SaudiRiyal size={15} />
+											</Label>
+											<div className="flex items-center gap-1 px-2 h-8 bg-blue-50 border border-blue-200 rounded text-xs font-semibold text-blue-700">
+												<Calculator className="h-3 w-3" />$
+												{item.vatAmount || "0.00"}
+											</div>
+										</div>
+									)}
 
-									{/* VAT (Read-only) */}
+									{/* Profit (Read-only) - VAT deducted */}
 									<div className="space-y-1">
-										<Label className="text-xs font-medium text-blue-700">VAT 15% ($)</Label>
-										<Input
-											type="text"
-											value={`$${Number(item.vatAmount || 0).toFixed(2)}`}
-											readOnly
-											className="h-8 text-sm bg-blue-50 border-blue-200 font-semibold text-blue-700 cursor-not-allowed"
-										/>
+										<Label className="text-xs font-medium text-green-700">
+											Profit <SaudiRiyal size={15} />
+										</Label>
+										<div className="flex items-center gap-1 px-2 h-8 bg-green-50 border border-green-200 rounded text-xs font-semibold text-green-700">
+											<Calculator className="h-3 w-3" />${profit}
+										</div>
 									</div>
 
 									{/* Remarks */}
 									<div className="space-y-1 md:col-span-2 lg:col-span-1">
-										<Label className="text-xs font-medium text-slate-600">Remarks</Label>
+										<Label className="text-xs font-medium text-slate-600">
+											Remarks
+										</Label>
 										<Input
 											value={item.remarks || ""}
 											onChange={(e) =>
@@ -589,47 +798,96 @@ export default function EditSalesTab({ sales, setSales }) {
 					</CardTitle>
 				</CardHeader>
 				<CardContent>
-					<div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+					<div className={`grid grid-cols-2 ${uiSales.some(s => s.routeType === "DOMESTIC") ? "md:grid-cols-6" : "md:grid-cols-5"} gap-4`}>
 						{/* Total Items */}
 						<div className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
-							<div className="text-sm text-slate-600 mb-1 font-medium">Total Items</div>
-							<div className="text-3xl font-bold text-slate-800">{uiSales.length}</div>
+							<div className="text-sm text-slate-600 mb-1 font-medium">
+								Total Items
+							</div>
+							<div className="text-3xl font-bold text-slate-800">
+								{uiSales.length}
+							</div>
 						</div>
 
 						{/* Net Total */}
 						<div className="bg-white rounded-lg p-4 shadow-sm border border-blue-200">
-							<div className="text-sm text-blue-600 mb-1 font-medium">Net Total</div>
-							<div className="text-3xl font-bold text-blue-700">${totals.net.toFixed(2)}</div>
+							<div className="text-sm text-blue-600 mb-1 font-medium">
+								Net Total
+							</div>
+							<div className="flex items-center gap-1 text-3xl font-bold text-blue-700">
+								<SaudiRiyal size={18} />
+								{totals.net.toFixed(2)}
+							</div>
 						</div>
 
 						{/* Sell Total */}
 						<div className="bg-white rounded-lg p-4 shadow-sm border border-purple-200">
-							<div className="text-sm text-purple-600 mb-1 font-medium">Sell Total</div>
-							<div className="text-3xl font-bold text-purple-700">${totals.sell.toFixed(2)}</div>
+							<div className="text-sm text-purple-600 mb-1 font-medium">
+								Sell Total
+							</div>
+							<div className="flex items-center gap-1 text-3xl font-bold text-purple-700">
+								<SaudiRiyal size={18} />
+								{totals.sell.toFixed(2)}
+							</div>
 						</div>
 
-						{/* Total Profit */}
+						{/* Total PAX VAT - Show if any sale is DOMESTIC */}
+						{uiSales.some((s) => s.routeType === "DOMESTIC") && (
+							<div className="bg-white rounded-lg p-4 shadow-sm border border-orange-200">
+								<div className="text-sm text-orange-600 mb-1 font-medium">
+									Total PAX VAT
+								</div>
+								<div className="flex items-center gap-1 text-3xl font-bold text-orange-700">
+									<SaudiRiyal size={18} />
+									{totals.paxVat.toFixed(2)}
+								</div>
+							</div>
+						)}
+
+						{/* Total MISC - Show if any sale is ZERO_VAT */}
+						{uiSales.some((s) => s.routeType === "ZERO_VAT") ? (
+							<div className="bg-white rounded-lg p-4 shadow-sm border border-slate-200">
+								<div className="text-sm text-slate-600 mb-1 font-medium">
+									Total MISC
+								</div>
+								<div className="flex items-center gap-1 text-3xl font-bold text-slate-700">
+									<SaudiRiyal size={18} />
+									{totals.misc.toFixed(2)}
+								</div>
+							</div>
+						) : (
+							<div className="bg-white rounded-lg p-4 shadow-sm border border-indigo-200">
+								<div className="text-sm text-indigo-600 mb-1 font-medium">
+									Total VAT (15%)
+								</div>
+								<div className="flex items-center gap-1 text-3xl font-bold text-indigo-700">
+									<SaudiRiyal size={18} />
+									{totals.vat.toFixed(2)}
+								</div>
+							</div>
+						)}
+
+						{/* Total Profit (VAT Deducted) */}
 						<div className="bg-white rounded-lg p-4 shadow-sm border border-green-200">
-							<div className="text-sm text-green-600 mb-1 font-medium">Total Profit</div>
-							<div className="text-3xl font-bold text-green-700">${totals.profit.toFixed(2)}</div>
-						</div>
-
-						{/* Total VAT */}
-						<div className="bg-white rounded-lg p-4 shadow-sm border border-indigo-200">
-							<div className="text-sm text-indigo-600 mb-1 font-medium">Total VAT (15%)</div>
-							<div className="text-3xl font-bold text-indigo-700">${totals.vat.toFixed(2)}</div>
+							<div className="text-sm text-green-600 mb-1 font-medium">
+								Total Profit
+							</div>
+							<div className="flex items-center gap-1 text-3xl font-bold text-green-700">
+								<SaudiRiyal size={18} />
+								{totals.profit.toFixed(2)}
+							</div>
 						</div>
 					</div>
 				</CardContent>
 			</Card>
 
 			<ManageDestinationsDialog
-			  destinationDialog={destinationDialog}
-			  setDestinationDialog={setDestinationDialog}
-			  currentSaleForDialog={currentSaleForDialog}
-			  updateSale={updateSale}
-			  removeDestination={removeDestination}
-			  loadDestinationOptions={loadDestinationOptions}
+				destinationDialog={destinationDialog}
+				setDestinationDialog={setDestinationDialog}
+				currentSaleForDialog={currentSaleForDialog}
+				updateSale={updateSale}
+				removeDestination={removeDestination}
+				loadDestinationOptions={loadDestinationOptions}
 			/>
 		</div>
 	);

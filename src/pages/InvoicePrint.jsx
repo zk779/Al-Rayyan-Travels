@@ -344,6 +344,10 @@ const InvoicePrint = () => {
                                             <div className="font-normal text-[10px] opacity-90 mt-0.5" dir="rtl">المسار</div>
                                         </th>
                                         <th className="border-r border-gray-700 px-3 py-3 text-left font-semibold">
+                                            <div className="leading-tight">PNR</div>
+                                            <div className="font-normal text-[10px] opacity-90 mt-0.5" dir="rtl">رقم الهاتف</div>
+                                        </th>
+                                        <th className="border-r border-gray-700 px-3 py-3 text-left font-semibold">
                                             <div className="leading-tight">Vendor</div>
                                             <div className="font-normal text-[10px] opacity-90 mt-0.5" dir="rtl">المورد</div>
                                         </th>
@@ -351,10 +355,6 @@ const InvoicePrint = () => {
                                             <div className="leading-tight">Base Fare</div>
                                             <div className="font-normal text-[10px] opacity-90 mt-0.5" dir="rtl">الأجرة الأساسية</div>
                                         </th>
-                                        {/* <th className="border-r border-gray-700 px-3 py-3 text-right font-semibold">
-                                            <div className="leading-tight">Service Charges</div>
-                                            <div className="font-normal text-[10px] opacity-90 mt-0.5" dir="rtl">رسوم الخدمة</div>
-                                        </th> */}
                                         <th className="border-r border-gray-700 px-3 py-3 text-right font-semibold">
                                             <div className="leading-tight">VAT (15%)</div>
                                             <div className="font-normal text-[10px] opacity-90 mt-0.5" dir="rtl">ضريبة</div>
@@ -376,9 +376,9 @@ const InvoicePrint = () => {
                                             )}
                                         </td>
                                         <td className="border-r border-gray-300 px-3 py-3 font-medium">{formatDestinations(invoiceData.destinations)}</td>
+                                        <td className="border-r border-gray-300 px-3 py-3 text-right font-semibold text-green-700">{invoiceData.pnr}</td>
                                         <td className="border-r border-gray-300 px-3 py-3">{invoiceData.vendor?.vendorName || 'N/A'}</td>
                                         <td className="border-r border-gray-300 px-3 py-3 text-right font-semibold">{baseFare.toFixed(2)}</td>
-                                        {/* <td className="border-r border-gray-300 px-3 py-3 text-right font-semibold text-green-700">{serviceCharges.toFixed(2)}</td> */}
                                         <td className="border-r border-gray-300 px-3 py-3 text-right font-semibold text-blue-700">{vatAmount.toFixed(2)}</td>
                                         <td className="px-3 py-3 text-right font-bold text-gray-900">{rowTotal.toFixed(2)}</td>
                                     </tr>
