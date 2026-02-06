@@ -30,7 +30,10 @@ const selectStyles = {
     borderColor: state.isFocused ? '#3b82f6' : '#e5e7eb',
     boxShadow: state.isFocused ? '0 0 0 2px rgba(59,130,246,0.1)' : 'none',
   }),
-  menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+  menu: (base) => ({
+    ...base,
+    zIndex: 9999,
+  }),
 };
 
 export default function ManageDestinationsDialog({
@@ -99,8 +102,6 @@ export default function ManageDestinationsDialog({
                   onChange={(value) => handleUpdate('tripType', value)}
                   className="w-full"
                   placeholder="Select trip type"
-
-                  /* 🔑 THIS FIXES MOUSE CLICK */
                   getPopupContainer={(triggerNode) => triggerNode.parentElement}
                 >
                   {tripTypes.map((t) => (
@@ -113,8 +114,6 @@ export default function ManageDestinationsDialog({
                   ))}
                 </Select>
               </div>
-
-
 
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold">Departure</Label>
@@ -159,21 +158,23 @@ export default function ManageDestinationsDialog({
             </div>
 
             {/* Add Destination */}
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">Add Destination</Label>
-              <AsyncSelect
-                cacheOptions
-                loadOptions={loadDestinationOptions}
-                value={null}
-                onChange={addDestination}
-                placeholder="Search airports (e.g., JED, DXB, LHR)..."
-                menuPortalTarget={document.body}
-                styles={selectStyles}
-                noOptionsMessage={({ inputValue }) =>
-                  inputValue.length < 2 ? 'Type 2+ characters' : 'No results'
-                }
-              />
-            </div>
+           {/* Add Destination */}
+{/* Add Destination */}
+<div className="space-y-1.5">
+  <Label className="text-xs font-semibold">Add Destination</Label>
+  <AsyncSelect
+    cacheOptions
+    loadOptions={loadDestinationOptions}
+    value={null}
+    onChange={addDestination}
+    placeholder="Search airports (e.g., JED, DXB, LHR)..."
+    styles={selectStyles}
+    // ✅ Remove menuPosition entirely, just use default behavior
+    noOptionsMessage={({ inputValue }) =>
+      inputValue.length < 2 ? 'Type 2+ characters' : 'No results'
+    }
+  />
+</div>
 
             {/* Destinations List */}
             <div className="space-y-2">
