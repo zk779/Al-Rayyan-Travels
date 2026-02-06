@@ -49,7 +49,7 @@ export default function NewSaleComponent() {
       try {
         setFetchingInvoice(true);
         const res = await fetch(
-          `${API_BASE}/api/invoice/next?saleDate=${saleDate}`,
+          `${API_BASE}/api/invoice/next`,
           {
             headers: { Authorization: `Bearer ${token}` },
             signal: controller.signal,
