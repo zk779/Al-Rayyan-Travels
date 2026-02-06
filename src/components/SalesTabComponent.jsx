@@ -587,16 +587,16 @@ export default function SalesTabComponent({ sales, setSales }) {
 												}),
 											}}
 										/>
-									<div className="border"></div>
-									<Button
-										variant="ghost"
-										size="sm"
-										onClick={() => removeSaleRow(item.id)}
+										<div className="border"></div>
+										<Button
+											variant="ghost"
+											size="sm"
+											onClick={() => removeSaleRow(item.id)}
 										>
-										<Trash2 className="h-4 w-4 text-red-500" />
-									</Button>
-									
-										</div>
+											<Trash2 className="h-4 w-4 text-red-500" />
+										</Button>
+
+									</div>
 								</div>
 							</CardHeader>
 
@@ -736,10 +736,10 @@ export default function SalesTabComponent({ sales, setSales }) {
 											value={
 												item.paymentType
 													? paymentOptions.find(
-															(p) =>
-																p.value ===
-																String(item.paymentType).toUpperCase(),
-													  ) || null
+														(p) =>
+															p.value ===
+															String(item.paymentType).toUpperCase(),
+													) || null
 													: null
 											}
 											onChange={(o) =>
@@ -772,18 +772,15 @@ export default function SalesTabComponent({ sales, setSales }) {
 											/>
 										</div>
 									)}
-									
+
 								</div>
 
 								{/* Row 2: Financial Information */}
 								<div
-									className={`grid grid-cols-2 ${
-										item.routeType === "DOMESTIC"
-											? "md:grid-cols-7"
-											: item.routeType === "ZERO_VAT"
-											? "md:grid-cols-6"
-											: "md:grid-cols-6"
-									} gap-3`}
+									className={`grid grid-cols-2 ${item.routeType === "DOMESTIC"
+											? "md:grid-cols-8"
+											: "md:grid-cols-7"
+										} gap-3`}
 								>
 
 									{/* Net Price */}
@@ -814,6 +811,21 @@ export default function SalesTabComponent({ sales, setSales }) {
 											</div>
 										</div>
 									)}
+
+									<div className="space-y-1">
+										<Label className="text-xs font-medium text-slate-600">
+											MISC <SaudiRiyal size={15} />
+										</Label>
+										<Input
+											type="number"
+											value={item.miscCharges}
+											onChange={(e) =>
+												updateSale(item.id, "miscCharges", e.target.value)
+											}
+											placeholder="0.00"
+											className="h-8 text-sm"
+										/>
+									</div>
 
 									{/* Sell Price */}
 									<div className="space-y-1">
@@ -847,33 +859,16 @@ export default function SalesTabComponent({ sales, setSales }) {
 										/>
 									</div>
 
-									{/* VAT or MISC based on Route Type */}
-									{item.routeType === "ZERO_VAT" ? (
-										<div className="space-y-1">
-											<Label className="text-xs font-medium text-slate-600">
-												MISC <SaudiRiyal size={15} />
-											</Label>
-											<Input
-												type="number"
-												value={item.miscCharges}
-												onChange={(e) =>
-													updateSale(item.id, "miscCharges", e.target.value)
-												}
-												placeholder="0.00"
-												className="h-8 text-sm"
-											/>
+
+									<div className="space-y-1">
+										<Label className="text-xs font-medium text-blue-700">
+											VAT 15% <SaudiRiyal size={15} />
+										</Label>
+										<div className="flex items-center gap-1 px-2 h-8 bg-blue-50 border border-blue-200 rounded text-xs font-semibold text-blue-700">
+											<Calculator className="h-3 w-3" />$
+											{item.vatAmount || "0.00"}
 										</div>
-									) : (
-										<div className="space-y-1">
-											<Label className="text-xs font-medium text-blue-700">
-												VAT 15% <SaudiRiyal size={15} />
-											</Label>
-											<div className="flex items-center gap-1 px-2 h-8 bg-blue-50 border border-blue-200 rounded text-xs font-semibold text-blue-700">
-												<Calculator className="h-3 w-3" />$
-												{item.vatAmount || "0.00"}
-											</div>
-										</div>
-									)}
+									</div>
 
 									{/* Profit (Read-only) - VAT deducted */}
 									<div className="space-y-1">
@@ -906,98 +901,97 @@ export default function SalesTabComponent({ sales, setSales }) {
 				})}
 			</div>
 
-{/* Summary Section */}
-<Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-l-4 border-l-blue-500 shadow-md">
-	<CardHeader className="pb-3">
-		<CardTitle className="text-lg flex items-center gap-2 text-blue-800">
-			<Calculator className="h-5 w-5" />
-			Financial Summary
-		</CardTitle>
-	</CardHeader>
-	<CardContent>
-		<div className={`grid grid-cols-2 ${uiSales.some(s => s.routeType === "DOMESTIC") ? "md:grid-cols-6" : "md:grid-cols-5"} gap-4`}>
-			{/* Total Items */}
-			<div className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
-				<div className="text-sm text-slate-600 mb-1 font-medium">
-					Total Items
-				</div>
-				<div className="text-3xl font-bold text-slate-800">
-					{sales.length}
-				</div>
-			</div>
+			{/* Summary Section */}
+			<Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-l-4 border-l-blue-500 shadow-md">
+				<CardHeader className="pb-3">
+					<CardTitle className="text-lg flex items-center gap-2 text-blue-800">
+						<Calculator className="h-5 w-5" />
+						Financial Summary
+					</CardTitle>
+				</CardHeader>
+				<CardContent>
+					<div className={`grid grid-cols-2 ${uiSales.some(s => s.routeType === "DOMESTIC") ? "md:grid-cols-7" : "md:grid-cols-6"} gap-4`}>
+						{/* Total Items */}
+						<div className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
+							<div className="text-sm text-slate-600 mb-1 font-medium">
+								Total Items
+							</div>
+							<div className="text-3xl font-bold text-slate-800">
+								{sales.length}
+							</div>
+						</div>
 
-			{/* Net Total */}
-			<div className="bg-white rounded-lg p-4 shadow-sm border border-blue-200">
-				<div className="text-sm text-blue-600 mb-1 font-medium">
-					Net Total
-				</div>
-				<div className="flex items-center gap-1 text-3xl font-bold text-blue-700">
-					<SaudiRiyal size={18} />
-					{totals.net.toFixed(2)}
-				</div>
-			</div>
+						{/* Net Total */}
+						<div className="bg-white rounded-lg p-4 shadow-sm border border-blue-200">
+							<div className="text-sm text-blue-600 mb-1 font-medium">
+								Net Total
+							</div>
+							<div className="flex items-center gap-1 text-3xl font-bold text-blue-700">
+								<SaudiRiyal size={18} />
+								{totals.net.toFixed(2)}
+							</div>
+						</div>
 
-			{/* Sell Total */}
-			<div className="bg-white rounded-lg p-4 shadow-sm border border-purple-200">
-				<div className="text-sm text-purple-600 mb-1 font-medium">
-					Sell Total
-				</div>
-				<div className="flex items-center gap-1 text-3xl font-bold text-purple-700">
-					<SaudiRiyal size={18} />
-					{totals.sell.toFixed(2)}
-				</div>
-			</div>
+						{/* Sell Total */}
+						<div className="bg-white rounded-lg p-4 shadow-sm border border-purple-200">
+							<div className="text-sm text-purple-600 mb-1 font-medium">
+								Sell Total
+							</div>
+							<div className="flex items-center gap-1 text-3xl font-bold text-purple-700">
+								<SaudiRiyal size={18} />
+								{totals.sell.toFixed(2)}
+							</div>
+						</div>
 
-			{/* Total PAX VAT - Show if any sale is DOMESTIC */}
-			{uiSales.some((s) => s.routeType === "DOMESTIC") && (
-				<div className="bg-white rounded-lg p-4 shadow-sm border border-orange-200">
-					<div className="text-sm text-orange-600 mb-1 font-medium">
-						Total PAX VAT
-					</div>
-					<div className="flex items-center gap-1 text-3xl font-bold text-orange-700">
-						<SaudiRiyal size={18} />
-						{totals.paxVat.toFixed(2)}
-					</div>
-				</div>
-			)}
+						{/* Total PAX VAT - Show if any sale is DOMESTIC */}
+						{uiSales.some((s) => s.routeType === "DOMESTIC") && (
+							<div className="bg-white rounded-lg p-4 shadow-sm border border-orange-200">
+								<div className="text-sm text-orange-600 mb-1 font-medium">
+									Total PAX VAT
+								</div>
+								<div className="flex items-center gap-1 text-3xl font-bold text-orange-700">
+									<SaudiRiyal size={18} />
+									{totals.paxVat.toFixed(2)}
+								</div>
+							</div>
+						)}
 
 
-			{/* Total MISC - Show if any sale is ZERO_VAT */}
-			{uiSales.some((s) => s.routeType === "ZERO_VAT") ? (
-				<div className="bg-white rounded-lg p-4 shadow-sm border border-slate-200">
-					<div className="text-sm text-slate-600 mb-1 font-medium">
-						Total MISC
-					</div>
-					<div className="flex items-center gap-1 text-3xl font-bold text-slate-700">
-						<SaudiRiyal size={18} />
-						{totals.misc.toFixed(2)}
-					</div>
-				</div>
-			):(
-				<div className="bg-white rounded-lg p-4 shadow-sm border border-indigo-200">
-					<div className="text-sm text-indigo-600 mb-1 font-medium">
-						Total VAT (15%)
-					</div>
-					<div className="flex items-center gap-1 text-3xl font-bold text-indigo-700">
-						<SaudiRiyal size={18} />
-						{totals.vat.toFixed(2)}
-					</div>
-				</div>
-			)}
+						{/* Total MISC - Show if any sale is ZERO_VAT */}
+						<div className="bg-white rounded-lg p-4 shadow-sm border border-slate-200">
+							<div className="text-sm text-slate-600 mb-1 font-medium">
+								Total MISC
+							</div>
+							<div className="flex items-center gap-1 text-3xl font-bold text-slate-700">
+								<SaudiRiyal size={18} />
+								{totals.misc.toFixed(2)}
+							</div>
+						</div>
 
-			{/* Total Profit (VAT Deducted) */}
-			<div className="bg-white rounded-lg p-4 shadow-sm border border-green-200">
-				<div className="text-sm text-green-600 mb-1 font-medium">
-					Total Profit
-				</div>
-				<div className="flex items-center gap-1 text-3xl font-bold text-green-700">
-					<SaudiRiyal size={18} />
-					{totals.profit.toFixed(2)}
-				</div>
-			</div>
-		</div>
-	</CardContent>
-</Card>
+						<div className="bg-white rounded-lg p-4 shadow-sm border border-indigo-200">
+							<div className="text-sm text-indigo-600 mb-1 font-medium">
+								Total VAT (15%)
+							</div>
+							<div className="flex items-center gap-1 text-3xl font-bold text-indigo-700">
+								<SaudiRiyal size={18} />
+								{totals.vat.toFixed(2)}
+							</div>
+						</div>
+
+
+						{/* Total Profit (VAT Deducted) */}
+						<div className="bg-white rounded-lg p-4 shadow-sm border border-green-200">
+							<div className="text-sm text-green-600 mb-1 font-medium">
+								Total Profit
+							</div>
+							<div className="flex items-center gap-1 text-3xl font-bold text-green-700">
+								<SaudiRiyal size={18} />
+								{totals.profit.toFixed(2)}
+							</div>
+						</div>
+					</div>
+				</CardContent>
+			</Card>
 
 			{/* Destination Management Dialog */}
 			<ManageDestinationsDialog

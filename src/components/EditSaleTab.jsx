@@ -661,13 +661,10 @@ export default function EditSalesTab({ sales, setSales }) {
 
 								{/* Row 2: Financial Information */}
 								<div
-									className={`grid grid-cols-2 ${
-										item.routeType === "DOMESTIC"
-											? "md:grid-cols-7"
-											: item.routeType === "ZERO_VAT"
-											? "md:grid-cols-6"
-											: "md:grid-cols-6"
-									} gap-3`}
+									className={`grid grid-cols-2 ${item.routeType === "DOMESTIC"
+											? "md:grid-cols-8"
+											: "md:grid-cols-7"
+										} gap-3`}
 								>
 									{/* Net Price */}
 									<div className="space-y-1">
@@ -697,7 +694,20 @@ export default function EditSalesTab({ sales, setSales }) {
 											</div>
 										</div>
 									)}
-
+									<div className="space-y-1">
+										<Label className="text-xs font-medium text-slate-600">
+											MISC <SaudiRiyal size={15} />
+										</Label>
+										<Input
+											type="number"
+											value={item.miscCharges}
+											onChange={(e) =>
+												updateSale(item.id, "miscCharges", e.target.value)
+											}
+											placeholder="0.00"
+											className="h-8 text-sm"
+										/>
+									</div>
 									{/* Sell Price */}
 									<div className="space-y-1">
 										<Label className="text-xs font-medium text-slate-600">
@@ -730,33 +740,19 @@ export default function EditSalesTab({ sales, setSales }) {
 										/>
 									</div>
 
-									{/* VAT or MISC based on Route Type */}
-									{item.routeType === "ZERO_VAT" ? (
-										<div className="space-y-1">
-											<Label className="text-xs font-medium text-slate-600">
-												MISC <SaudiRiyal size={15} />
-											</Label>
-											<Input
-												type="number"
-												value={item.miscCharges}
-												onChange={(e) =>
-													updateSale(item.id, "miscCharges", e.target.value)
-												}
-												placeholder="0.00"
-												className="h-8 text-sm"
-											/>
+
+
+
+									<div className="space-y-1">
+										<Label className="text-xs font-medium text-blue-700">
+											VAT 15% <SaudiRiyal size={15} />
+										</Label>
+										<div className="flex items-center gap-1 px-2 h-8 bg-blue-50 border border-blue-200 rounded text-xs font-semibold text-blue-700">
+											<Calculator className="h-3 w-3" />$
+											{item.vatAmount || "0.00"}
 										</div>
-									) : (
-										<div className="space-y-1">
-											<Label className="text-xs font-medium text-blue-700">
-												VAT 15% <SaudiRiyal size={15} />
-											</Label>
-											<div className="flex items-center gap-1 px-2 h-8 bg-blue-50 border border-blue-200 rounded text-xs font-semibold text-blue-700">
-												<Calculator className="h-3 w-3" />$
-												{item.vatAmount || "0.00"}
-											</div>
-										</div>
-									)}
+									</div>
+
 
 									{/* Profit (Read-only) - VAT deducted */}
 									<div className="space-y-1">
@@ -798,7 +794,7 @@ export default function EditSalesTab({ sales, setSales }) {
 					</CardTitle>
 				</CardHeader>
 				<CardContent>
-					<div className={`grid grid-cols-2 ${uiSales.some(s => s.routeType === "DOMESTIC") ? "md:grid-cols-6" : "md:grid-cols-5"} gap-4`}>
+					<div className={`grid grid-cols-2 ${uiSales.some(s => s.routeType === "DOMESTIC") ? "md:grid-cols-7" : "md:grid-cols-6"} gap-4`}>
 						{/* Total Items */}
 						<div className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
 							<div className="text-sm text-slate-600 mb-1 font-medium">
@@ -844,28 +840,26 @@ export default function EditSalesTab({ sales, setSales }) {
 							</div>
 						)}
 
-						{/* Total MISC - Show if any sale is ZERO_VAT */}
-						{uiSales.some((s) => s.routeType === "ZERO_VAT") ? (
-							<div className="bg-white rounded-lg p-4 shadow-sm border border-slate-200">
-								<div className="text-sm text-slate-600 mb-1 font-medium">
-									Total MISC
-								</div>
-								<div className="flex items-center gap-1 text-3xl font-bold text-slate-700">
-									<SaudiRiyal size={18} />
-									{totals.misc.toFixed(2)}
-								</div>
+						<div className="bg-white rounded-lg p-4 shadow-sm border border-slate-200">
+							<div className="text-sm text-slate-600 mb-1 font-medium">
+								Total MISC
 							</div>
-						) : (
-							<div className="bg-white rounded-lg p-4 shadow-sm border border-indigo-200">
-								<div className="text-sm text-indigo-600 mb-1 font-medium">
-									Total VAT (15%)
-								</div>
-								<div className="flex items-center gap-1 text-3xl font-bold text-indigo-700">
-									<SaudiRiyal size={18} />
-									{totals.vat.toFixed(2)}
-								</div>
+							<div className="flex items-center gap-1 text-3xl font-bold text-slate-700">
+								<SaudiRiyal size={18} />
+								{totals.misc.toFixed(2)}
 							</div>
-						)}
+						</div>
+
+						<div className="bg-white rounded-lg p-4 shadow-sm border border-indigo-200">
+							<div className="text-sm text-indigo-600 mb-1 font-medium">
+								Total VAT (15%)
+							</div>
+							<div className="flex items-center gap-1 text-3xl font-bold text-indigo-700">
+								<SaudiRiyal size={18} />
+								{totals.vat.toFixed(2)}
+							</div>
+						</div>
+
 
 						{/* Total Profit (VAT Deducted) */}
 						<div className="bg-white rounded-lg p-4 shadow-sm border border-green-200">
