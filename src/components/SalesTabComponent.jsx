@@ -931,6 +931,17 @@ export default function SalesTabComponent({ sales, setSales }) {
 								{totals.net.toFixed(2)}
 							</div>
 						</div>
+						{/* Total MISC - Show if any sale is ZERO_VAT */}
+						<div className="bg-white rounded-lg p-4 shadow-sm border border-slate-200">
+							<div className="text-sm text-slate-600 mb-1 font-medium">
+								Total MISC
+							</div>
+							<div className="flex items-center gap-1 text-3xl font-bold text-slate-700">
+								<SaudiRiyal size={18} />
+								{totals.misc.toFixed(2)}
+							</div>
+						</div>
+
 
 						{/* Sell Total */}
 						<div className="bg-white rounded-lg p-4 shadow-sm border border-purple-200">
@@ -957,17 +968,7 @@ export default function SalesTabComponent({ sales, setSales }) {
 						)}
 
 
-						{/* Total MISC - Show if any sale is ZERO_VAT */}
-						<div className="bg-white rounded-lg p-4 shadow-sm border border-slate-200">
-							<div className="text-sm text-slate-600 mb-1 font-medium">
-								Total MISC
-							</div>
-							<div className="flex items-center gap-1 text-3xl font-bold text-slate-700">
-								<SaudiRiyal size={18} />
-								{totals.misc.toFixed(2)}
-							</div>
-						</div>
-
+						
 						<div className="bg-white rounded-lg p-4 shadow-sm border border-indigo-200">
 							<div className="text-sm text-indigo-600 mb-1 font-medium">
 								Total VAT (15%)
