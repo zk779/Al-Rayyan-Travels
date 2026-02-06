@@ -81,62 +81,65 @@ export default function NewSaleComponent() {
   /* ======================
      SINGLE SUBMIT HANDLER
   ====================== */
-  const handleSubmit = async () => {
-    if (sales.length === 0 && refunds.length === 0) {
-      appToast.warning(
-        "Empty Submission", 
-        "Add at least one sale or refund before submitting."
-      );
-      return;
-    }
+/* ======================
+   SINGLE SUBMIT HANDLER
+====================== */
+const handleSubmit = async () => {
+  if (sales.length === 0 && refunds.length === 0) {
+    appToast.warning(
+      "Empty Submission", 
+      "Add at least one sale or refund before submitting."
+    );
+    return;
+  }
 
-    // ✅ We DO NOT send invoiceNo anymore
-    const payload = {
-      saleDate,
-      sales,
-      refunds,
-    };
+  const payload = {
+    saleDate,
+    sales,
+    refunds,
+  };
 
-    try {
-      setLoading(true);
-
-      const res = await fetch(`${API_BASE}/api/sales`, {
+  try {
+    setLoading(true);
+    
+    const data = await appToast.promise(
+      fetch(`${API_BASE}/api/sales`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Something went wrong");
+      }).then(async (res) => {
+        const json = await res.json();
+        if (!res.ok) {
+          throw new Error(json.error || "Something went wrong");
+        }
+        return json;
+      }),
+      {
+        loading: "Submitting invoice...",
+        error: "Failed to submit invoice"
       }
+    );
 
-      // ✅ Success toast
-      appToast.invoice(
-        "Submission Successful", 
-        `Invoice No: ${data?.data?.invoiceNo || invoiceNo}`
-      );
+    // Show invoice toast with the returned invoice number
+    appToast.invoice(
+      "Invoice Submitted Successfully!",
+      `Invoice No: ${data?.data?.invoiceNo || ""}`
+    );
 
-      // Reset after success
-      setSales([]);
-      setRefunds([]);
-      setActiveTab("new-sale");
-
-      // Refresh invoiceNo display
-      setSaleDate((d) => d);
-    } catch (err) {
-      appToast.error(
-        "Submission Failed",
-        err.message || "Failed to submit sales and refunds"
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
+    // Reset after success
+    setSales([]);
+    setRefunds([]);
+    setActiveTab("new-sale");
+    setSaleDate((d) => d);
+  } catch (err) {
+    // Error already handled by promise toast
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="w-full">

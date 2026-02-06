@@ -15,13 +15,14 @@ import {
 	CardTitle,
 	CardDescription,
 } from "../../shadcn/components/ui/card";
-import { Button } from "../../shadcn/components/ui/button";
 import { Input } from "../../shadcn/components/ui/input";
 
 import EditSalesTab from "../components/EditSaleTab";
 import EditRefundTab from "../components/EditRefundTab";
 import Loader from "../components/Loading";
 import SubmitButton from "../components/SubmitButton";
+import { appToast } from "../../shadcn/components/ui/appToast";
+import { Receipt } from "lucide-react";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
@@ -108,7 +109,10 @@ export default function EditSaleComponent() {
 				setRefunds(refundPayload); // 👈 FINAL PAYLOAD (SAFE)
 
 			} catch (err) {
-				alert(err.message);
+				appToast.error(
+					"Failed to Load Invoice",
+					err.message || "Could not load invoice data"
+				);
 			} finally {
 				setInitialLoading(false);
 			}
@@ -122,7 +126,10 @@ export default function EditSaleComponent() {
 	====================== */
 	const handleUpdate = async () => {
 		if (sales.length === 0 && refunds.length === 0) {
-			alert("At least one sale or refund is required");
+			appToast.warning(
+				"Empty Invoice",
+				"At least one sale or refund is required"
+			);
 			return;
 		}
 
@@ -136,21 +143,27 @@ export default function EditSaleComponent() {
 		try {
 			setLoading(true);
 
-			const res = await fetch(`${API_BASE}/api/sales/${saleId}`, {
-				method: "PUT",
-				headers: {
-					"Content-Type": "application/json",
-					Authorization: `Bearer ${token}`,
-				},
-				body: JSON.stringify(payload),
-			});
-
-			const json = await res.json();
-			if (!res.ok) throw new Error(json.error || "Update failed");
-
-			alert("Sale updated successfully");
+			await appToast.promise(
+				fetch(`${API_BASE}/api/sales/${saleId}`, {
+					method: "PUT",
+					headers: {
+						"Content-Type": "application/json",
+						Authorization: `Bearer ${token}`,
+					},
+					body: JSON.stringify(payload),
+				}).then(async (res) => {
+					const json = await res.json();
+					if (!res.ok) throw new Error(json.error || "Update failed");
+					return json;
+				}),
+				{
+					loading: "Updating invoice...",
+					success: "Invoice updated successfully!",
+					successDescription: `Invoice No: ${invoiceNo}`,
+				}
+			);
 		} catch (err) {
-			alert(err.message);
+			appToast.error("Failed to update invoice", err.message);
 		} finally {
 			setLoading(false);
 		}
@@ -166,7 +179,7 @@ export default function EditSaleComponent() {
 				<div className="fixed inset-0 bg-black/20 bg-opacity-50 flex items-center justify-center z-50">
 					<div className="rounded-lg p-8 flex flex-col items-center gap-4">
 						<Loader/>
-						<p className="text-lg font-medium text-gray-700">Invoice data...</p>
+						<p className="text-lg font-medium text-gray-700">Loading invoice data...</p>
 					</div>
 				</div>
 			)}
@@ -182,17 +195,41 @@ export default function EditSaleComponent() {
 				<CardContent className="space-y-6">
 					{/* HEADER */}
 					<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-						<div>
-							<label className="text-sm font-medium">Invoice No</label>
-							<Input value={invoiceNo} disabled />
+						{/* Enhanced Invoice No Input */}
+						<div className="space-y-2">
+							<label className="text-sm font-medium text-gray-700">
+								Invoice Number
+							</label>
+							<div className="relative">
+								<div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+									<Receipt className="h-4 w-4 text-indigo-900" />
+								</div>
+								<Input
+									value={invoiceNo}
+									disabled
+									className="pl-10 pr-16 font-mono text-sm font-semibold bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200 text-indigo-900! cursor-not-allowed"
+								/>
+								<div className="absolute right-3 top-1/2 -translate-y-1/2">
+									<span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
+										View
+									</span>
+								</div>
+							</div>
+							<p className="text-xs text-gray-500">
+								Invoice number (read-only)
+							</p>
 						</div>
 
-						<div>
-							<label className="text-sm font-medium">Sale Date</label>
+						{/* Sale Date Input */}
+						<div className="space-y-2">
+							<label className="text-sm font-medium text-gray-700">
+								Sale Date
+							</label>
 							<Input
 								type="date"
 								value={saleDate}
 								onChange={(e) => setSaleDate(e.target.value)}
+								className="focus-visible:ring-indigo-500"
 							/>
 						</div>
 					</div>
@@ -218,7 +255,7 @@ export default function EditSaleComponent() {
 
 					{/* ACTION */}
 					<div className="flex justify-center pt-4">
-			            <SubmitButton onClick={handleUpdate} disabled={loading} />
+						<SubmitButton onClick={handleUpdate} disabled={loading} />
 					</div>
 				</CardContent>
 			</Card>

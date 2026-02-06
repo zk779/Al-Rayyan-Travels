@@ -78,7 +78,7 @@ const CustomToast = ({ t, title, description, icon, gradientClass, iconBgClass }
 // Gradient configurations for each toast type
 const toastStyles = {
   success: {
-    gradient: "bg-gradient-to-bl from-emerald-600 to-green-600",
+    gradient: "bg-gradient-to-tl from-emerald-600 to-green-600",
     iconBg: "bg-white/25"
   },
   error: {
@@ -100,7 +100,11 @@ const toastStyles = {
   theme: {
     gradient: "bg-gradient-to-br from-slate-600 via-gray-600 to-zinc-700",
     iconBg: "bg-white/25"
-  }
+  },
+   loading: { // ✅ Added missing loading style
+    gradient: "bg-gradient-to-br from-slate-600 to-gray-600",
+    iconBg: "bg-white/25"
+  },
 };
 
 const toastConfig = {
@@ -170,39 +174,46 @@ export const appToast = {
   /**
    * Promise wrapper with loading, success, and error states
    */
-  promise: async (promise, messages = {}) => {
-    const toastId = toast.custom((t) => (
-      <CustomToast 
-        t={t} 
-        title={messages.loading || "Processing..."} 
-        description="Please wait a moment" 
-        gradientClass={toastStyles.loading.gradient}
-        iconBgClass={toastStyles.loading.iconBg}
-        icon={<Loader2 size={18} className="text-white animate-spin" strokeWidth={2.5} />} 
-      />
-    ), { duration: Infinity });
+  /**
+ * Promise wrapper with loading, success, and error states
+ */
+promise: async (promise, messages = {}, options = {}) => {
+  const toastId = toast.custom((t) => (
+    <CustomToast 
+      t={t} 
+      title={messages.loading || "Processing..."} 
+      description="Please wait a moment" 
+      gradientClass={toastStyles.loading.gradient}
+      iconBgClass={toastStyles.loading.iconBg}
+      icon={<Loader2 size={18} className="text-white animate-spin" strokeWidth={2.5} />} 
+    />
+  ), { duration: Infinity });
 
-    try {
-      const result = await promise;
-      toast.dismiss(toastId);
-      // Small delay to ensure smooth transition
-      setTimeout(() => {
-        appToast.success(
-          typeof messages.success === "string" ? messages.success : "Success!",
-          typeof messages.successDescription === "string" ? messages.successDescription : ""
-        );
-      }, 100);
-      return result;
-    } catch (err) {
-      toast.dismiss(toastId);
-      // Small delay to ensure smooth transition
-      setTimeout(() => {
-        appToast.error(
-          typeof messages.error === "string" ? messages.error : "Error",
-          err?.message || "An unexpected error occurred"
-        );
-      }, 100);
-      throw err;
-    }
+  try {
+    const result = await promise;
+    toast.dismiss(toastId);
+    // Small delay to ensure smooth transition
+    setTimeout(() => {
+      // Use custom type if provided, otherwise default to success
+      const toastType = options.successType || 'success';
+      const toastMethod = appToast[toastType] || appToast.success;
+      
+      toastMethod(
+        typeof messages.success === "string" ? messages.success : "Success!",
+        typeof messages.successDescription === "string" ? messages.successDescription : ""
+      );
+    }, 100);
+    return result;
+  } catch (err) {
+    toast.dismiss(toastId);
+    // Small delay to ensure smooth transition
+    setTimeout(() => {
+      appToast.error(
+        typeof messages.error === "string" ? messages.error : "Error",
+        err?.message || "An unexpected error occurred"
+      );
+    }, 100);
+    throw err;
   }
+}
 };
