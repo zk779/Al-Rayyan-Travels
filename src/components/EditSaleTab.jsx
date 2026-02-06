@@ -399,7 +399,7 @@ export default function EditSalesTab({ sales, setSales }) {
 	========================= */
 	const airlineOptions = airlines.map((a) => ({
 		value: a.id,
-		label: `${a.airlineCode} - ${a.airlineName}`,
+		label: `${a.airlineCode} - ${a.iataName}`,
 	}));
 
 	const vendorOptions = vendors.map((v) => ({
