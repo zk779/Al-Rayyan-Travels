@@ -19,6 +19,8 @@ import { Input } from "../../shadcn/components/ui/input";
 import SalesTabComponent from "../components/SalesTabComponent";
 import RefundTabComponent from "../components/RefundTabComponent";
 import SubmitButton from "../components/SubmitButton";
+import { appToast } from "../../shadcn/components/ui/appToast";
+import { Receipt, Loader2 } from "lucide-react";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
@@ -31,6 +33,7 @@ export default function NewSaleComponent() {
   const [saleDate, setSaleDate] = useState(
     new Date().toISOString().slice(0, 10)
   );
+  const [fetchingInvoice, setFetchingInvoice] = useState(false);
 
   const [sales, setSales] = useState([]);
   const [refunds, setRefunds] = useState([]);
@@ -44,9 +47,7 @@ export default function NewSaleComponent() {
 
     async function fetchInvoiceNo() {
       try {
-        // pick one:
-        // - preview => last issued (no +1)
-        // - next => last+1 (read-only, no increment)
+        setFetchingInvoice(true);
         const res = await fetch(
           `${API_BASE}/api/invoice/next?saleDate=${saleDate}`,
           {
@@ -62,8 +63,14 @@ export default function NewSaleComponent() {
       } catch (err) {
         if (err.name !== "AbortError") {
           console.error(err);
+          appToast.error(
+            "Invoice Error",
+            "Failed to fetch invoice number. Please try again."
+          );
           setInvoiceNo("");
         }
+      } finally {
+        setFetchingInvoice(false);
       }
     }
 
@@ -76,7 +83,10 @@ export default function NewSaleComponent() {
   ====================== */
   const handleSubmit = async () => {
     if (sales.length === 0 && refunds.length === 0) {
-      alert("Add at least one sale or refund");
+      appToast.warning(
+        "Empty Submission", 
+        "Add at least one sale or refund before submitting."
+      );
       return;
     }
 
@@ -105,8 +115,11 @@ export default function NewSaleComponent() {
         throw new Error(data.error || "Something went wrong");
       }
 
-      // ✅ backend returns invoiceNo in created invoice (recommended)
-      alert(`Sales & refunds submitted successfully\nInvoice: ${data?.data?.invoiceNo || ""}`);
+      // ✅ Success toast
+      appToast.invoice(
+        "Submission Successful", 
+        `Invoice No: ${data?.data?.invoiceNo || invoiceNo}`
+      );
 
       // Reset after success
       setSales([]);
@@ -114,11 +127,12 @@ export default function NewSaleComponent() {
       setActiveTab("new-sale");
 
       // Refresh invoiceNo display
-      // (same date, but you might want to re-fetch explicitly)
-      // easiest: trigger by setting saleDate to itself:
       setSaleDate((d) => d);
     } catch (err) {
-      alert(err.message);
+      appToast.error(
+        "Submission Failed",
+        err.message || "Failed to submit sales and refunds"
+      );
     } finally {
       setLoading(false);
     }
@@ -139,17 +153,46 @@ export default function NewSaleComponent() {
               INVOICE HEADER
           ====================== */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="text-sm font-medium">Invoice No</label>
-              <Input value={invoiceNo} readOnly placeholder="Fetching..." />
+            {/* Enhanced Invoice No Input */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">
+                Invoice Number
+              </label>
+              <div className="relative">
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                  {fetchingInvoice ? (
+                    <Loader2 className="h-4 w-4 text-gray-400 animate-spin" />
+                  ) : (
+                    <Receipt className="h-4 w-4 text-indigo-500" />
+                  )}
+                </div>
+                <Input
+                  value={invoiceNo}
+                  readOnly
+                  placeholder={fetchingInvoice ? "Loading..." : "No invoice"}
+                  className="pl-10 pr-16 font-mono text-sm font-semibold bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200 text-indigo-900 cursor-not-allowed focus-visible:ring-indigo-500"
+                />
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800">
+                    Auto
+                  </span>
+                </div>
+              </div>
+              <p className="text-xs text-gray-500">
+                Generated automatically
+              </p>
             </div>
 
-            <div>
-              <label className="text-sm font-medium">Sale Date</label>
+            {/* Sale Date Input */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">
+                Sale Date
+              </label>
               <Input
                 type="date"
                 value={saleDate}
                 onChange={(e) => setSaleDate(e.target.value)}
+                className="focus-visible:ring-indigo-500"
               />
             </div>
           </div>
