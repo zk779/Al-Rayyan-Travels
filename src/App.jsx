@@ -22,6 +22,7 @@ import NewPayments from "./pages/NewPayments";
 import EditSaleComponent from "./pages/EditServices";
 import PaymentPage from "./pages/Payments";
 import InvoicePrint from "./pages/InvoicePrint";
+import EditRefundComponent from "./pages/EditRefund";
 
 function App() {
 	return (
@@ -43,8 +44,8 @@ function App() {
 									<Route path="vendors" element={<VendorsPage />} />
 									<Route path="new-services" element={<NewServices />} />
 									<Route path="edit-services/:saleId" element={<EditSaleComponent />} />
+									<Route path="edit-refund/:refundId" element={<EditRefundComponent />} />
 									<Route path="manage-payments" element={<PaymentPage />} />
-
 									<Route path ="invoice-print/:saleId" element ={<InvoicePrint />} />
 
 									<Route path="ledger" element={<LedgerComponent />} />

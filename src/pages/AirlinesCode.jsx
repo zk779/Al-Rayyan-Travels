@@ -352,17 +352,17 @@ const AirlineCodesPage = () => {
           <CheckCheck className="w-4 h-4" />
         ),
         onClick: () => handleStatusToggle(record, !record.status),
-      },
-      {
-        type: "divider",
-      },
-      {
-        key: "delete",
-        label: "Delete",
-        danger: true,
-        icon: <Trash className="w-4 h-4" />,
-        onClick: () => handleDelete(record.id),
-      },
+      }
+      // {
+      //   type: "divider",
+      // },
+      // {
+      //   key: "delete",
+      //   label: "Delete",
+      //   danger: true,
+      //   icon: <Trash className="w-4 h-4" />,
+      //   onClick: () => handleDelete(record.id),
+      // },
     ],
   });
 
@@ -716,7 +716,6 @@ const AirlineCodesPage = () => {
               showSizeChanger: true,
               pageSizeOptions: ["10", "20", "50", "100"],
             }}
-            rowSelection={rowSelection}
             scroll={{ x: 1200 }}
             locale={{
               emptyText: (

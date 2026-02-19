@@ -31,25 +31,6 @@ import RefundsTab from "../components/salesReport/refundReport";
 
 import ViewSaleData from "../components/ViewSaleData";
 
-export const mockRefundData = [
-	{
-		id: "1",
-		date: "2024-03-15",
-		invoiceNumber: "INV-001234",
-		documentNumber: "RF001234",
-		airline: "AA",
-		customer: "Mark Davis",
-		originalAmount: 520.0,
-		refundFee: 50.0,
-		serviceCharge: 20.0,
-		refundAmount: 450.0,
-		agent: "Sarah Johnson",
-		branch: "Main Branch",
-		status: "Processed",
-		remarks: "Customer requested full refund",
-	},
-];
-
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
 export default function SalesReport() {
@@ -66,23 +47,25 @@ export default function SalesReport() {
 	const [searchQuery, setSearchQuery] = useState("");
 	const [searchBy, setSearchBy] = useState("all");
 
-	// ✅ keep both: full invoices + flattened rows
+	// Sales state
 	const [invoices, setInvoices] = useState([]);
 	const [salesData, setSalesData] = useState([]);
 	const [loading, setLoading] = useState(false);
+
+	// Refund state
+	const [refundData, setRefundData] = useState([]);
+	const [refundLoading, setRefundLoading] = useState(false);
 
 	// View dialog state
 	const [viewOpen, setViewOpen] = useState(false);
 	const [viewSaleData, setViewSaleData] = useState(null);
 
 	/* ===========================
-		FAST LOOKUPS (FIXES invoice not found)
+		FAST LOOKUPS
 	============================ */
 	const invoiceById = useMemo(() => {
 		const map = new Map();
-		for (const inv of invoices) {
-			map.set(String(inv.id), inv);
-		}
+		for (const inv of invoices) map.set(String(inv.id), inv);
 		return map;
 	}, [invoices]);
 
@@ -92,48 +75,26 @@ export default function SalesReport() {
 	const handleDatePreset = (preset) => {
 		const now = new Date();
 		switch (preset) {
-			case "today":
-				setDateRange({ from: now, to: now });
-				break;
-			case "yesterday": {
-				const y = subDays(now, 1);
-				setDateRange({ from: y, to: y });
-				break;
-			}
-			case "last7days":
-				setDateRange({ from: subDays(now, 6), to: now });
-				break;
-			case "last30days":
-				setDateRange({ from: subDays(now, 29), to: now });
-				break;
-			case "thisMonth":
-				setDateRange({ from: startOfMonth(now), to: endOfMonth(now) });
-				break;
-			case "thisYear":
-				setDateRange({ from: startOfYear(now), to: endOfYear(now) });
-				break;
-			default:
-				break;
+			case "today": setDateRange({ from: now, to: now }); break;
+			case "yesterday": { const y = subDays(now, 1); setDateRange({ from: y, to: y }); break; }
+			case "last7days": setDateRange({ from: subDays(now, 6), to: now }); break;
+			case "last30days": setDateRange({ from: subDays(now, 29), to: now }); break;
+			case "thisMonth": setDateRange({ from: startOfMonth(now), to: endOfMonth(now) }); break;
+			case "thisYear": setDateRange({ from: startOfYear(now), to: endOfYear(now) }); break;
+			default: break;
 		}
 	};
 
 	/* ===========================
-		FETCH SALES FROM API
+		FETCH SALES
 	============================ */
-	useEffect(() => {
-		fetchSales();
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, []);
-
 	const fetchSales = async () => {
 		setLoading(true);
 		try {
 			const token = localStorage.getItem("token");
-
 			const res = await fetch(`${API_BASE}/api/sales`, {
 				headers: { Authorization: `Bearer ${token}` },
 			});
-
 			const json = await res.json();
 			if (!res.ok) throw new Error(json.error || "Failed to fetch sales");
 
@@ -142,33 +103,28 @@ export default function SalesReport() {
 
 			const flattened = apiInvoices.flatMap((inv) => {
 				const invDate = inv.saleDate ? new Date(inv.saleDate) : null;
-
-				return (inv.sales || []).map((sale) => {
-					const customerLabel = sale.customerName ? `${sale.customerName}` : "";
-
-					return {
-						id: String(sale.id),
-						invoiceId: String(inv.id),
-						date: invDate,
-						invoiceNumber: inv.invoiceNo,
-						documentNumber: sale.documentNo || sale.id,
-						airline: sale.airlineCode || "-",
-						vendor: sale.vendorName || "-",
-						customer: customerLabel,
-						customerId: sale.customerId || null,
-						paymentMethod: sale.paymentType || "-",
-						paymentStatus: sale.paymentStatus || "-",
-						status: sale.status || "-",
-						netPrice: Number(sale.netPrice || 0),
-						sellPrice: Number(sale.sellPrice || 0),
-						profit: Number(sale.profit || 0),
-						agent: inv.createdByName,
-						branch: "-",
-						remarks: sale.remarks || "",
-						isRefund: !!sale.isRefund,
-						Refund: sale.refund || null,
-					};
-				});
+				return (inv.sales || []).map((sale) => ({
+					id: String(sale.id),
+					invoiceId: String(inv.id),
+					date: invDate,
+					invoiceNumber: inv.invoiceNo,
+					documentNumber: sale.documentNo || sale.id,
+					airline: sale.airlineCode || "-",
+					vendor: sale.vendorName || "-",
+					customer: sale.customerName ? `${sale.customerName}` : "",
+					customerId: sale.customerId || null,
+					paymentMethod: sale.paymentType || "-",
+					paymentStatus: sale.paymentStatus || "-",
+					status: sale.status || "-",
+					netPrice: Number(sale.netPrice || 0),
+					sellPrice: Number(sale.sellPrice || 0),
+					profit: Number(sale.profit || 0),
+					agent: inv.createdByName,
+					branch: "-",
+					remarks: sale.remarks || "",
+					isRefund: !!sale.isRefund,
+					Refund: sale.refund || null,
+				}));
 			});
 
 			setSalesData(flattened);
@@ -181,41 +137,75 @@ export default function SalesReport() {
 	};
 
 	/* ===========================
-		VIEW HANDLER (NO FETCH)
-		- Uses invoiceById Map (fixes invoice not found)
-		- Also fixes ViewSaleData expected shape
+		FETCH REFUNDS
+	============================ */
+	const fetchRefunds = async () => {
+		setRefundLoading(true);
+		try {
+			const token = localStorage.getItem("token");
+			const res = await fetch(`${API_BASE}/api/refunds`, {
+				headers: { Authorization: `Bearer ${token}` },
+			});
+			const json = await res.json();
+			if (!res.ok) throw new Error(json.error || "Failed to fetch refunds");
+
+			const flattened = (json.data || []).map((refund) => ({
+				id: refund.id,
+				saleId: refund.saleId,
+				date: refund.refundDate ? new Date(refund.refundDate) : null,
+				status: refund.status || "-",
+				originalAmount: Number(refund.originalSaleAmount || 0),
+				customerRefundAmount: Number(refund.customerRefundAmount || 0),
+				vendorRefundAmount: Number(refund.vendorRefundAmount || 0),
+				refundFee: Number(refund.refundFee || 0),
+				cancellationCharges: Number(refund.cancellationCharges || 0),
+				netRefundToCustomer: Number(refund.netRefundToCustomer || 0),
+				netCostToUs: Number(refund.netCostToUs || 0),
+				refundReason: refund.refundReason || "",
+				remarks: refund.remarks || "",
+				vendor: refund.sale?.vendor?.vendorName || "-",
+				customer: refund.sale?.customer?.customerName || "-",
+				invoiceNumber: refund.sale?.invoice?.invoiceNo || "-",
+				netPrice: Number(refund.sale?.netPrice || 0),
+				sellPrice: Number(refund.sale?.sellPrice || 0),
+				agent: refund.processedBy?.fullName || "-",
+				branch: "-",
+			}));
+
+			setRefundData(flattened);
+		} catch (err) {
+			console.error("Failed to fetch refunds", err);
+			alert(err.message);
+		} finally {
+			setRefundLoading(false);
+		}
+	};
+
+	useEffect(() => {
+		fetchSales();
+		fetchRefunds();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
+
+	/* ===========================
+		VIEW SALE HANDLER
 	============================ */
 	const handleViewSale = useCallback(
 		(row) => {
-			const invId = String(row.invoiceId);
-			const saleId = String(row.id);
+			const invoice = invoiceById.get(String(row.invoiceId));
+			if (!invoice) { alert("Invoice not found"); return; }
 
-			const invoice = invoiceById.get(invId);
-			if (!invoice) {
-				console.log("Invoice not found. invId:", invId, "available:", Array.from(invoiceById.keys()));
-				alert("Invoice not found");
-				return;
-			}
+			const sale = (invoice.sales || []).find((s) => String(s.id) === String(row.id));
+			if (!sale) { alert("Sale not found"); return; }
 
-			const sale = (invoice.sales || []).find((s) => String(s.id) === saleId);
-			if (!sale) {
-				console.log("Sale not found. saleId:", saleId, "invoice.sales:", invoice.sales);
-				alert("Sale not found");
-				return;
-			}
-
-			// ✅ ViewSaleData expects { invoiceNo, saleDate, sales:[...] ... }
-			// You want dialog to open for a SINGLE sale => create a "single-sale invoice object"
-			const singleSalePayload = {
+			setViewSaleData({
 				...invoice,
 				sales: [sale],
 				salesCount: 1,
 				totalNet: sale.netPrice ?? invoice.totalNet,
 				totalSell: sale.sellPrice ?? invoice.totalSell,
 				totalProfit: sale.profit ?? invoice.totalProfit,
-			};
-
-			setViewSaleData(singleSalePayload);
+			});
 			setViewOpen(true);
 		},
 		[invoiceById]
@@ -225,12 +215,12 @@ export default function SalesReport() {
 		METRICS
 	============================ */
 	const totalSales = useMemo(
-		() => salesData.reduce((sum, sale) => sum + (Number(sale.sellPrice) || 0), 0),
+		() => salesData.reduce((sum, s) => sum + (Number(s.sellPrice) || 0), 0),
 		[salesData]
 	);
 
 	const totalProfit = useMemo(
-		() => salesData.reduce((sum, sale) => sum + (Number(sale.profit) || 0), 0),
+		() => salesData.reduce((sum, s) => sum + (Number(s.profit) || 0), 0),
 		[salesData]
 	);
 
@@ -240,51 +230,37 @@ export default function SalesReport() {
 	const isInDateRange = (d) => {
 		if (!d) return false;
 		if (!dateRange?.from && !dateRange?.to) return true;
-
 		const dt = new Date(d);
 		const from = dateRange?.from ? new Date(dateRange.from) : null;
 		const to = dateRange?.to ? new Date(dateRange.to) : null;
-
 		if (from) from.setHours(0, 0, 0, 0);
 		if (to) to.setHours(23, 59, 59, 999);
-
 		if (from && dt < from) return false;
 		if (to && dt > to) return false;
 		return true;
 	};
 
 	const filterData = (data) => {
-		let out = data;
+		let out = data.filter((item) => isInDateRange(item.date));
 
-		out = out.filter((item) => isInDateRange(item.date));
-
-		if (selectedBranch !== "all") {
-			out = out.filter((x) => (x.branch || "").toLowerCase() === selectedBranch.toLowerCase());
-		}
-		if (selectedAgent !== "all") {
-			out = out.filter((x) => (x.agent || "").toLowerCase() === selectedAgent.toLowerCase());
-		}
-		if (selectedAirline !== "all") {
-			out = out.filter((x) => (x.airline || "").toLowerCase() === selectedAirline.toLowerCase());
-		}
+		if (selectedBranch !== "all") out = out.filter((x) => (x.branch || "").toLowerCase() === selectedBranch.toLowerCase());
+		if (selectedAgent !== "all") out = out.filter((x) => (x.agent || "").toLowerCase() === selectedAgent.toLowerCase());
+		if (selectedAirline !== "all") out = out.filter((x) => (x.airline || "").toLowerCase() === selectedAirline.toLowerCase());
 
 		if (!searchQuery.trim()) return out;
 		const query = searchQuery.toLowerCase();
 
 		return out.filter((item) => {
 			switch (searchBy) {
-				case "invoiceNumber":
-					return (item.invoiceNumber || "").toLowerCase().includes(query);
-				case "documentNumber":
-					return (item.documentNumber || "").toLowerCase().includes(query);
+				case "invoiceNumber": return (item.invoiceNumber || "").toLowerCase().includes(query);
+				case "documentNumber": return (item.documentNumber || "").toLowerCase().includes(query);
 				case "date":
 					if (!item.date) return false;
 					return (
 						format(new Date(item.date), "yyyy-MM-dd").includes(query) ||
 						format(new Date(item.date), "MMM dd, yyyy").toLowerCase().includes(query)
 					);
-				case "remarks":
-					return (item.remarks || "").toLowerCase().includes(query);
+				case "remarks": return (item.remarks || item.refundReason || "").toLowerCase().includes(query);
 				default:
 					return (
 						(item.invoiceNumber || "").toLowerCase().includes(query) ||
@@ -295,6 +271,7 @@ export default function SalesReport() {
 						(item.status || "").toLowerCase().includes(query) ||
 						(item.agent || "").toLowerCase().includes(query) ||
 						(item.branch || "").toLowerCase().includes(query) ||
+						(item.remarks || item.refundReason || "").toLowerCase().includes(query) ||
 						(item.airline || "").toLowerCase().includes(query)
 					);
 			}
@@ -307,8 +284,8 @@ export default function SalesReport() {
 	);
 
 	const filteredRefundData = useMemo(
-		() => filterData(mockRefundData),
-		[searchQuery, searchBy, dateRange, selectedBranch, selectedAgent, selectedAirline]
+		() => filterData(refundData),
+		[refundData, searchQuery, searchBy, dateRange, selectedBranch, selectedAgent, selectedAirline]
 	);
 
 	/* ===========================
@@ -363,15 +340,11 @@ export default function SalesReport() {
 									<Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
 									<Input
 										placeholder={
-											searchBy === "invoiceNumber"
-												? "Search by invoice number..."
-												: searchBy === "documentNumber"
-												? "Search by document number..."
-												: searchBy === "date"
-												? "Search by date (YYYY-MM-DD or MMM DD, YYYY)..."
-												: searchBy === "remarks"
-												? "Search by remarks..."
-												: "Search across all fields..."
+											searchBy === "invoiceNumber" ? "Search by invoice number..." :
+											searchBy === "documentNumber" ? "Search by document number..." :
+											searchBy === "date" ? "Search by date (YYYY-MM-DD or MMM DD, YYYY)..." :
+											searchBy === "remarks" ? "Search by remarks..." :
+											"Search across all fields..."
 										}
 										value={searchQuery}
 										onChange={(e) => setSearchQuery(e.target.value)}
@@ -391,42 +364,22 @@ export default function SalesReport() {
 											<CalendarIcon className="mr-2 h-4 w-4" />
 											{dateRange?.from ? (
 												dateRange.to ? (
-													<>
-														{format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}
-													</>
-												) : (
-													format(dateRange.from, "LLL dd, y")
-												)
-											) : (
-												<span>Pick a date range</span>
-											)}
+													<>{format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}</>
+												) : format(dateRange.from, "LLL dd, y")
+											) : <span>Pick a date range</span>}
 										</Button>
 									</PopoverTrigger>
-
 									<PopoverContent className="w-auto p-0" align="start">
 										<div className="p-3 border-b">
 											<div className="grid grid-cols-2 gap-2">
-												<Button variant="ghost" size="sm" onClick={() => handleDatePreset("today")}>
-													Today
-												</Button>
-												<Button variant="ghost" size="sm" onClick={() => handleDatePreset("yesterday")}>
-													Yesterday
-												</Button>
-												<Button variant="ghost" size="sm" onClick={() => handleDatePreset("last7days")}>
-													Last 7 days
-												</Button>
-												<Button variant="ghost" size="sm" onClick={() => handleDatePreset("last30days")}>
-													Last 30 days
-												</Button>
-												<Button variant="ghost" size="sm" onClick={() => handleDatePreset("thisMonth")}>
-													This month
-												</Button>
-												<Button variant="ghost" size="sm" onClick={() => handleDatePreset("thisYear")}>
-													This year
-												</Button>
+												<Button variant="ghost" size="sm" onClick={() => handleDatePreset("today")}>Today</Button>
+												<Button variant="ghost" size="sm" onClick={() => handleDatePreset("yesterday")}>Yesterday</Button>
+												<Button variant="ghost" size="sm" onClick={() => handleDatePreset("last7days")}>Last 7 days</Button>
+												<Button variant="ghost" size="sm" onClick={() => handleDatePreset("last30days")}>Last 30 days</Button>
+												<Button variant="ghost" size="sm" onClick={() => handleDatePreset("thisMonth")}>This month</Button>
+												<Button variant="ghost" size="sm" onClick={() => handleDatePreset("thisYear")}>This year</Button>
 											</div>
 										</div>
-
 										<Calendar
 											initialFocus
 											mode="range"
@@ -442,9 +395,7 @@ export default function SalesReport() {
 							<div className="space-y-2 w-full sm:w-1/4 lg:w-1/6">
 								<Label>Branch</Label>
 								<Select value={selectedBranch} onValueChange={setSelectedBranch}>
-									<SelectTrigger className={"w-full"}>
-										<SelectValue />
-									</SelectTrigger>
+									<SelectTrigger className={"w-full"}><SelectValue /></SelectTrigger>
 									<SelectContent>
 										<SelectItem value="all">All Branches</SelectItem>
 										<SelectItem value="main">Main Branch</SelectItem>
@@ -458,9 +409,7 @@ export default function SalesReport() {
 							<div className="space-y-2 w-full sm:w-1/4 lg:w-1/6">
 								<Label>Agent</Label>
 								<Select value={selectedAgent} onValueChange={setSelectedAgent}>
-									<SelectTrigger className={"w-full"}>
-										<SelectValue />
-									</SelectTrigger>
+									<SelectTrigger className={"w-full"}><SelectValue /></SelectTrigger>
 									<SelectContent>
 										<SelectItem value="all">All Agents</SelectItem>
 										<SelectItem value="sarah">Sarah Johnson</SelectItem>
@@ -496,9 +445,9 @@ export default function SalesReport() {
 
 			{/* Tabs */}
 			<Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-				<TabsList className="grid w-full grid-cols-3">
+				<TabsList className="grid w-full grid-cols-2">
 					<TabsTrigger value="detailed">Detailed Report</TabsTrigger>
-					<TabsTrigger value="branch">Branch Report</TabsTrigger>
+					{/* <TabsTrigger value="branch">Branch Report</TabsTrigger> */}
 					<TabsTrigger value="refunds">Refunds</TabsTrigger>
 				</TabsList>
 
@@ -514,12 +463,17 @@ export default function SalesReport() {
 					/>
 				</TabsContent>
 
-				<TabsContent value="branch">
+				{/* <TabsContent value="branch">
 					<BranchReportTab salesData={filteredSalesData} totalSales={totalSales} />
-				</TabsContent>
+				</TabsContent> */}
 
 				<TabsContent value="refunds">
-					<RefundsTab refundData={filteredRefundData} searchQuery={searchQuery} searchBy={searchBy} />
+					<RefundsTab
+						refundData={filteredRefundData}
+						loading={refundLoading}
+						searchQuery={searchQuery}
+						searchBy={searchBy}
+					/>
 				</TabsContent>
 			</Tabs>
 

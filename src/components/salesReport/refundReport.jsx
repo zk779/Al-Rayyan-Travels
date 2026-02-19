@@ -1,6 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { format } from "date-fns";
+import { useNavigate } from "react-router-dom";
+import { Eye, Pencil, Trash2, SaudiRiyal, MoreVertical } from "lucide-react";
+
 import {
   Card,
   CardContent,
@@ -17,103 +21,226 @@ import {
   TableRow,
 } from "../../../shadcn/components/ui/table";
 import { Badge } from "../../../shadcn/components/ui/badge";
+import { Button } from "../../../shadcn/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "../../../shadcn/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../../../shadcn/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "../../../shadcn/components/ui/dropdown-menu";
 
-export default function RefundsTab({ refundData, searchQuery, searchBy }) {
-  const highlightText = (text, query, field) => {
-    if (!query || !text) return text;
+const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
-    // Only highlight if searching in this specific field or searching all fields
-    if (searchBy !== "all" && searchBy !== field) return text;
+/* ========================= STATUS BADGE ========================= */
+const statusVariant = (status) => {
+  switch (String(status).toUpperCase()) {
+    case "COMPLETED":
+      return "destructive";
+    case "PENDING":
+      return "secondary";
+    case "APPROVED":
+      return "outline";
+    default:
+      return "secondary";
+  }
+};
 
-    const regex = new RegExp(`(${query})`, "gi");
-    const parts = text.split(regex);
+/* ========================= HIGHLIGHT ========================= */
+const highlightText = (text, query, field, searchBy) => {
+  if (!query || !text) return text;
+  if (searchBy !== "all" && searchBy !== field) return text;
+  const regex = new RegExp(`(${query})`, "gi");
+  const parts = String(text).split(regex);
+  return parts.map((part, i) =>
+    regex.test(part) ? (
+      <mark key={i} className="bg-yellow-200 px-1 rounded">
+        {part}
+      </mark>
+    ) : (
+      part
+    ),
+  );
+};
 
-    return parts.map((part, index) =>
-      regex.test(part) ? (
-        <mark key={index} className="bg-yellow-200 px-1 rounded">
-          {part}
-        </mark>
-      ) : (
-        part
-      )
-    );
-  };
+/* ========================= VIEW DIALOG ========================= */
+function ViewRefundDialog({ refund, onClose }) {
+  if (!refund) return null;
+
+  const rows = [
+    // { label: "Refund ID", value: refund.id, mono: true },
+    // { label: "Sale ID", value: refund.saleId, mono: true },
+    { label: "Invoice Number", value: refund.invoiceNumber, mono: true },
+    {
+      label: "Date",
+      value: refund.date ? format(new Date(refund.date), "MMM dd, yyyy") : "-",
+    },
+    {
+      label: "Status",
+      value: (
+        <Badge variant={statusVariant(refund.status)}>{refund.status}</Badge>
+      ),
+    },
+    { label: "Customer", value: refund.customer || "-" },
+    { label: "Vendor", value: refund.vendor || "-" },
+    { label: "Agent", value: refund.agent || "-" },
+    { label: "Refund Reason", value: refund.refundReason || "-" },
+    { label: "Remarks", value: refund.remarks || "-" },
+  ];
+
+  const financials = [
+    {
+      label: "Original Sale Amount",
+      value: refund.originalAmount,
+      color: "text-slate-700",
+    },
+    { label: "Net Price", value: refund.netPrice, color: "text-blue-700" },
+    { label: "Sell Price", value: refund.sellPrice, color: "text-purple-700" },
+    {
+      label: "Customer Refund Amount",
+      value: refund.customerRefundAmount,
+      color: "text-slate-700",
+    },
+    {
+      label: "Vendor Refund Amount",
+      value: refund.vendorRefundAmount,
+      color: "text-slate-700",
+    },
+    { label: "Refund Fee", value: refund.refundFee, color: "text-orange-600" },
+    {
+      label: "Cancellation Charges",
+      value: refund.cancellationCharges,
+      color: "text-red-600",
+    },
+    {
+      label: "Net Refund to Customer",
+      value: refund.netRefundToCustomer,
+      color: "text-green-700",
+    },
+    {
+      label: "Net Cost to Us",
+      value: refund.netCostToUs,
+      color: "text-red-700",
+    },
+  ];
 
   return (
+    <Dialog open={!!refund} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            Refund Details
+            <Badge variant={statusVariant(refund.status)}>
+              {refund.status}
+            </Badge>
+          </DialogTitle>
+          <DialogDescription>
+            Full breakdown of the refund transaction
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Info Grid */}
+          <div className="grid grid-cols-2 gap-2">
+            {rows.map(({ label, value, mono }) => (
+              <div key={label} className="bg-slate-50 rounded-lg px-3 py-2">
+                <div className="text-xs text-slate-500 font-medium">
+                  {label}
+                </div>
+                <div
+                  className={`text-sm font-semibold mt-0.5 ${mono ? "font-mono" : ""}`}
+                >
+                  {value}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Financials */}
+          <div className="border-t pt-3">
+            <div className="text-sm font-semibold text-slate-600 mb-2">
+              Financial Breakdown
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {financials.map(({ label, value, color }) => (
+                <div
+                  key={label}
+                  className="bg-white border rounded-lg px-3 py-2"
+                >
+                  <div className="text-xs text-slate-500 font-medium">
+                    {label}
+                  </div>
+                  <div
+                    className={`text-sm font-bold mt-0.5 flex items-center gap-1 ${color}`}
+                  >
+                    <SaudiRiyal size={13} />
+                    {Number(value || 0).toFixed(2)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ========================= MAIN COMPONENT ========================= */
+export default function RefundsTab({
+  refundData,
+  loading,
+  searchQuery,
+  searchBy,
+}) {
+  const navigate = useNavigate();
+  const [viewRefund, setViewRefund] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+
+  /* ========================= DELETE ========================= */
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_BASE}/api/refunds/${deleteTarget.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to delete refund");
+      alert("Refund deleted and reversed successfully!");
+      // Reload page to reflect changes
+      window.location.reload();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setDeleting(false);
+      setDeleteTarget(null);
+    }
+  };
+
+  /* ========================= UI ========================= */
+  return (
     <div className="space-y-6">
-      {/* Refund Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Total Refunds</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              $
-              {refundData
-                .reduce((sum, refund) => sum + refund.refundAmount, 0)
-                .toFixed(2)}
-            </div>
-            <div className="text-xs text-gray-500">
-              {refundData.length} refund requests
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Refund Fees</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-orange-600">
-              $
-              {refundData
-                .reduce((sum, refund) => sum + refund.refundFee, 0)
-                .toFixed(2)}
-            </div>
-            <div className="text-xs text-gray-500">Total fees collected</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">
-              Service Charges
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">
-              $
-              {refundData
-                .reduce((sum, refund) => sum + refund.serviceCharge, 0)
-                .toFixed(2)}
-            </div>
-            <div className="text-xs text-gray-500">Total service charges</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Avg Refund</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              $
-              {refundData.length > 0
-                ? (
-                    refundData.reduce(
-                      (sum, refund) => sum + refund.refundAmount,
-                      0
-                    ) / refundData.length
-                  ).toFixed(2)
-                : "0.00"}
-            </div>
-            <div className="text-xs text-gray-500">Per refund request</div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Refund Details */}
       <Card>
         <CardHeader>
           <CardTitle>Refund Details</CardTitle>
@@ -134,25 +261,34 @@ export default function RefundsTab({ refundData, searchQuery, searchBy }) {
               <TableHeader>
                 <TableRow>
                   <TableHead>Date</TableHead>
-                  <TableHead>Invoice #</TableHead>
-                  <TableHead>Document #</TableHead>
-                  <TableHead>Airline</TableHead>
+                  <TableHead>Inv#</TableHead>
                   <TableHead>Customer</TableHead>
+                  <TableHead>Vendor</TableHead>
                   <TableHead>Agent</TableHead>
-                  <TableHead>Branch</TableHead>
-                  <TableHead className="text-right">Original Amount</TableHead>
-                  <TableHead className="text-right">Refund Fee</TableHead>
-                  <TableHead className="text-right">Service Charge</TableHead>
-                  <TableHead className="text-right">Refund Amount</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Remarks</TableHead>
+                  <TableHead className="text-right">Original Amt</TableHead>
+                  <TableHead className="text-right">Vend. Refund</TableHead>
+                  <TableHead className="text-right">Cust. Refund</TableHead>
+                  <TableHead className="text-right">Refund Fee</TableHead>
+                  <TableHead className="text-right">Service Charges</TableHead>
+                  <TableHead>Reason</TableHead>
+                  <TableHead className="text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {refundData.length === 0 ? (
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={14} className="text-center py-8">
+                      <div className="flex items-center justify-center gap-2 text-slate-500">
+                        <div className="h-4 w-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                        Loading refunds...
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : refundData.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={13}
+                      colSpan={14}
                       className="text-center py-8 text-gray-500"
                     >
                       {searchQuery
@@ -161,75 +297,175 @@ export default function RefundsTab({ refundData, searchQuery, searchBy }) {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  refundData.map((refund) => (
-                    <TableRow key={refund.id}>
-                      <TableCell>
-                        {highlightText(
-                          format(new Date(refund.date), "MMM dd, yyyy"),
-                          searchQuery,
-                          "date"
-                        )}
-                      </TableCell>
-                      <TableCell className="font-mono">
-                        {highlightText(
-                          refund.invoiceNumber,
-                          searchQuery,
-                          "invoiceNumber"
-                        )}
-                      </TableCell>
-                      <TableCell className="font-mono">
-                        {highlightText(
-                          refund.documentNumber,
-                          searchQuery,
-                          "documentNumber"
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">{refund.airline}</Badge>
-                      </TableCell>
-                      <TableCell>{refund.customer}</TableCell>
-                      <TableCell>{refund.agent}</TableCell>
-                      <TableCell>{refund.branch}</TableCell>
-                      <TableCell className="text-right">
-                        ${refund.originalAmount.toFixed(2)}
-                      </TableCell>
-                      <TableCell className="text-right text-orange-600">
-                        ${refund.refundFee.toFixed(2)}
-                      </TableCell>
-                      <TableCell className="text-right text-blue-600">
-                        ${refund.serviceCharge.toFixed(2)}
-                      </TableCell>
-                      <TableCell className="text-right font-medium text-red-600">
-                        ${refund.refundAmount.toFixed(2)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            refund.status === "Processed"
-                              ? "default"
-                              : "secondary"
-                          }
-                        >
-                          {refund.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="max-w-xs">
-                        <div className="truncate" title={refund.remarks}>
-                          {highlightText(
-                            refund.remarks || "",
-                            searchQuery,
-                            "remarks"
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  refundData.map(
+                    (refund) =>
+                      console.log("Rendering refund:", refund) || (
+                        <TableRow key={refund.id}>
+                          <TableCell className="whitespace-nowrap">
+                            {refund.date
+                              ? highlightText(
+                                  format(new Date(refund.date), "MMM dd, yyyy"),
+                                  searchQuery,
+                                  "date",
+                                  searchBy,
+                                )
+                              : "-"}
+                          </TableCell>
+                          <TableCell>{refund.invoiceNumber}</TableCell>
+                          <TableCell>
+                            {highlightText(
+                              refund.customer,
+                              searchQuery,
+                              "customer",
+                              searchBy,
+                            )}
+                          </TableCell>
+                          <TableCell>{refund.vendor}</TableCell>
+                          <TableCell>{refund.agent}</TableCell>
+                          <TableCell>
+                            <Badge variant={statusVariant(refund.status)}>
+                              {refund.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <span className="flex items-center justify-end gap-0.5">
+                              <SaudiRiyal size={12} />
+                              {Number(refund.originalAmount).toFixed(2)}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <span className="flex items-center justify-end gap-0.5">
+                              <SaudiRiyal size={12} />
+                              {Number(refund.vendorRefundAmount).toFixed(2)}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <span className="flex items-center justify-end gap-0.5">
+                              <SaudiRiyal size={12} />
+                              {Number(refund.netRefundToCustomer).toFixed(2)}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right text-orange-600">
+                            <span className="flex items-center justify-end gap-0.5">
+                              <SaudiRiyal size={12} />
+                              {Number(refund.refundFee).toFixed(2)}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right text-red-500">
+                            <span className="flex items-center justify-end gap-0.5">
+                              <SaudiRiyal size={12} />
+                              {Number(refund.cancellationCharges).toFixed(2)}
+                            </span>
+                          </TableCell>
+                          <TableCell className="max-w-[140px]">
+                            <div
+                              className="truncate text-xs text-slate-600"
+                              title={refund.refundReason}
+                            >
+                              {highlightText(
+                                refund.refundReason,
+                                searchQuery,
+                                "remarks",
+                                searchBy,
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0"
+                                >
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                <DropdownMenuItem
+                                  variant="ghost"
+                                  size="sm"
+                                  title="View Refund"
+                                  onClick={() => setViewRefund(refund)}
+                                >
+                                  <Eye className="h-4 w-4 text-blue-500" /> View
+                                  Details
+                                </DropdownMenuItem>
+                                {/* Edit */}
+                                <DropdownMenuItem
+                                  variant="ghost"
+                                  size="sm"
+                                  title="Edit Refund"
+                                  onClick={() =>
+                                    navigate(`/edit-refund/${refund.id}`)
+                                  }
+                                >
+                                  <Pencil className="h-4 w-4 text-indigo-500" />{" "}
+                                  Edit Refund
+                                </DropdownMenuItem>
+                                {/* Delete */}
+                                <DropdownMenuItem
+                                  variant="ghost"
+                                  size="sm"
+                                  title="Delete Refund"
+                                  onClick={() => setDeleteTarget(refund)}
+                                >
+                                  <Trash2 className="h-4 w-4 text-red-500" />{" "}
+                                  Delete Refund
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      ),
+                  )
                 )}
               </TableBody>
             </Table>
           </div>
         </CardContent>
       </Card>
+
+      {/* View Dialog */}
+      <ViewRefundDialog
+        refund={viewRefund}
+        onClose={() => setViewRefund(null)}
+      />
+
+      {/* Delete Confirmation */}
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={() => setDeleteTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete & Reverse Refund?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this refund and reverse all account
+              balance changes. The sale will be restored to{" "}
+              <strong>COMPLETED</strong> status. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={deleting}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {deleting ? (
+                <span className="flex items-center gap-2">
+                  <div className="h-3 w-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Deleting...
+                </span>
+              ) : (
+                "Delete & Reverse"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

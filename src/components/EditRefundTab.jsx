@@ -1,232 +1,395 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "../../shadcn/components/ui/button";
 import { Input } from "../../shadcn/components/ui/input";
 import { Label } from "../../shadcn/components/ui/label";
+import { Separator } from "../../shadcn/components/ui/separator";
 import { Textarea } from "../../shadcn/components/ui/textarea";
-import { Trash2 } from "lucide-react";
+import { Loader2, Save, X, Calendar as CalendarIcon, AlertCircle } from "lucide-react";
+import { Calendar } from "../../shadcn/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "../../shadcn/components/ui/popover";
+import { format } from "date-fns";
 
-export default function EditRefundTab({ refunds, setRefunds }) {
-	/* =========================
-		LOCAL UI STATE
-	========================= */
-	const [uiRefunds, setUiRefunds] = useState([]);
+const API_BASE = import.meta.env.VITE_BASE_URL; // Ensure this matches your .env variable name
 
-	/* =========================
-		HELPER — RECALCULATE
-	========================= */
-	const calcRefundableAmount = (refund) => {
-		const original = Number(refund.originalAmount || 0);
-		const fee = Number(refund.refundFee || 0);
-		const service = Number(refund.serviceCharges || 0);
-		return Math.max(original - fee - service, 0);
-	};
+export default function EditRefundTab({ refundId}) {
+  // 1. Initialize token safely
+  const [token, setToken] = useState(null);
 
-	/* =========================
-		SYNC TO PARENT (FLATTENED PAYLOAD)
-	========================= */
-	const syncToParent = (nextUiRefunds) => {
-		const payload = nextUiRefunds.map((sale) => {
-			const r = sale.refund;
-			return {
-				id: r.id,
-				saleId: sale.id,
-				refundableAmount: calcRefundableAmount(r),
-				refundFee: Number(r.refundFee || 0),
-				serviceCharges: Number(r.serviceCharges || 0),
-				refundReason: r.refundReason || null,
-				refundDate: r.refundDate?.slice(0, 10), // YYYY-MM-DD
-				remarks: r.remarks || null,
-			};
-		});
+  const [fetching, setFetching] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [refundDate, setRefundDate] = useState(new Date());
 
-		setRefunds(payload);
-	};
+  // Form State
+  const [refundForm, setRefundForm] = useState({
+    documentNumber: "",
+    airline: "",
+    vendorName: "",
+    netPrice: "",
+    sellPrice: "",
+    refundFee: "0",
+    serviceCharges: "0",
+    remarks: "",
+    refundReason: "",
+  });
 
-	/* =========================
-		INIT FROM PARENT (ONCE)
-		refunds = array of SALE objects with refund inside
-	========================= */
-	useEffect(() => {
-		if (
-			uiRefunds.length === 0 &&
-			Array.isArray(refunds) &&
-			refunds.length > 0
-		) {
-			const cloned = refunds.map((sale) => ({ ...sale }));
-			setUiRefunds(cloned);
-			syncToParent(cloned); // ✅ IMPORTANT: initial payload sync
-		}
-	}, [refunds, uiRefunds.length]);
+  const [refundVendor, setRefundVendor] = useState("0.00");
+  const [refundPax, setRefundPax] = useState("0.00");
 
-	/* =========================
-		UPDATE / DELETE
-	========================= */
-	const updateRefund = (saleId, field, value) => {
-		setUiRefunds((prev) => {
-			const next = prev.map((sale) =>
-				sale.id === saleId
-					? {
-						...sale,
-						refund: {
-							...sale.refund,
-							[field]: value,
-						},
-						}
-					: sale
-			);
+  /* =========================
+      1. INITIALIZE TOKEN
+  ========================= */
+  useEffect(() => {
+    // Access localStorage only on the client side
+    const storedToken = localStorage.getItem("token");
+    setToken(storedToken);
+  }, []);
 
-			syncToParent(next);
-			return next;
-		});
-	};
+  /* =========================
+      2. FETCH DATA (When token & id ready)
+  ========================= */
+  useEffect(() => {
+    // Wait for token and refundId to be present
+    if (!token || !refundId) return;
 
-	const removeRefund = (saleId) => {
-		setUiRefunds((prev) => {
-			const next = prev.filter((sale) => sale.id !== saleId);
-			syncToParent(next); // exclusion = delete refund
-			return next;
-		});
-	};
+    const fetchRefund = async () => {
+      setFetching(true);
+      setError("");
+      try {
+        const res = await fetch(`${API_BASE}/api/refunds/${refundId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
 
-	/* =========================
-		CALCULATIONS (READ-ONLY)
-	========================= */
-	const calcVendorRefund = (sale) =>
-		Math.max(
-			Number(sale.refund.originalAmount || 0) -
-				Number(sale.refund.refundFee || 0),
-			0
-		);
+        const json = await res.json();
+        
+        if (!res.ok || !json.success) {
+          throw new Error(json.error || "Failed to fetch refund details");
+        }
 
-	const calcPaxRefund = (sale) =>
-		Math.max(
-			calcVendorRefund(sale) -
-				Number(sale.refund.serviceCharges || 0),
-			0
-		);
+        const data = json.data;
+        const sale = data.sale;
 
-	/* =========================
-		UI
-	========================= */
-	return (
-		<div className="space-y-4">
-			{uiRefunds.length === 0 && (
-				<div className="text-sm text-gray-500 italic">
-					No refunded items found.
-				</div>
-			)}
+        // Pre-fill form
+        setRefundForm({
+          documentNumber: sale.documentNo || "N/A",
+          airline: sale.airlineCode || sale.airlineName || "N/A",
+          vendorName: sale.vendor?.name || "N/A",
+          netPrice: Number(sale.netPrice || 0).toFixed(2),
+          sellPrice: Number(sale.sellPrice || 0).toFixed(2),
+          refundFee: Number(data.refundFee || 0).toString(),
+          serviceCharges: Number(data.cancellationCharges || 0).toString(),
+          remarks: data.remarks || "",
+          refundReason: data.refundReason || "",
+        });
 
-			{uiRefunds.map((sale) => {
-				const r = sale.refund;
-				const refundableAmount = calcRefundableAmount(r);
+        if (data.refundDate) {
+            setRefundDate(new Date(data.refundDate));
+        }
 
-				return (
-					<div
-						key={sale.id}
-						className="border rounded-lg p-4 space-y-4 bg-slate-50"
-					>
-						{/* INFO */}
-						<div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-							<div>
-								<Label>Document No</Label>
-								<Input value={sale.documentNo} disabled />
-							</div>
+      } catch (err) {
+        console.error(err);
+        setError(err.message);
+      } finally {
+        setFetching(false);
+      }
+    };
 
-							<div>
-								<Label>Original Amount</Label>
-								<Input value={r.originalAmount} disabled />
-							</div>
+    fetchRefund();
+  }, [token, refundId]); // Dependencies: Run when these change
 
-							<div>
-								<Label>Status</Label>
-								<Input value={sale.status} disabled />
-							</div>
+  /* =========================
+      3. CALCULATIONS
+  ========================= */
+  useEffect(() => {
+    const net = Number(refundForm.netPrice) || 0;
+    const fee = Number(refundForm.refundFee) || 0;
+    const service = Number(refundForm.serviceCharges) || 0;
 
-							<div>
-								<Label>Refund Date</Label>
-								<Input value={r.refundDate.slice(0, 10)} disabled />
-							</div>
-						</div>
+    const vendorAmount = Math.max(net - fee, 0);
+    const paxAmount = Math.max(vendorAmount - service, 0);
 
-						{/* EDITABLE */}
-						<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-							<div>
-								<Label>Refund Fee</Label>
-								<Input
-									type="number"
-									value={r.refundFee || 0}
-									onChange={(e) =>
-										updateRefund(
-											sale.id,
-											"refundFee",
-											Number(e.target.value || 0)
-										)
-									}
-								/>
-							</div>
+    setRefundVendor(vendorAmount.toFixed(2));
+    setRefundPax(paxAmount.toFixed(2));
+  }, [refundForm]);
 
-							<div>
-								<Label>Service Charges</Label>
-								<Input
-									type="number"
-									value={r.serviceCharges || 0}
-									onChange={(e) =>
-										updateRefund(
-											sale.id,
-											"serviceCharges",
-											Number(e.target.value || 0)
-										)
-									}
-								/>
-							</div>
+  const updateField = (field, value) =>
+    setRefundForm((p) => ({ ...p, [field]: value }));
 
-							<div>
-								<Label>Refundable Amount</Label>
-								<Input value={refundableAmount} disabled />
-							</div>
-						</div>
+  /* =========================
+      4. SUBMIT UPDATE
+  ========================= */
+  const handleSubmit = async () => {
+    const fee = Number(refundForm.refundFee) || 0;
+    const service = Number(refundForm.serviceCharges) || 0;
 
-						{/* SUMMARY */}
-						<div className="grid grid-cols-2 gap-4 text-sm font-semibold">
-							<div className="text-rose-700">
-								Refund Vendor: ${calcVendorRefund(sale).toFixed(2)}
-							</div>
-							<div className="text-blue-700">
-								Refund PAX: ${calcPaxRefund(sale).toFixed(2)}
-							</div>
-						</div>
+    if (fee < 0 || service < 0) {
+      setError("Fees and charges cannot be negative.");
+      return;
+    }
 
-						<div>
-							<Label>Refund Reason</Label>
-							<Input
-								value={r.refundReason || ""}
-								onChange={(e) =>
-									updateRefund(sale.id, "refundReason", e.target.value)
-								}
-							/>
-						</div>
+    const payload = {
+      refundDate: refundDate.toISOString().split("T")[0],
+      refundFee: fee,
+      serviceCharges: service,
+      refundReason: refundForm.refundReason || null,
+      remarks: refundForm.remarks || null,
+    };
 
-						<Textarea
-							placeholder="Remarks"
-							value={r.remarks || ""}
-							onChange={(e) =>
-								updateRefund(sale.id, "remarks", e.target.value)
-							}
-						/>
+    try {
+      setLoading(true);
+      setError("");
+      
+      const res = await fetch(`${API_BASE}/api/refunds/${refundId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
 
-						<div className="flex justify-end">
-							<Button
-								variant="ghost"
-								onClick={() => removeRefund(sale.id)}
-							>
-								<Trash2 className="h-4 w-4 text-red-500" />
-							</Button>
-						</div>
-					</div>
-				);
-			})}
-		</div>
-	);
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to update refund");
+      }
+
+      alert("Refund updated successfully!");
+    //   if (onUpdate) onUpdate(data.data);
+      
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* =========================
+      UI
+  ========================= */
+  if (fetching) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-3">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        <p className="text-gray-500 text-sm">Loading refund details...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Date Picker */}
+      <div className="bg-slate-50 p-4 rounded-lg border">
+        <div className="flex items-center gap-3">
+          <Label className="text-sm font-medium whitespace-nowrap">
+            Refund Date:
+          </Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className="justify-start text-left font-normal bg-white max-w-60 h-9"
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {format(refundDate, "PPP")}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0">
+              <Calendar
+                mode="single"
+                selected={refundDate}
+                onSelect={(d) => d && setRefundDate(d)}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
+      </div>
+
+      {/* Warning Banner */}
+      <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-3">
+        <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5" />
+        <div>
+          <h4 className="font-semibold text-blue-900 text-sm">Editing Existing Refund</h4>
+          <p className="text-xs text-blue-700">
+            Sale information (Document, Prices, Vendor) is locked. You are only modifying the refund parameters.
+          </p>
+        </div>
+      </div>
+
+      {error && (
+        <div className="text-sm text-red-600 bg-red-50 border border-red-200 p-3 rounded-md flex items-center justify-between">
+          {error}
+          <button
+            onClick={() => setError("")}
+            className="text-red-400 hover:text-red-600"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Details */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Left Column - Sale Details (Disabled) */}
+        <div className="space-y-4">
+          <div className="bg-gray-50 p-4 rounded-lg border space-y-3">
+            <h3 className="font-semibold text-sm text-gray-700 mb-3">
+              Original Sale Information
+            </h3>
+
+            <div className="space-y-1">
+              <Label className="text-xs text-gray-600">Document Number</Label>
+              <Input value={refundForm.documentNumber} disabled className="bg-gray-100 text-gray-500" />
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs text-gray-600">Airline</Label>
+              <Input value={refundForm.airline} disabled className="bg-gray-100 text-gray-500" />
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs text-gray-600">Vendor</Label>
+              <Input value={refundForm.vendorName} disabled className="bg-gray-100 text-gray-500" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                <Label className="text-xs text-gray-600">Net Price</Label>
+                <Input value={refundForm.netPrice} disabled className="bg-gray-100 text-gray-500" />
+                </div>
+                <div className="space-y-1">
+                <Label className="text-xs text-gray-600">Sell Price</Label>
+                <Input value={refundForm.sellPrice} disabled className="bg-gray-100 text-gray-500" />
+                </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column - Editable Refund Details */}
+        <div className="space-y-4">
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label className="text-sm font-medium">Refund Fee</Label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={refundForm.refundFee}
+                onChange={(e) => updateField("refundFee", e.target.value)}
+                placeholder="0.00"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-sm font-medium">Service Charges</Label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={refundForm.serviceCharges}
+                onChange={(e) => updateField("serviceCharges", e.target.value)}
+                placeholder="0.00"
+              />
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Calculation Summary */}
+          <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-lg space-y-2">
+            <h4 className="font-semibold text-sm text-blue-900 mb-2">
+              Refund Calculation
+            </h4>
+
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-600">Net Price</span>
+              <span className="font-medium">
+                ${refundForm.netPrice || "0.00"}
+              </span>
+            </div>
+
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-600">- Refund Fee</span>
+              <span className="font-medium text-red-600">
+                -${refundForm.refundFee || "0.00"}
+              </span>
+            </div>
+
+            <Separator />
+
+            <div className="flex justify-between text-sm font-semibold">
+              <span className="text-rose-700">Refund to Vendor</span>
+              <span className="text-rose-700">${refundVendor}</span>
+            </div>
+
+            <Separator className="my-2" />
+
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-600">- Service Charges</span>
+              <span className="font-medium text-red-600">
+                -${refundForm.serviceCharges || "0.00"}
+              </span>
+            </div>
+
+            <Separator />
+
+            <div className="flex justify-between text-sm font-semibold">
+              <span className="text-blue-700">Refund to Customer</span>
+              <span className="text-blue-700">${refundPax}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Refund Reason */}
+      <div className="space-y-1">
+        <Label className="text-sm font-medium">Refund Reason</Label>
+        <Input
+          placeholder="e.g., Customer cancellation, Flight cancelled"
+          value={refundForm.refundReason}
+          onChange={(e) => updateField("refundReason", e.target.value)}
+        />
+      </div>
+
+      {/* Remarks */}
+      <div className="space-y-1">
+        <Label className="text-sm font-medium">Remarks</Label>
+        <Textarea
+          placeholder="Additional notes..."
+          value={refundForm.remarks}
+          onChange={(e) => updateField("remarks", e.target.value)}
+          rows={3}
+          className="resize-none"
+        />
+      </div>
+
+      {/* Actions */}
+      <div className="flex justify-end gap-3 pt-4">
+        <Button
+          onClick={handleSubmit}
+          disabled={loading}
+          className="bg-gradient-primary text-white h-11 px-8 text-base font-semibold gap-2"
+        >
+          {loading ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Updating...
+            </>
+          ) : (
+            <>
+              <Save className="h-4 w-4" />
+              Update Refund
+            </>
+          )}
+        </Button>
+      </div>
+    </div>
+  );
 }

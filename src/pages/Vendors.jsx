@@ -23,6 +23,10 @@ import {
   TrendingDown,
 } from "lucide-react";
 
+// Components & Utils
+import CustomAlertDialog from "../components/CustomAlertDialog"; 
+import { appToast } from "../../shadcn/components/ui/appToast"; 
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
 /* ======================= API ======================= */
@@ -66,11 +70,9 @@ function unpackAddress(address = "") {
   return { location, contactPerson };
 }
 
-/* ======================= COMPONENT ======================= */
 const VendorsPage = () => {
   const [vendors, setVendors] = useState([]);
   const [loadingList, setLoadingList] = useState(false);
-
   const [orderBy, setOrderBy] = useState("vendorDate");
   const [orderDir, setOrderDir] = useState("desc");
 
@@ -78,12 +80,15 @@ const VendorsPage = () => {
   const [isEditModal, setIsEditModal] = useState(false);
   const [currentVendor, setCurrentVendor] = useState(null);
 
+  // Delete State
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const [saving, setSaving] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [selectedRowKeys, setSelectedRowKeys] = useState([]);
   const [form] = Form.useForm();
 
-  /* ======================= NORMALIZE ======================= */
   const normalizeVendor = (v) => {
     const { location, contactPerson } = unpackAddress(v?.address);
     return {
@@ -102,18 +107,14 @@ const VendorsPage = () => {
     };
   };
 
-  /* ======================= FETCH ======================= */
   const refreshVendors = async () => {
     setLoadingList(true);
     try {
-      const params = new URLSearchParams({
-        orderBy,
-        orderDir,
-      });
+      const params = new URLSearchParams({ orderBy, orderDir });
       const res = await apiRequest(`/api/vendors?${params.toString()}`);
       setVendors((res.data || []).map(normalizeVendor));
     } catch (e) {
-      message.error(e.message || "Failed to fetch vendors");
+      appToast.error(e.message || "Failed to fetch vendors");
     } finally {
       setLoadingList(false);
     }
@@ -123,14 +124,12 @@ const VendorsPage = () => {
     refreshVendors();
   }, [orderBy, orderDir]);
 
-  /* ======================= SEARCH ======================= */
   const filteredData = useMemo(() => {
     const q = searchText.toLowerCase();
     if (!q) return vendors;
     return vendors.filter((v) => v.name.toLowerCase().includes(q));
   }, [vendors, searchText]);
 
-  /* ======================= TOTALS ======================= */
   const totals = useMemo(() => {
     const total = vendors.length;
     const active = vendors.filter((v) => v.status).length;
@@ -143,12 +142,10 @@ const VendorsPage = () => {
     return { total, active, receivables, payables };
   }, [vendors]);
 
-  /* ======================= MODAL ======================= */
   const showModal = (vendor = null) => {
     setIsModalOpen(true);
     setIsEditModal(!!vendor);
     setCurrentVendor(vendor);
-
     form.setFieldsValue(
       vendor
         ? {
@@ -159,8 +156,7 @@ const VendorsPage = () => {
             email: vendor.email,
             location: vendor.location,
             openingBalance: vendor.openingBalance,
-            balanceType:
-              vendor._category === "DEBIT" ? "Debit (DR)" : "Credit (CR)",
+            balanceType: vendor._category === "DEBIT" ? "Debit (DR)" : "Credit (CR)",
             vendorDate: vendor.vendorDate ? dayjs(vendor.vendorDate) : dayjs(),
             status: vendor.status,
           }
@@ -180,7 +176,6 @@ const VendorsPage = () => {
     form.resetFields();
   };
 
-  /* ======================= SUBMIT ======================= */
   const handleSubmit = async (values) => {
     setSaving(true);
     try {
@@ -201,78 +196,57 @@ const VendorsPage = () => {
           method: "PUT",
           body: payload,
         });
-        message.success("Vendor updated successfully!");
+        appToast.success("Vendor updated successfully!");
       } else {
         await apiRequest("/api/vendors", { method: "POST", body: payload });
-        message.success("Vendor added successfully!");
+        appToast.success("Vendor added successfully!");
       }
-
       handleCancel();
       refreshVendors();
     } catch (e) {
-      message.error(e.message || "Failed to save vendor");
+      appToast.error(e.message || "Failed to save vendor");
     } finally {
       setSaving(false);
     }
   };
 
-  const handleDelete = (id) =>
-    Modal.confirm({
-      title: "Delete this vendor?",
-      okText: "Delete",
-      okType: "danger",
-      onOk: async () => {
-        try {
-          await apiRequest(`/api/vendors/${id}`, { method: "DELETE" });
-          message.success("Vendor deleted!");
-          setSelectedRowKeys((prev) => prev.filter((x) => x !== id));
-          await refreshVendors();
-        } catch (e) {
-          message.error(e.message || "Failed to delete vendor");
-        }
-      },
-    });
-
-  const handleDeleteSelected = () =>
-    Modal.confirm({
-      title: "Delete selected vendors?",
-      okText: "Delete",
-      okType: "danger",
-      onOk: async () => {
-        try {
-          await Promise.all(
-            selectedRowKeys.map((id) =>
-              apiRequest(`/api/vendors/${id}`, { method: "DELETE" })
-            )
-          );
-          message.success("Selected vendors deleted!");
-          setSelectedRowKeys([]);
-          await refreshVendors();
-        } catch (e) {
-          message.error(e.message || "Failed to delete selected vendors");
-        }
-      },
-    });
+  /* ======================= DELETE LOGIC ======================= */
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      // Bulk delete or single delete?
+      if (Array.isArray(deleteTarget)) {
+        await Promise.all(
+          deleteTarget.map((id) => apiRequest(`/api/vendors/${id}`, { method: "DELETE" }))
+        );
+        appToast.success("Selected vendors processed successfully");
+        setSelectedRowKeys([]);
+      } else {
+        const res = await apiRequest(`/api/vendors/${deleteTarget.id}`, { method: "DELETE" });
+        appToast.success(res.message || "Vendor processed successfully");
+        setSelectedRowKeys((prev) => prev.filter((x) => x !== deleteTarget.id));
+      }
+      refreshVendors();
+      setDeleteTarget(null);
+    } catch (e) {
+      appToast.error(e.message || "Failed to delete vendor(s)");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const handleStatusToggle = async (id, checked) => {
-    // optimistic UI
-    setVendors((prev) =>
-      prev.map((v) => (v.id === id ? { ...v, status: checked } : v))
-    );
+    setVendors((prev) => prev.map((v) => (v.id === id ? { ...v, status: checked } : v)));
     try {
       await apiRequest(`/api/vendors/${id}`, {
         method: "PUT",
         body: { status: checked },
       });
-      message.success(
-        `Vendor status updated to ${checked ? "Active" : "Inactive"}`
-      );
+      appToast.success(`Vendor ${checked ? "Activated" : "Deactivated"}`);
     } catch (e) {
-      // revert
-      setVendors((prev) =>
-        prev.map((v) => (v.id === id ? { ...v, status: !checked } : v))
-      );
-      message.error(e.message || "Failed to update status");
+      setVendors((prev) => prev.map((v) => (v.id === id ? { ...v, status: !checked } : v)));
+      appToast.error(e.message || "Failed to update status");
     }
   };
 
@@ -283,15 +257,11 @@ const VendorsPage = () => {
       render: (_, record) => (
         <div className="flex items-center space-x-3">
           <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center shrink-0">
-            <span className="text-blue-600 font-semibold">
-              {(record.name || "?").charAt(0)}
-            </span>
+            <span className="text-blue-600 font-semibold">{(record.name || "?").charAt(0)}</span>
           </div>
           <div className="min-w-0">
             <div className="font-medium truncate">{record.name}</div>
-            <div className="text-gray-500 text-sm truncate">
-              {record.contactPerson}
-            </div>
+            <div className="text-gray-500 text-sm truncate">{record.contactPerson}</div>
           </div>
         </div>
       ),
@@ -311,7 +281,7 @@ const VendorsPage = () => {
       title: "Opening Balance",
       dataIndex: "openingBalance",
       key: "openingBalance",
-      render: (value) => `$${Number(value || 0)}`,
+      render: (value) => `${Number(value || 0).toLocaleString()} SAR`,
     },
     {
       title: "Type",
@@ -377,14 +347,12 @@ const VendorsPage = () => {
             variant="link"
             color="danger"
             icon={<Trash className="w-5 h-5" />}
-            onClick={() => handleDelete(record.id)}
+            onClick={() => setDeleteTarget(record)}
           />
         </Space>
       ),
     },
   ];
-
-  const rowSelection = { selectedRowKeys, onChange: setSelectedRowKeys };
 
   return (
     <div className="min-h-screen p-4 sm:p-6">
@@ -411,20 +379,9 @@ const VendorsPage = () => {
           <Button type="primary" icon={<Plus />} onClick={() => showModal()}>
             Add Vendor
           </Button>
-          {selectedRowKeys.length > 0 && (
-            <Button
-              danger
-              onClick={handleDeleteSelected}
-              icon={<Trash className="w-5 h-5 mr-2" />}
-              className="flex items-center"
-            >
-              Delete Selected
-            </Button>
-          )}
         </Space>
       </div>
 
-      {/* Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {[
           {
@@ -467,16 +424,6 @@ const VendorsPage = () => {
           <div className="text-lg font-semibold">
             Vendors List ({vendors.length})
           </div>
-          {selectedRowKeys.length > 0 && (
-            <Button
-              danger
-              onClick={handleDeleteSelected}
-              icon={<Trash className="w-5 h-5 mr-2" />}
-              className="flex items-center"
-            >
-              Delete Selected
-            </Button>
-          )}
         </div>
 
         <Table
@@ -484,13 +431,27 @@ const VendorsPage = () => {
           columns={columns}
           dataSource={filteredData}
           rowKey="id"
+          // rowSelection={{ selectedRowKeys, onChange: setSelectedRowKeys }}
           pagination={{ pageSize: 10, showSizeChanger: false }}
-          rowSelection={rowSelection}
           scroll={{ x: "max-content" }}
         />
       </div>
 
-      {/* Modal */}
+      <CustomAlertDialog
+        open={!!deleteTarget}
+        onOpenChange={() => setDeleteTarget(null)}
+        title={Array.isArray(deleteTarget) ? "Delete Selected Vendors?" : "Remove Vendor?"}
+        description={
+          Array.isArray(deleteTarget) 
+          ? `You are about to delete ${deleteTarget.length} vendors. If they have transaction history, they will be deactivated instead of removed.`
+          : `Are you sure you want to remove "${deleteTarget?.name}"? If they have existing ledger entries, they will be safely deactivated.`
+        }
+        onConfirm={handleConfirmDelete}
+        loading={isDeleting}
+        variant="danger"
+        confirmText="Confirm Action"
+      />
+
       <Modal
         title={
           <div className="flex items-center">
