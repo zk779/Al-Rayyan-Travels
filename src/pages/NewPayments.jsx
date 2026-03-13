@@ -149,7 +149,7 @@ const Steps = ({ step, isVendor }) => {
           {i < 2 && (
             <div
               className={cn(
-                "w-14 h-0.5 mb-5 mx-1 rounded",
+                "w-50 h-0.5 mb-5 mx-1 rounded",
                 step > i + 1 ? "bg-green-400" : "bg-slate-200",
               )}
             />
@@ -231,7 +231,7 @@ export default function DepositTabComponent() {
   // ── STEP 1 ─────────────────────────────────────────────────────────────────
   if (step === 1)
     return (
-      <div className="max-w-2xl mx-auto p-6">
+      <div className="max-w-7xl mx-auto p-6">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-slate-800">Payments</h1>
           <p className="text-sm text-slate-500 mt-0.5">
@@ -322,7 +322,7 @@ export default function DepositTabComponent() {
   // ── STEP 2 ─────────────────────────────────────────────────────────────────
   if (step === 2)
     return (
-      <div className="max-w-2xl mx-auto p-6 space-y-4">
+      <div className="max-w-7xl mx-auto p-6 space-y-4">
         <Steps step={2} isVendor={isVendor} />
 
         {/* Search box */}
@@ -505,7 +505,7 @@ export default function DepositTabComponent() {
 
   // ── STEP 3 ─────────────────────────────────────────────────────────────────
   return (
-    <div className="max-w-2xl mx-auto p-6 space-y-4">
+    <div className="max-w-7xl mx-auto p-6 space-y-4">
       <Steps step={3} isVendor={isVendor} />
 
       {success ? (
@@ -799,13 +799,15 @@ export default function DepositTabComponent() {
                 />
               </div>
 
-              <SlideButton
-                handlePayment={pay}
-                disabled={processing || !amount || parseFloat(amount) <= 0}
-                price={parseFloat(amount) || 0}
-                isProcessing={processing}
-                className="w-full"
-              />
+              <div className="">
+                <SlideButton
+                  handlePayment={pay}
+                  disabled={processing || !amount || parseFloat(amount) <= 0}
+                  price={parseFloat(amount) || 0}
+                  isProcessing={processing}
+                  className=""
+                />
+              </div>
             </div>
           </div>
 

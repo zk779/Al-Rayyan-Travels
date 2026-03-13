@@ -15,8 +15,6 @@ import {
   Send,
 } from "lucide-react";
 import { format } from "date-fns";
-
-// shadcn
 import { Button } from "../../shadcn/components/ui/button";
 import {
   Card,
@@ -34,13 +32,94 @@ import {
 } from "../../shadcn/components/ui/popover";
 import { Badge } from "../../shadcn/components/ui/badge";
 import ManageDestinationsDialog from "./ManageDestinationsDialog";
+import PaymentDialog from "./PaymentDialog";
 import { appToast } from "../../shadcn/components/ui/appToast";
-
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
+/* ─── Pure helpers ───────────────────────────────────────── */
+const emptyRow = () => ({
+  id: crypto.randomUUID(),
+  airlineId: "",
+  documentNo: "",
+  pnr: "",
+  vendorId: "",
+  customerId: "",
+  netPrice: "",
+  sellPrice: "",
+  paidAmount: "",
+  paymentType: "",
+  paymentMeta: null,
+  remarks: "",
+  paxName: "",
+  destinations: [],
+  routeType: "",
+  tripType: "ONE_WAY",
+  departureDate: null,
+  returnDate: null,
+  paxVat: "",
+  miscCharges: "",
+  vatAmount: "",
+});
+
+const isEmptySale = (s) =>
+  !s.airlineId && !s.documentNo && !s.vendorId && !s.netPrice && !s.sellPrice;
+
+const detectRouteType = (destinations = []) => {
+  const hasKSA = destinations.some((d) => d.airport?.country === "SA");
+  const hasNonKSA = destinations.some((d) => d.airport?.country !== "SA");
+  if (!destinations.length) return "";
+  if (hasKSA && !hasNonKSA) return "DOMESTIC";
+  if (hasKSA && hasNonKSA) return "MIXED";
+  return "ZERO_VAT";
+};
+
+const calcVAT = (profit) => {
+  const p = Number(profit) || 0;
+  return p > 0 ? ((p / 1.15) * 0.15).toFixed(2) : "0.00";
+};
+const calcPaxVAT = (netPrice) => {
+  const n = Number(netPrice) || 0;
+  return n > 0 ? ((n / 1.15) * 0.15).toFixed(2) : "0.00";
+};
+
+const applyRouteEffects = (item, routeType) => {
+  const updated = { ...item, routeType };
+  if (routeType === "DOMESTIC") {
+    updated.paxVat = calcPaxVAT(item.netPrice);
+    updated.miscCharges = "";
+  } else if (routeType === "ZERO_VAT") {
+    updated.paxVat = "";
+    updated.vatAmount = "0.00";
+  } else {
+    updated.paxVat = "";
+    updated.miscCharges = "";
+  }
+  return updated;
+};
+
+const compactSelectStyles = {
+  control: (b) => ({
+    ...b,
+    minHeight: 32,
+    height: 32,
+    boxShadow: "none",
+    fontSize: "13px",
+  }),
+  valueContainer: (b) => ({ ...b, height: 32, padding: "0 6px" }),
+  input: (b) => ({ ...b, margin: 0, padding: 0 }),
+  indicatorsContainer: (b) => ({ ...b, height: 32 }),
+  menuPortal: (b) => ({ ...b, zIndex: 9999 }),
+};
+
+const routeTypeOptions = [
+  { value: "DOMESTIC", label: "Domestic (KSA Only)" },
+  { value: "MIXED", label: "Domestic/International (Mixed)" },
+  { value: "ZERO_VAT", label: "Zero VAT Route (Non-KSA)" },
+];
+
+/* ─── Component ──────────────────────────────────────────── */
 export default function SalesTabComponent() {
-  /* ========================= STATE ========================= */
   const [saleDate, setSaleDate] = useState(new Date());
   const [uiSales, setUiSales] = useState([]);
   const [destinationDialog, setDestinationDialog] = useState({
@@ -48,16 +127,12 @@ export default function SalesTabComponent() {
     saleId: null,
   });
   const [loading, setLoading] = useState(false);
-
   const [invoiceNo, setInvoiceNo] = useState("");
   const [fetchingInvoice, setFetchingInvoice] = useState(false);
-
-  /* Master data */
   const [airlines, setAirlines] = useState([]);
   const [vendors, setVendors] = useState([]);
   const [customers, setCustomers] = useState([]);
   const lastToastValue = useRef(null);
-
 
   const token = localStorage.getItem("token");
   const headers = useMemo(
@@ -68,130 +143,46 @@ export default function SalesTabComponent() {
     [token],
   );
 
-  /* ========================= ROUTE TYPE OPTIONS ========================= */
-  const routeTypeOptions = [
-    { value: "DOMESTIC", label: "Domestic (KSA Only)" },
-    { value: "MIXED", label: "Domestic/International (Mixed)" },
-    { value: "ZERO_VAT", label: "Zero VAT Route (Non-KSA)" },
-  ];
-
-  /* ========================= HELPERS ========================= */
-  const emptyRow = () => ({
-    id: crypto.randomUUID(),
-    airlineId: "",
-    documentNo: "",
-    pnr: "",
-    vendorId: "",
-    customerId: "",
-    netPrice: "",
-    sellPrice: "",
-    paidAmount: "",
-    paymentType: "",
-    remarks: "",
-    paxName: "",
-    destinations: [],
-    routeType: "",
-    tripType: "ONE_WAY",
-    departureDate: null,
-    returnDate: null,
-    paxVat: "",
-    miscCharges: "",
-    vatAmount: "",
-  });
-
-  const isEmptySale = (s) => {
-    return (
-      !s.airlineId &&
-      !s.documentNo &&
-      !s.vendorId &&
-      !s.netPrice &&
-      !s.sellPrice
-    );
-  };
-
-  const detectRouteType = (destinations) => {
-    if (!destinations || destinations.length === 0) return "";
-    const hasKSA = destinations.some((d) => d.airport?.country === "SA");
-    const hasNonKSA = destinations.some((d) => d.airport?.country !== "SA");
-    if (hasKSA && !hasNonKSA) return "DOMESTIC";
-    if (hasKSA && hasNonKSA) return "MIXED";
-    if (!hasKSA && hasNonKSA) return "ZERO_VAT";
-    return "";
-  };
-
-  const calculateVAT = (profit) => {
-    const profitNum = Number(profit) || 0;
-    if (profitNum <= 0) return "0.00";
-    const baseAmount = profitNum / 1.15;
-    const vatAmount = baseAmount * 0.15;
-    return vatAmount.toFixed(2);
-  };
-
-  const calculatePaxVAT = (netPrice) => {
-    const net = Number(netPrice) || 0;
-    if (net <= 0) return "0.00";
-    const baseAmount = net / 1.15;
-    const vatAmount = baseAmount * 0.15;
-    return vatAmount.toFixed(2);
-  };
-
-  useEffect(() => {
-    if (!token) return;
-
-    const controller = new AbortController();
-
-    async function fetchInvoiceNo() {
-      try {
-        setFetchingInvoice(true);
-        const res = await fetch(`${API_BASE}/api/invoice/next`, {
-          headers: { Authorization: `Bearer ${token}` },
-          signal: controller.signal,
-        });
-
-        const data = await res.json();
-        if (!res.ok)
-          throw new Error(data.error || "Failed to fetch invoice no");
-
-        setInvoiceNo(data.invoiceNo || "");
-      } catch (err) {
-        if (err.name !== "AbortError") {
-          console.error(err);
-          appToast.error( 
-            "Invoice Error",
-            "Failed to fetch invoice number. Please try again."
-          );
-          setInvoiceNo("");
-        }
-      } finally {
-        setFetchingInvoice(false);
-      }
-    }
-
-    fetchInvoiceNo();
-    return () => controller.abort();
-  }, [saleDate, token]);
-
-  /* ========================= INIT ========================= */
+  /* ── Init ── */
   useEffect(() => {
     setUiSales([emptyRow()]);
   }, []);
 
-  /* ========================= LOAD MASTER DATA ========================= */
+  /* ── Invoice number ── */
+  useEffect(() => {
+    if (!token) return;
+    const controller = new AbortController();
+    setFetchingInvoice(true);
+    fetch(`${API_BASE}/api/invoice/next`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal,
+    })
+      .then((r) => r.json())
+      .then((d) => setInvoiceNo(d.invoiceNo || ""))
+      .catch((err) => {
+        if (err.name !== "AbortError") {
+          appToast.error("Invoice Error", "Failed to fetch invoice number.");
+          setInvoiceNo("");
+        }
+      })
+      .finally(() => setFetchingInvoice(false));
+    return () => controller.abort();
+  }, [saleDate, token]);
+
+  /* ── Master data ── */
   useEffect(() => {
     fetch(`${API_BASE}/api/airlines`, { headers })
       .then((r) => r.json())
       .then((j) => setAirlines(j.data || []));
-
     fetch(`${API_BASE}/api/vendors`, { headers })
       .then((r) => r.json())
       .then((j) => setVendors(j.data || []));
-
     fetch(`${API_BASE}/api/customers?isActive=true`, { headers })
       .then((r) => r.json())
       .then((j) => setCustomers(j.data || []));
   }, [headers]);
 
-  /* ========================= DESTINATIONS ASYNC SEARCH ========================= */
+  /* ── Destination search ── */
   const loadDestinationOptions = useCallback(
     (inputValue) => {
       if (!inputValue || inputValue.length < 2) return Promise.resolve([]);
@@ -200,87 +191,70 @@ export default function SalesTabComponent() {
         { headers },
       )
         .then((r) => r.json())
-        .then((j) => {
-          if (j.success && j.data) {
-            return j.data.map((airport) => ({
-              value: airport.iata,
-              label: `${airport.iata} - ${airport.city}, ${airport.country}`,
-              airport,
-            }));
-          }
-          return [];
-        })
+        .then((j) =>
+          j.success && j.data
+            ? j.data.map((a) => ({
+                value: a.iata,
+                label: `${a.iata} - ${a.city}, ${a.country}`,
+                airport: a,
+              }))
+            : [],
+        )
         .catch(() => []);
     },
     [headers],
   );
 
-  /* ========================= VENDOR LOOKUP ========================= */
-  const vendorMap = useMemo(() => {
-    const map = {};
-    vendors.forEach((v) => {
-      map[v.id] = v;
-    });
-    return map;
-  }, [vendors]);
+  /* ── Vendor map ── */
+  const vendorMap = useMemo(
+    () => Object.fromEntries(vendors.map((v) => [v.id, v])),
+    [vendors],
+  );
 
-  /* ========================= ROW HANDLING ========================= */
+  /* ── Row ops ── */
   const addSaleRow = useCallback(() => {
-    const newRow = emptyRow();
-    setUiSales((prev) => [...prev, newRow]);
-    setTimeout(() => {
-      const firstInput = document.querySelector(
-        `[data-row-id="${newRow.id}"] input`,
-      );
-      if (firstInput) firstInput.focus();
-    }, 100);
+    const row = emptyRow();
+    setUiSales((prev) => [...prev, row]);
+    setTimeout(
+      () => document.querySelector(`[data-row-id="${row.id}"] input`)?.focus(),
+      100,
+    );
   }, []);
 
-  const removeSaleRow = (id) => {
+  const removeSaleRow = (id) =>
     setUiSales((prev) => {
       const next = prev.filter((s) => s.id !== id);
-      return next.length === 0 ? [emptyRow()] : next;
+      return next.length ? next : [emptyRow()];
     });
-  };
 
-  const updateSale = (id, field, value) => {
+  const updateSale = (id, field, value) =>
     setUiSales((prev) =>
       prev.map((item) => {
         if (item.id !== id) return item;
 
-if (field === "netPrice") {
-  const vendor = vendorMap[item.vendorId];
-  const netValue = Number(value || 0);
-  
-  if (vendor && String(vendor.category).toUpperCase() === "CREDIT") {
-    const balance = Number(vendor.account?.balance || 0);
-    
-    if (netValue > balance) {
-      // Check if we already showed this exact warning
-      const toastKey = `${item.id}-${netValue}`;
-      if (lastToastValue.current !== toastKey) {
-        appToast.warning(
-          "Low Balance!",
-          `Insufficient vendor balance.\n\nAvailable: ${balance}\nEntered: ${netValue}`
-        );
-        lastToastValue.current = toastKey;
-      }
-      return item; 
-    }
-  }
-}
-// Reset guard if value becomes valid
-lastToastValue.current = null;
+        if (field === "netPrice") {
+          const vendor = vendorMap[item.vendorId];
+          const net = Number(value || 0);
+          if (vendor && String(vendor.category).toUpperCase() === "CREDIT") {
+            const balance = Number(vendor.account?.balance || 0);
+            if (net > balance) {
+              const key = `${item.id}-${net}`;
+              if (lastToastValue.current !== key) {
+                appToast.warning(
+                  "Low Balance!",
+                  `Insufficient vendor balance.\n\nAvailable: ${balance}\nEntered: ${net}`,
+                );
+                lastToastValue.current = key;
+              }
+              return item;
+            }
+          }
+          lastToastValue.current = null;
+        }
 
-        if (field === "paymentType") {
-          const isCredit = String(value).toUpperCase() === "CREDIT";
-          return {
-            ...item,
-            paymentType: value,
-            customerId: isCredit ? item.customerId : "",
-            paidAmount: isCredit ? item.paidAmount : item.sellPrice || "",
-            paxName: isCredit ? "" : item.paxName,
-          };
+        if (field === "payment") {
+          // value = { paymentType, paymentMeta, customerId, paidAmount, paxName }
+          return { ...item, ...value };
         }
 
         if (field === "paidAmount") {
@@ -290,119 +264,54 @@ lastToastValue.current = null;
 
         if (field === "destinations") {
           const newRouteType = detectRouteType(value);
-          const updatedItem = {
-            ...item,
-            destinations: value,
-            routeType: newRouteType,
-          };
-          if (newRouteType === "DOMESTIC") {
-            updatedItem.paxVat = calculatePaxVAT(updatedItem.netPrice);
-            updatedItem.miscCharges = "";
-          } else if (newRouteType === "ZERO_VAT") {
-            updatedItem.paxVat = "";
-            updatedItem.vatAmount = "0.00";
-          } else {
-            updatedItem.paxVat = "";
-            updatedItem.miscCharges = "";
-          }
-          return updatedItem;
+          return applyRouteEffects(
+            { ...item, destinations: value },
+            newRouteType,
+          );
         }
 
         if (field === "netPrice" || field === "sellPrice") {
-          const updatedItem = { ...item, [field]: value };
-          const net = Number(updatedItem.netPrice) || 0;
-          const sell = Number(updatedItem.sellPrice) || 0;
-          const profit = sell - net;
-          if (updatedItem.routeType === "DOMESTIC") {
-            updatedItem.paxVat = calculatePaxVAT(updatedItem.netPrice);
-          }
-          if (updatedItem.routeType !== "ZERO_VAT") {
-            updatedItem.vatAmount = calculateVAT(profit);
-          } else {
-            updatedItem.vatAmount = "0.00";
-          }
-          return updatedItem;
+          const updated = { ...item, [field]: value };
+          if (updated.routeType === "DOMESTIC")
+            updated.paxVat = calcPaxVAT(updated.netPrice);
+          if (updated.routeType !== "ZERO_VAT")
+            updated.vatAmount = calcVAT(
+              Number(updated.sellPrice || 0) - Number(updated.netPrice || 0),
+            );
+          else updated.vatAmount = "0.00";
+          return updated;
         }
 
         return { ...item, [field]: value };
       }),
     );
-  };
 
-  const removeDestination = (saleId, destValue) => {
+  const removeDestination = (saleId, destValue) =>
     setUiSales((prev) =>
       prev.map((item) => {
         if (item.id !== saleId) return item;
-        const newDestinations = item.destinations.filter(
-          (d) => d.value !== destValue,
+        const newDests = item.destinations.filter((d) => d.value !== destValue);
+        return applyRouteEffects(
+          { ...item, destinations: newDests },
+          detectRouteType(newDests),
         );
-        const newRouteType = detectRouteType(newDestinations);
-        const updated = {
-          ...item,
-          destinations: newDestinations,
-          routeType: newRouteType,
-        };
-        if (newRouteType === "DOMESTIC") {
-          updated.paxVat = calculatePaxVAT(updated.netPrice);
-          updated.miscCharges = "";
-        } else if (newRouteType === "ZERO_VAT") {
-          updated.paxVat = "";
-          updated.vatAmount = "0.00";
-        } else {
-          updated.paxVat = "";
-          updated.miscCharges = "";
-        }
-        return updated;
       }),
     );
-  };
 
-  /* ========================= KEYBOARD SHORTCUT (Alt+A) ========================= */
+  /* ── Keyboard shortcut Alt+A ── */
   useEffect(() => {
-    const handleKeyDown = (e) => {
+    const handler = (e) => {
       const isMac = navigator.platform.toUpperCase().includes("MAC");
-      if (
-        (isMac && e.metaKey && e.key.toLowerCase() === "a") ||
-        (!isMac && e.altKey && e.key.toLowerCase() === "a")
-      ) {
+      if ((isMac ? e.metaKey : e.altKey) && e.key.toLowerCase() === "a") {
         e.preventDefault();
         addSaleRow();
       }
     };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
   }, [addSaleRow]);
 
-  /* ========================= CALCULATIONS ========================= */
-  const calculateProfit = (net, sell, vat) => {
-    const netNum = Number(net) || 0;
-    const sellNum = Number(sell) || 0;
-    const vatNum = Number(vat) || 0;
-    const profit = sellNum - netNum - vatNum;
-    return profit.toFixed(2);
-  };
-
-  const totals = uiSales.reduce(
-    (acc, item) => {
-      const net = Number(item.netPrice) || 0;
-      const sell = Number(item.sellPrice) || 0;
-      const vat = Number(item.vatAmount) || 0;
-      const paxVat = Number(item.paxVat) || 0;
-      const misc = Number(item.miscCharges) || 0;
-      const profit = sell - net - vat;
-      return {
-        net: acc.net + net,
-        sell: acc.sell + sell,
-        profit: acc.profit + profit,
-        vat: acc.vat + vat,
-        paxVat: acc.paxVat + paxVat,
-        misc: acc.misc + misc,
-      };
-    },
-    { net: 0, sell: 0, profit: 0, vat: 0, paxVat: 0, misc: 0 },
-  );
-
-  /* ========================= OPTIONS ========================= */
+  /* ── Options ── */
   const airlineOptions = airlines.map((a) => ({
     value: a.id,
     label: `${a.airlineCode} - ${a.iataName}`,
@@ -415,143 +324,124 @@ lastToastValue.current = null;
     value: c.id,
     label: c.customerName,
   }));
-  const paymentOptions = [
-    { value: "CASH", label: "Cash" },
-    { value: "CREDIT", label: "Credit" },
-    { value: "BANK_TRANSFER", label: "Bank Transfer" },
-  ];
 
-  /* ========================= COMPACT SELECT STYLES ========================= */
-  const compactSelectStyles = {
-    control: (base) => ({
-      ...base,
-      minHeight: 32,
-      height: 32,
-      boxShadow: "none",
-      fontSize: "13px",
+  /* ── Totals ── */
+  const totals = uiSales.reduce(
+    (acc, s) => ({
+      net: acc.net + (Number(s.netPrice) || 0),
+      sell: acc.sell + (Number(s.sellPrice) || 0),
+      vat: acc.vat + (Number(s.vatAmount) || 0),
+      paxVat: acc.paxVat + (Number(s.paxVat) || 0),
+      misc: acc.misc + (Number(s.miscCharges) || 0),
+      profit:
+        acc.profit +
+        ((Number(s.sellPrice) || 0) -
+          (Number(s.netPrice) || 0) -
+          (Number(s.vatAmount) || 0)),
     }),
-    valueContainer: (base) => ({ ...base, height: 32, padding: "0 6px" }),
-    input: (base) => ({ ...base, margin: 0, padding: 0 }),
-    indicatorsContainer: (base) => ({ ...base, height: 32 }),
-    menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-  };
+    { net: 0, sell: 0, vat: 0, paxVat: 0, misc: 0, profit: 0 },
+  );
 
-  /* ========================= SUBMIT HANDLER ========================= */
- const handleSubmit = async () => {
+  /* ── Submit ── */
+  const handleSubmit = async () => {
     const cleanedSales = uiSales.filter((s) => !isEmptySale(s));
-
-    if (cleanedSales.length === 0) {
-        appToast.warning(
-            "Empty Submission",
-            "Add at least one sale or refund before submitting."
-        );
-        return;
+    if (!cleanedSales.length) {
+      appToast.warning(
+        "Empty Submission",
+        "Add at least one sale before submitting.",
+      );
+      return;
     }
 
-    // Validate required fields
-    for (const sale of cleanedSales) {
-        if (
-            !sale.airlineId ||
-            !sale.vendorId ||
-            !sale.documentNo ||
-            !sale.netPrice ||
-            !sale.sellPrice ||
-            !sale.paymentType
-        ) {
-            appToast.warning(
-                "Incomplete Sale",
-                "Please fill all required fields (Airline, Vendor, Document No, Net, Sell, Payment)"
-            );
-            return;
-        }
-        if (String(sale.paymentType).toUpperCase() === "CREDIT" && !sale.customerId) {
-            appToast.warning(
-                "Incomplete Sale",
-                "Customer is required for CREDIT payment type"
-            );
-            return;
-        }
+    for (const s of cleanedSales) {
+      if (
+        !s.airlineId ||
+        !s.vendorId ||
+        !s.documentNo ||
+        !s.netPrice ||
+        !s.sellPrice ||
+        !s.paymentType
+      ) {
+        appToast.warning(
+          "Incomplete Sale",
+          "Please fill all required fields (Airline, Vendor, Document No, Net, Sell, Payment)",
+        );
+        return;
+      }
+      if (String(s.paymentType).toUpperCase() === "CREDIT" && !s.customerId) {
+        appToast.warning(
+          "Incomplete Sale",
+          "Customer is required for CREDIT payment type",
+        );
+        return;
+      }
     }
 
     const payload = {
-        saleDate: saleDate.toISOString(),
-        sales: cleanedSales.map((s) => ({
-            airlineId: s.airlineId,
-            vendorId: s.vendorId,
-            customerId: s.customerId || null,
-            documentNo: s.documentNo,
-            pnr: s.pnr || null,
-            routeType: s.routeType || null,
-            tripType: s.tripType || "ONE_WAY",
-            departureDate: s.departureDate || null,
-            returnDate: s.returnDate || null,
-            paxName: s.paxName || null,
-            destinations: s.destinations || null,
-            netPrice: Number(s.netPrice),
-            sellPrice: Number(s.sellPrice),
-            vatAmount: Number(s.vatAmount || 0),
-            paxVat: Number(s.paxVat || 0),
-            miscCharges: Number(s.miscCharges || 0),
-            paidAmount: Number(s.paidAmount || 0),
-            paymentType: s.paymentType,
-            remarks: s.remarks || null,
-        })),
+      saleDate: saleDate.toISOString(),
+      sales: cleanedSales.map((s) => ({
+        airlineId: s.airlineId,
+        vendorId: s.vendorId,
+        customerId: s.customerId || null,
+        documentNo: s.documentNo,
+        pnr: s.pnr || null,
+        routeType: s.routeType || null,
+        tripType: s.tripType || "ONE_WAY",
+        departureDate: s.departureDate || null,
+        returnDate: s.returnDate || null,
+        paxName: s.paxName || null,
+        destinations: s.destinations || null,
+        netPrice: Number(s.netPrice),
+        sellPrice: Number(s.sellPrice),
+        vatAmount: Number(s.vatAmount || 0),
+        paxVat: Number(s.paxVat || 0),
+        miscCharges: Number(s.miscCharges || 0),
+        paidAmount: Number(s.paidAmount || 0),
+        paymentType: s.paymentType,
+        remarks: s.remarks || null,
+      })),
     };
 
     try {
-        setLoading(true);
-
-        // --- Start of appToast.promise Logic ---
-        const responseData = await appToast.promise(
-            fetch(`${API_BASE}/api/sales`, {
-                method: "POST",
-                headers,
-                body: JSON.stringify(payload),
-            }).then(async (res) => {
-                const data = await res.json();
-                if (!res.ok) {
-                    throw new Error(data.error || "Failed to create sales");
-                }
-                return data; // This returns to responseData
-            }),
-            {
-                loading: "Submitting invoice...",
-                success: (data) => `Invoice ${data?.data?.invoiceNo || ""} Submitted Successfully!`,
-                error: (err) => err.message || "Failed to submit invoice",
-            }
-        );
-        // --- End of appToast.promise Logic ---
-
-        // Reset Form on Success
-        setUiSales([emptyRow()]);
-        setSaleDate(new Date());
-        
+      setLoading(true);
+      await appToast.promise(
+        fetch(`${API_BASE}/api/sales`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(payload),
+        }).then(async (res) => {
+          const d = await res.json();
+          if (!res.ok) throw new Error(d.error || "Failed");
+          return d;
+        }),
+        {
+          loading: "Submitting invoice...",
+          success: (d) =>
+            `Invoice ${d?.data?.invoiceNo || ""} Submitted Successfully!`,
+          error: (err) => err.message || "Failed to submit invoice",
+        },
+      );
+      setUiSales([emptyRow()]);
+      setSaleDate(new Date());
     } catch (err) {
-        // Errors are handled by the toast, but we catch here to stop loading
-        console.error("Submission Error:", err);
+      console.error("Submission Error:", err);
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
-};
-
-  /* ========================= DESTINATION DIALOG ========================= */
-  const openDestinationDialog = (saleId) => {
-    setDestinationDialog({ open: true, saleId });
   };
 
+  /* ── Dialog ── */
   const currentSaleForDialog = uiSales.find(
     (s) => s.id === destinationDialog.saleId,
   );
 
-  /* ========================= UI ========================= */
+  /* ─── Render ─────────────────────────────────────────────── */
   return (
     <div className="space-y-4">
-      {/* Date Picker */}
       {/* Date & Invoice */}
       <Card className="bg-slate-50 mb-2">
         <CardContent className="py-3">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Invoice Number */}
             <div className="space-y-2">
               <Label className="text-sm font-medium text-gray-700">
                 Invoice Number
@@ -580,8 +470,6 @@ lastToastValue.current = null;
                 Generated automatically based on date
               </p>
             </div>
-
-            {/* Sale Date */}
             <div className="space-y-2">
               <Label className="text-sm font-medium text-gray-700">
                 Transaction Date
@@ -590,7 +478,7 @@ lastToastValue.current = null;
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
-                    className="w-full justify-start text-left font-normal h-10 focus-visible:ring-indigo-500"
+                    className="w-full justify-start text-left font-normal h-10"
                   >
                     <CalendarIcon className="mr-2 h-4 w-4 text-gray-500" />
                     {format(saleDate, "PPP")}
@@ -620,21 +508,19 @@ lastToastValue.current = null;
           onClick={addSaleRow}
           className="flex items-center gap-2 bg-gradient-primary text-white"
         >
-          <Plus className="h-4 w-4" />
-          Add New Sale <span className="text-xs opacity-80">(Alt+A)</span>
+          <Plus className="h-4 w-4" /> Add New Sale{" "}
+          <span className="text-xs opacity-80">(Alt+A)</span>
         </Button>
       </div>
 
       {/* Sales Cards */}
       <div className="space-y-3">
         {uiSales.map((item, index) => {
-          const isCredit = String(item.paymentType).toUpperCase() === "CREDIT";
-          const profit = calculateProfit(
-            item.netPrice,
-            item.sellPrice,
-            item.vatAmount,
-          );
-
+          const profit = (
+            (Number(item.sellPrice) || 0) -
+            (Number(item.netPrice) || 0) -
+            (Number(item.vatAmount) || 0)
+          ).toFixed(2);
           return (
             <Card
               key={item.id}
@@ -644,13 +530,11 @@ lastToastValue.current = null;
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base flex items-center gap-2">
-                    <Receipt className="h-4 w-4" />
-                    Sale #{index + 1}
+                    <Receipt className="h-4 w-4" /> Sale #{index + 1}
                   </CardTitle>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 items-center">
                     <Label className="text-md font-medium text-indigo-700 flex items-center gap-1">
-                      <Route className="h-3 w-3" />
-                      Route Type :
+                      <Route className="h-3 w-3" /> Route Type :
                     </Label>
                     <Select
                       options={routeTypeOptions}
@@ -663,15 +547,15 @@ lastToastValue.current = null;
                       menuPortalTarget={document.body}
                       styles={{
                         ...compactSelectStyles,
-                        control: (base) => ({
-                          ...compactSelectStyles.control(base),
+                        control: (b) => ({
+                          ...compactSelectStyles.control(b),
                           backgroundColor: "#eef2ff",
                           borderColor: "#c7d2fe",
                         }),
                       }}
                       isDisabled
                     />
-                    <div className="border"></div>
+                    <div className="border" />
                     <Button
                       variant="ghost"
                       size="sm"
@@ -684,47 +568,55 @@ lastToastValue.current = null;
               </CardHeader>
 
               <CardContent className="space-y-3">
-                {/* Row 1: Basic Information */}
-                <div
-                  className={`grid grid-cols-1 ${isCredit ? "md:grid-cols-8" : "md:grid-cols-7"} gap-3`}
-                >
-                  <div className="space-y-1">
-                    <Label className="text-xs font-medium text-slate-600">
-                      Airline *
-                    </Label>
-                    <Select
-                      options={airlineOptions}
-                      value={
-                        airlineOptions.find(
-                          (o) => o.value === item.airlineId,
-                        ) || null
-                      }
-                      onChange={(o) =>
-                        updateSale(item.id, "airlineId", o?.value)
-                      }
-                      placeholder="Select airline"
-                      menuPortalTarget={document.body}
-                      styles={compactSelectStyles}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs font-medium text-slate-600">
-                      Vendor *
-                    </Label>
-                    <Select
-                      options={vendorOptions}
-                      value={
-                        vendorOptions.find((o) => o.value === item.vendorId) ||
-                        null
-                      }
-                      onChange={(o) =>
-                        updateSale(item.id, "vendorId", o?.value)
-                      }
-                      placeholder="Select"
-                      menuPortalTarget={document.body}
-                      styles={compactSelectStyles}
-                    />
-                  </div>
+                {/* Row 1: Info */}
+                <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
+                  {[
+                    {
+                      label: "Airline *",
+                      content: (
+                        <Select
+                          options={airlineOptions}
+                          value={
+                            airlineOptions.find(
+                              (o) => o.value === item.airlineId,
+                            ) || null
+                          }
+                          onChange={(o) =>
+                            updateSale(item.id, "airlineId", o?.value)
+                          }
+                          placeholder="Select airline"
+                          menuPortalTarget={document.body}
+                          styles={compactSelectStyles}
+                        />
+                      ),
+                    },
+                    {
+                      label: "Vendor *",
+                      content: (
+                        <Select
+                          options={vendorOptions}
+                          value={
+                            vendorOptions.find(
+                              (o) => o.value === item.vendorId,
+                            ) || null
+                          }
+                          onChange={(o) =>
+                            updateSale(item.id, "vendorId", o?.value)
+                          }
+                          placeholder="Select"
+                          menuPortalTarget={document.body}
+                          styles={compactSelectStyles}
+                        />
+                      ),
+                    },
+                  ].map(({ label, content }) => (
+                    <div key={label} className="space-y-1">
+                      <Label className="text-xs font-medium text-slate-600">
+                        {label}
+                      </Label>
+                      {content}
+                    </div>
+                  ))}
                   <div className="space-y-1">
                     <Label className="text-xs font-medium text-slate-600">
                       Document No *
@@ -735,19 +627,6 @@ lastToastValue.current = null;
                         updateSale(item.id, "documentNo", e.target.value)
                       }
                       placeholder="e.g. 123"
-                      className="h-8 text-sm"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs font-medium text-slate-600">
-                      Passenger Name
-                    </Label>
-                    <Input
-                      value={item.paxName}
-                      onChange={(e) =>
-                        updateSale(item.id, "paxName", e.target.value)
-                      }
-                      placeholder="John Doe"
                       className="h-8 text-sm"
                     />
                   </div>
@@ -764,94 +643,72 @@ lastToastValue.current = null;
                       className="h-8 text-sm"
                     />
                   </div>
+
+                  {/* Destinations */}
                   <div className="space-y-1">
                     <Label className="text-xs font-medium text-slate-600">
                       Destinations
                     </Label>
                     <div className="flex items-center gap-2">
                       {item.destinations?.length > 0 ? (
-                        <>
-                          <div className="flex gap-2 w-full">
-                            <Badge
-                              variant="secondary"
-                              size="sm"
-                              className="text-xs px-2 w-2/3 py-1 h-8 flex items-center gap-1"
-                            >
-                              <MapPin className="h-3 w-3" />
-                              {item.destinations.length} selected
-                            </Badge>
-                            <Button
-                              variant="outline"
-                              size="xs"
-                              onClick={() => openDestinationDialog(item.id)}
-                              className="h-8 px-2 w-1/3 text-xs"
-                              title="View/Edit Destinations"
-                            >
-                              <Eye className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        </>
+                        <div className="flex gap-2 w-full">
+                          <Badge
+                            variant="secondary"
+                            className="text-xs px-2 w-2/3 py-1 h-8 flex items-center gap-1"
+                          >
+                            <MapPin className="h-3 w-3" />
+                            {item.destinations.length} selected
+                          </Badge>
+                          <Button
+                            variant="outline"
+                            size="xs"
+                            onClick={() =>
+                              setDestinationDialog({
+                                open: true,
+                                saleId: item.id,
+                              })
+                            }
+                            className="h-8 px-2 w-1/3 text-xs"
+                          >
+                            <Eye className="h-3 w-3" />
+                          </Button>
+                        </div>
                       ) : (
                         <Button
                           variant="outline"
                           size="xs"
-                          onClick={() => openDestinationDialog(item.id)}
+                          onClick={() =>
+                            setDestinationDialog({
+                              open: true,
+                              saleId: item.id,
+                            })
+                          }
                           className="h-8 text-xs px-3 border-dashed w-full"
                         >
-                          <Plus className="h-3 w-3 mr-1.5" />
-                          Add Destinations
+                          <Plus className="h-3 w-3 mr-1.5" /> Add Destinations{" "}
                           <MapPin className="h-3 w-3 mr-1.5" />
                         </Button>
                       )}
                     </div>
                   </div>
+
+                  {/* Payment — new dialog-based component */}
                   <div className="space-y-1">
                     <Label className="text-xs font-medium text-slate-600">
                       Payment *
                     </Label>
-                    <Select
-                      options={paymentOptions}
-                      value={
-                        item.paymentType
-                          ? paymentOptions.find(
-                              (p) =>
-                                p.value ===
-                                String(item.paymentType).toUpperCase(),
-                            ) || null
-                          : null
+                    <PaymentDialog
+                      sale={item}
+                      sellPrice={item.sellPrice}
+                      customerOptions={customerOptions}
+                      onConfirm={(result) =>
+                        updateSale(item.id, "payment", result)
                       }
-                      onChange={(o) =>
-                        updateSale(item.id, "paymentType", o?.value)
-                      }
-                      placeholder="Method"
-                      menuPortalTarget={document.body}
-                      styles={compactSelectStyles}
                     />
                   </div>
-                  {isCredit && (
-                    <div className="space-y-1">
-                      <Label className="text-xs font-medium text-slate-600">
-                        Customer *
-                      </Label>
-                      <Select
-                        options={customerOptions}
-                        value={
-                          customerOptions.find(
-                            (o) => o.value === item.customerId,
-                          ) || null
-                        }
-                        onChange={(o) =>
-                          updateSale(item.id, "customerId", o?.value)
-                        }
-                        placeholder="Select"
-                        menuPortalTarget={document.body}
-                        styles={compactSelectStyles}
-                      />
-                    </div>
-                  )}
                 </div>
 
-                {/* Row 2: Financial Information */}
+                {/* Row 2: Financials */}
                 <div
                   className={`grid grid-cols-2 ${item.routeType === "DOMESTIC" ? "md:grid-cols-8" : "md:grid-cols-7"} gap-3`}
                 >
@@ -869,6 +726,7 @@ lastToastValue.current = null;
                       className="h-8 text-sm"
                     />
                   </div>
+
                   {item.routeType === "DOMESTIC" && (
                     <div className="space-y-1">
                       <Label className="text-xs font-medium text-orange-700">
@@ -880,6 +738,7 @@ lastToastValue.current = null;
                       </div>
                     </div>
                   )}
+
                   <div className="space-y-1">
                     <Label className="text-xs font-medium text-slate-600">
                       MISC <SaudiRiyal size={15} />
@@ -922,6 +781,7 @@ lastToastValue.current = null;
                       className="h-8 text-sm"
                     />
                   </div>
+
                   <div className="space-y-1">
                     <Label className="text-xs font-medium text-blue-700">
                       VAT 15% <SaudiRiyal size={15} />
@@ -959,87 +819,79 @@ lastToastValue.current = null;
         })}
       </div>
 
-      {/* Summary Section */}
+      {/* Summary */}
       <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-l-4 border-l-blue-500 shadow-md">
         <CardHeader className="pb-3">
           <CardTitle className="text-lg flex items-center gap-2 text-blue-800">
-            <Calculator className="h-5 w-5" />
-            Financial Summary
+            <Calculator className="h-5 w-5" /> Financial Summary
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div
             className={`grid grid-cols-2 ${uiSales.some((s) => s.routeType === "DOMESTIC") ? "md:grid-cols-7" : "md:grid-cols-6"} gap-4`}
           >
-            <div className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
-              <div className="text-sm text-slate-600 mb-1 font-medium">
-                Total Items
-              </div>
-              <div className="text-3xl font-bold text-slate-800">
-                {uiSales.filter((s) => !isEmptySale(s)).length}
-              </div>
-            </div>
-            <div className="bg-white rounded-lg p-4 shadow-sm border border-blue-200">
-              <div className="text-sm text-blue-600 mb-1 font-medium">
-                Net Total
-              </div>
-              <div className="flex items-center gap-1 text-3xl font-bold text-blue-700">
-                <SaudiRiyal size={18} />
-                {totals.net.toFixed(2)}
-              </div>
-            </div>
-            <div className="bg-white rounded-lg p-4 shadow-sm border border-slate-200">
-              <div className="text-sm text-slate-600 mb-1 font-medium">
-                Total MISC
-              </div>
-              <div className="flex items-center gap-1 text-3xl font-bold text-slate-700">
-                <SaudiRiyal size={18} />
-                {totals.misc.toFixed(2)}
-              </div>
-            </div>
-            <div className="bg-white rounded-lg p-4 shadow-sm border border-purple-200">
-              <div className="text-sm text-purple-600 mb-1 font-medium">
-                Sell Total
-              </div>
-              <div className="flex items-center gap-1 text-3xl font-bold text-purple-700">
-                <SaudiRiyal size={18} />
-                {totals.sell.toFixed(2)}
-              </div>
-            </div>
-            {uiSales.some((s) => s.routeType === "DOMESTIC") && (
-              <div className="bg-white rounded-lg p-4 shadow-sm border border-orange-200">
-                <div className="text-sm text-orange-600 mb-1 font-medium">
-                  Total PAX VAT
+            {[
+              {
+                label: "Total Items",
+                value: uiSales.filter((s) => !isEmptySale(s)).length,
+                color: "slate",
+                noSAR: true,
+              },
+              {
+                label: "Net Total",
+                value: totals.net.toFixed(2),
+                color: "blue",
+              },
+              {
+                label: "Total MISC",
+                value: totals.misc.toFixed(2),
+                color: "slate",
+              },
+              {
+                label: "Sell Total",
+                value: totals.sell.toFixed(2),
+                color: "purple",
+              },
+              ...(uiSales.some((s) => s.routeType === "DOMESTIC")
+                ? [
+                    {
+                      label: "Total PAX VAT",
+                      value: totals.paxVat.toFixed(2),
+                      color: "orange",
+                    },
+                  ]
+                : []),
+              {
+                label: "Total VAT (15%)",
+                value: totals.vat.toFixed(2),
+                color: "indigo",
+              },
+              {
+                label: "Total Profit",
+                value: totals.profit.toFixed(2),
+                color: "green",
+              },
+            ].map(({ label, value, color, noSAR }) => (
+              <div
+                key={label}
+                className={`bg-white rounded-lg p-4 shadow-sm border border-${color}-200`}
+              >
+                <div className={`text-sm text-${color}-600 mb-1 font-medium`}>
+                  {label}
                 </div>
-                <div className="flex items-center gap-1 text-3xl font-bold text-orange-700">
-                  <SaudiRiyal size={18} />
-                  {totals.paxVat.toFixed(2)}
+                <div
+                  className={`flex items-center gap-1 text-3xl font-bold text-${color}-700`}
+                >
+                  {!noSAR && <SaudiRiyal size={18} />}
+                  {value}
                 </div>
               </div>
-            )}
-            <div className="bg-white rounded-lg p-4 shadow-sm border border-indigo-200">
-              <div className="text-sm text-indigo-600 mb-1 font-medium">
-                Total VAT (15%)
-              </div>
-              <div className="flex items-center gap-1 text-3xl font-bold text-indigo-700">
-                <SaudiRiyal size={18} />
-                {totals.vat.toFixed(2)}
-              </div>
-            </div>
-            <div className="bg-white rounded-lg p-4 shadow-sm border border-green-200">
-              <div className="text-sm text-green-600 mb-1 font-medium">
-                Total Profit
-              </div>
-              <div className="flex items-center gap-1 text-3xl font-bold text-green-700">
-                <SaudiRiyal size={18} />
-                {totals.profit.toFixed(2)}
-              </div>
-            </div>
+            ))}
           </div>
         </CardContent>
       </Card>
 
-      {/* Submit Button */}
+      {/* Submit */}
       <div className="flex justify-end pt-4">
         <Button
           onClick={handleSubmit}
@@ -1048,19 +900,18 @@ lastToastValue.current = null;
         >
           {loading ? (
             <>
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />{" "}
               Submitting...
             </>
           ) : (
             <>
-              <Send className="h-4 w-4" />
-              Submit Sales
+              <Send className="h-4 w-4" /> Submit Sales
             </>
           )}
         </Button>
       </div>
 
-      {/* Destination Management Dialog */}
+      {/* Destination Dialog */}
       <ManageDestinationsDialog
         destinationDialog={destinationDialog}
         setDestinationDialog={setDestinationDialog}
