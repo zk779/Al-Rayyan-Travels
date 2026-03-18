@@ -210,6 +210,7 @@ const Sidebar = () => {
 			<NavItem to="/airline-codes" icon={Plane} label="Airline Codes" />
 			<NavItem to="/vendors" icon={Store} label="Vendors" />
 			<NavItem to="/customers" icon={Users2} label="Customers" />
+			<NavItem to="/bank-accounts" icon={LandmarkIcon} label="Bank Accounts" />
 
 			<Collapsible id="sales" icon={HandCoins} label="Sales">
 				<NavItem to="/new-services" icon={Plus} label="New Services" />
