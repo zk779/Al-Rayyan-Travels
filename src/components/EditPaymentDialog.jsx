@@ -98,13 +98,17 @@ const compact = {
   menuPortal: (b) => ({ ...b, zIndex: 9999 }),
 };
 
-export function paymentDisplayLabel(paymentMeta) {
-  if (!paymentMeta) return "Select";
-  if (paymentMeta.type === "PARTIAL") {
+/* ─── Public helper ──────────────────────────────────────── */
+export function paymentDisplayLabel(paymentMeta, paymentType) {
+  if (paymentMeta?.type === "PARTIAL") {
     const combo = PARTIAL_COMBOS.find((c) => c.value === paymentMeta.combo);
     return combo ? `Split: ${combo.label}` : "Split Payment";
   }
-  return METHOD_META[paymentMeta.type]?.label ?? paymentMeta.type;
+  if (paymentMeta?.type)
+    return METHOD_META[paymentMeta.type]?.label ?? paymentMeta.type;
+  if (paymentType)
+    return METHOD_META[String(paymentType).toUpperCase()]?.label ?? paymentType;
+  return "Select";
 }
 
 const emptyPartial = (combo = "") => ({
@@ -117,7 +121,84 @@ const emptyPartial = (combo = "") => ({
   bBankId: "",
 });
 
-/* ─── Single payment slot ────────────────────────────────── */
+/* ─── Resolves initial state from sale prop ─────────────────
+   Runs eagerly (useState initialiser) so the trigger button
+   gets the correct colour/label on first paint without needing
+   the dialog to open first.
+────────────────────────────────────────────────────────────── */
+function resolveState(sale, sell) {
+  const pt = String(sale.paymentType || "").toUpperCase();
+  const meta = sale.paymentMeta;
+
+  // Path A: paymentMeta was previously set via this dialog
+  if (meta?.type) {
+    if (meta.type !== "PARTIAL") {
+      return {
+        mode: meta.type,
+        amount: String(sale.paidAmount ?? sell),
+        customerId: sale.customerId || "",
+        bankId: meta.bankId || sale.bankId || "",
+        partial: emptyPartial(),
+      };
+    }
+    return {
+      mode: "PARTIAL",
+      amount: "",
+      customerId: "",
+      bankId: "",
+      partial: {
+        combo: meta.combo ?? "",
+        aAmount: String(meta.aAmount ?? ""),
+        bAmount: String(meta.bAmount ?? ""),
+        aCustomerId: meta.aCustomerId ?? "",
+        bCustomerId: meta.bCustomerId ?? "",
+        aBankId: meta.aBankId ?? "",
+        bBankId: meta.bBankId ?? "",
+      },
+    };
+  }
+
+  // Path B: raw DB data — Prisma returns nested objects, not flat ids
+  if (
+    pt === "PARTIAL" &&
+    Array.isArray(sale.payments) &&
+    sale.payments.length >= 2
+  ) {
+    const legA = sale.payments[0];
+    const legB = sale.payments[1];
+    const mA = String(legA?.method || "").toUpperCase();
+    const mB = String(legB?.method || "").toUpperCase();
+    const found = PARTIAL_COMBOS.find((c) => c.value === `${mA}+${mB}`);
+    return {
+      mode: "PARTIAL",
+      amount: "",
+      customerId: "",
+      bankId: "",
+      partial: {
+        combo: found?.value ?? "",
+        aAmount: String(legA?.amount ?? ""),
+        bAmount: String(legB?.amount ?? ""),
+        // ✅ FIX: Prisma returns bank/customer as nested objects
+        aCustomerId: legA?.customer?.id ?? legA?.customerId ?? "",
+        bCustomerId: legB?.customer?.id ?? legB?.customerId ?? "",
+        aBankId: legA?.bank?.id ?? legA?.bankId ?? "",
+        bBankId: legB?.bank?.id ?? legB?.bankId ?? "",
+      },
+    };
+  }
+
+  // Single payment type (CASH / BANK_TRANSFER / CREDIT)
+  return {
+    mode: pt,
+    amount: String(sale.paidAmount ?? sell),
+    // ✅ FIX: Prisma returns customer/bank as nested objects on the sale
+    customerId: sale.customer?.id ?? sale.customerId ?? "",
+    bankId: sale.bank?.id ?? sale.bankId ?? "",
+    partial: emptyPartial(),
+  };
+}
+
+/* ─── Reusable slot fields ───────────────────────────────── */
 function SlotFields({
   methodValue,
   amount,
@@ -188,138 +269,92 @@ function SlotFields({
 }
 
 /* ─── Main Component ─────────────────────────────────────── */
-export default function PaymentDialog({
+export default function EditPaymentDialog({
   sale,
   sellPrice,
   customerOptions = [],
   bankOptions = [],
   onConfirm,
 }) {
-  const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState("");
-  const [amount, setAmount] = useState("");
-  const [customerId, setCustomerId] = useState("");
-  const [bankId, setBankId] = useState("");
-  const [partial, setPartial] = useState(emptyPartial());
-
   const sell = Number(sellPrice) || 0;
 
-  /* Restore state from sale when dialog re-opens */
+  // Initialise eagerly so the trigger button has the right colour on first paint
+  const [s, setS] = useState(() => resolveState(sale, sell));
+  const [open, setOpen] = useState(false);
+
+  // Re-resolve on open to pick up any sale prop changes since last open
   useEffect(() => {
-    if (!open) return;
-    const meta = sale.paymentMeta;
-    if (!meta) {
-      setMode("");
-      setAmount("");
-      setCustomerId("");
-      setBankId("");
-      setPartial(emptyPartial());
-      return;
-    }
-    setMode(meta.type);
-    if (meta.type !== "PARTIAL") {
-      setAmount(sale.paidAmount || "");
-      setCustomerId(sale.customerId || "");
-      setBankId(meta.bankId || "");
-      setPartial(emptyPartial());
-    } else {
-      setPartial({
-        combo: meta.combo ?? "",
-        aAmount: meta.aAmount ?? "",
-        bAmount: meta.bAmount ?? "",
-        aCustomerId: meta.aCustomerId ?? "",
-        bCustomerId: meta.bCustomerId ?? "",
-        aBankId: meta.aBankId ?? "",
-        bBankId: meta.bBankId ?? "",
-      });
-    }
+    if (open) setS(resolveState(sale, sell));
   }, [open]);
 
-  const selectedCombo = PARTIAL_COMBOS.find((c) => c.value === partial.combo);
+  const patch = (obj) => setS((prev) => ({ ...prev, ...obj }));
+
+  const selectedCombo = PARTIAL_COMBOS.find((c) => c.value === s.partial.combo);
   const partialTotal =
-    (Number(partial.aAmount) || 0) + (Number(partial.bAmount) || 0);
+    (Number(s.partial.aAmount) || 0) + (Number(s.partial.bAmount) || 0);
   const partialRemaining = sell - partialTotal;
 
+  /* ── Validation ── */
   const isValid = () => {
-    if (!mode) return false;
-    if (mode === "CREDIT" && !customerId) return false;
-    if (mode === "BANK_TRANSFER" && !bankId) return false;
-    if (mode === "PARTIAL") {
-      if (!partial.combo || !partial.aAmount || !partial.bAmount) return false;
-      if (selectedCombo?.a === "CREDIT" && !partial.aCustomerId) return false;
-      if (selectedCombo?.b === "CREDIT" && !partial.bCustomerId) return false;
-      if (selectedCombo?.a === "BANK_TRANSFER" && !partial.aBankId)
+    if (!s.mode) return false;
+    if (s.mode === "CREDIT" && !s.customerId) return false;
+    if (s.mode === "BANK_TRANSFER" && !s.bankId) return false;
+    if (s.mode === "PARTIAL") {
+      if (!s.partial.combo || !s.partial.aAmount || !s.partial.bAmount)
         return false;
-      if (selectedCombo?.b === "BANK_TRANSFER" && !partial.bBankId)
+      if (selectedCombo?.a === "CREDIT" && !s.partial.aCustomerId) return false;
+      if (selectedCombo?.b === "CREDIT" && !s.partial.bCustomerId) return false;
+      if (selectedCombo?.a === "BANK_TRANSFER" && !s.partial.aBankId)
+        return false;
+      if (selectedCombo?.b === "BANK_TRANSFER" && !s.partial.bBankId)
         return false;
     }
     return true;
   };
 
+  /* ── Confirm ── */
   const handleConfirm = () => {
-    let result;
-
-    if (mode !== "PARTIAL") {
-      result = {
-        paymentType: mode,
-        paymentMeta: { type: mode, bankId: bankId || null },
-        // top-level fields the sales payload mapper reads directly
-        bankId: mode === "BANK_TRANSFER" ? bankId : null,
-        customerId: mode === "CREDIT" ? customerId : "",
-        paidAmount: amount || String(sell),
-        paymentLegs: null,
-        paxName: "",
-      };
-    } else {
-      result = {
-        paymentType: "PARTIAL",
-        paymentMeta: {
-          type: "PARTIAL",
-          combo: partial.combo,
-          aMethod: selectedCombo.a,
-          bMethod: selectedCombo.b,
-          aAmount: partial.aAmount,
-          bAmount: partial.bAmount,
-          aCustomerId: partial.aCustomerId || null,
-          bCustomerId: partial.bCustomerId || null,
-          aBankId: partial.aBankId || null,
-          bBankId: partial.bBankId || null,
-        },
-        // paymentLegs — exactly what the backend iterates over
-        paymentLegs: [
-          {
-            method: selectedCombo.a,
-            amount: Number(partial.aAmount),
-            bankId:
-              selectedCombo.a === "BANK_TRANSFER" ? partial.aBankId : null,
-            customerId:
-              selectedCombo.a === "CREDIT" ? partial.aCustomerId : null,
-          },
-          {
-            method: selectedCombo.b,
-            amount: Number(partial.bAmount),
-            bankId:
-              selectedCombo.b === "BANK_TRANSFER" ? partial.bBankId : null,
-            customerId:
-              selectedCombo.b === "CREDIT" ? partial.bCustomerId : null,
-          },
-        ],
-        bankId: partial.aBankId || partial.bBankId || null,
-        customerId: partial.aCustomerId || partial.bCustomerId || "",
-        paidAmount: String(partialTotal),
-        paxName: "",
-      };
-    }
+    const result =
+      s.mode !== "PARTIAL"
+        ? {
+            paymentType: s.mode,
+            paymentMeta: { type: s.mode, bankId: s.bankId || null },
+            customerId: s.mode === "CREDIT" ? s.customerId : "",
+            bankId: s.mode === "BANK_TRANSFER" ? s.bankId : null,
+            paidAmount: s.amount || String(sell),
+            paxName: "",
+          }
+        : {
+            paymentType: "PARTIAL",
+            paymentMeta: {
+              type: "PARTIAL",
+              combo: s.partial.combo,
+              aMethod: selectedCombo.a,
+              bMethod: selectedCombo.b,
+              aAmount: s.partial.aAmount,
+              bAmount: s.partial.bAmount,
+              aCustomerId: s.partial.aCustomerId || null,
+              bCustomerId: s.partial.bCustomerId || null,
+              aBankId: s.partial.aBankId || null,
+              bBankId: s.partial.bBankId || null,
+            },
+            customerId: s.partial.aCustomerId || s.partial.bCustomerId || "",
+            bankId: null,
+            paidAmount: String(partialTotal),
+            paxName: "",
+          };
 
     onConfirm(result);
     setOpen(false);
   };
 
-  const selectedMethod = METHOD_META[mode];
+  const selectedMethod = METHOD_META[s.mode];
   const triggerColors = selectedMethod ? colorMap[selectedMethod.color] : null;
 
+  /* ─── Render ──────────────────────────────────────────── */
   return (
     <>
+      {/* Trigger */}
       <button
         onClick={() => setOpen(true)}
         className={`h-8 w-full text-xs font-medium rounded border px-2 flex items-center gap-1.5 transition-all
@@ -333,11 +368,11 @@ export default function PaymentDialog({
           <>
             <selectedMethod.icon className="h-3.5 w-3.5 shrink-0" />
             <span className="truncate">
-              {paymentDisplayLabel(sale.paymentMeta)}
+              {paymentDisplayLabel(sale.paymentMeta, sale.paymentType)}
             </span>
           </>
         ) : (
-          <span>Select Payment</span>
+          <span>{paymentDisplayLabel(null, sale.paymentType)}</span>
         )}
       </button>
 
@@ -345,26 +380,33 @@ export default function PaymentDialog({
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
-              <CreditCard className="h-4 w-4" /> Payment Method
+              <CreditCard className="h-4 w-4" /> Edit Payment Method
             </DialogTitle>
           </DialogHeader>
 
+          {/* Method selector */}
           <div className="grid grid-cols-2 gap-2">
             {METHODS.map((m) => {
               const c = colorMap[m.color];
-              const active = mode === m.value;
+              const active = s.mode === m.value;
               return (
                 <button
                   key={m.value}
-                  onClick={() => {
-                    setMode(m.value);
-                    setAmount("");
-                    setCustomerId("");
-                    setBankId("");
-                    setPartial(emptyPartial());
-                  }}
+                  onClick={() =>
+                    patch({
+                      mode: m.value,
+                      amount: "",
+                      customerId: "",
+                      bankId: "",
+                      partial: emptyPartial(),
+                    })
+                  }
                   className={`flex items-center gap-2 p-3 rounded-lg border-2 text-sm font-medium transition-all
-                    ${active ? `${c.bg} ${c.border} ${c.text} ring-2 ${c.ring} ring-offset-1` : "bg-white border-gray-200 text-gray-600 hover:border-gray-300"}`}
+                    ${
+                      active
+                        ? `${c.bg} ${c.border} ${c.text} ring-2 ${c.ring} ring-offset-1`
+                        : "bg-white border-gray-200 text-gray-600 hover:border-gray-300"
+                    }`}
                 >
                   <m.icon className="h-4 w-4" />
                   {m.label}
@@ -374,37 +416,37 @@ export default function PaymentDialog({
             })}
           </div>
 
-          {mode === "CASH" && (
+          {s.mode === "CASH" && (
             <SlotFields
               methodValue="CASH"
-              amount={amount}
-              setAmount={setAmount}
+              amount={s.amount}
+              setAmount={(v) => patch({ amount: v })}
             />
           )}
 
-          {mode === "BANK_TRANSFER" && (
+          {s.mode === "BANK_TRANSFER" && (
             <SlotFields
               methodValue="BANK_TRANSFER"
-              amount={amount}
-              setAmount={setAmount}
-              bankId={bankId}
-              setBankId={setBankId}
+              amount={s.amount}
+              setAmount={(v) => patch({ amount: v })}
+              bankId={s.bankId}
+              setBankId={(v) => patch({ bankId: v })}
               bankOptions={bankOptions}
             />
           )}
 
-          {mode === "CREDIT" && (
+          {s.mode === "CREDIT" && (
             <SlotFields
               methodValue="CREDIT"
-              amount={amount}
-              setAmount={setAmount}
-              customerId={customerId}
-              setCustomerId={setCustomerId}
+              amount={s.amount}
+              setAmount={(v) => patch({ amount: v })}
+              customerId={s.customerId}
+              setCustomerId={(v) => patch({ customerId: v })}
               customerOptions={customerOptions}
             />
           )}
 
-          {mode === "PARTIAL" && (
+          {s.mode === "PARTIAL" && (
             <div className="space-y-3">
               <div className="space-y-1">
                 <Label className="text-xs font-medium text-slate-600">
@@ -414,11 +456,15 @@ export default function PaymentDialog({
                   {PARTIAL_COMBOS.map((c) => (
                     <button
                       key={c.value}
-                      onClick={() => setPartial(emptyPartial(c.value))}
+                      onClick={() => patch({ partial: emptyPartial(c.value) })}
                       className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-all text-left
-                        ${partial.combo === c.value ? "bg-amber-50 border-amber-400 text-amber-700 ring-1 ring-amber-400" : "bg-white border-gray-200 text-gray-600 hover:border-gray-300"}`}
+                        ${
+                          s.partial.combo === c.value
+                            ? "bg-amber-50 border-amber-400 text-amber-700 ring-1 ring-amber-400"
+                            : "bg-white border-gray-200 text-gray-600 hover:border-gray-300"
+                        }`}
                     >
-                      {partial.combo === c.value ? (
+                      {s.partial.combo === c.value ? (
                         <Check className="h-3.5 w-3.5 shrink-0 text-amber-600" />
                       ) : (
                         <div className="h-3.5 w-3.5 rounded-full border border-gray-300 shrink-0" />
@@ -433,27 +479,35 @@ export default function PaymentDialog({
                 <div className="grid grid-cols-2 gap-3">
                   <SlotFields
                     methodValue={selectedCombo.a}
-                    amount={partial.aAmount}
-                    setAmount={(v) => setPartial((p) => ({ ...p, aAmount: v }))}
-                    customerId={partial.aCustomerId}
-                    setCustomerId={(v) =>
-                      setPartial((p) => ({ ...p, aCustomerId: v }))
+                    amount={s.partial.aAmount}
+                    setAmount={(v) =>
+                      patch({ partial: { ...s.partial, aAmount: v } })
                     }
-                    bankId={partial.aBankId}
-                    setBankId={(v) => setPartial((p) => ({ ...p, aBankId: v }))}
+                    customerId={s.partial.aCustomerId}
+                    setCustomerId={(v) =>
+                      patch({ partial: { ...s.partial, aCustomerId: v } })
+                    }
+                    bankId={s.partial.aBankId}
+                    setBankId={(v) =>
+                      patch({ partial: { ...s.partial, aBankId: v } })
+                    }
                     customerOptions={customerOptions}
                     bankOptions={bankOptions}
                   />
                   <SlotFields
                     methodValue={selectedCombo.b}
-                    amount={partial.bAmount}
-                    setAmount={(v) => setPartial((p) => ({ ...p, bAmount: v }))}
-                    customerId={partial.bCustomerId}
-                    setCustomerId={(v) =>
-                      setPartial((p) => ({ ...p, bCustomerId: v }))
+                    amount={s.partial.bAmount}
+                    setAmount={(v) =>
+                      patch({ partial: { ...s.partial, bAmount: v } })
                     }
-                    bankId={partial.bBankId}
-                    setBankId={(v) => setPartial((p) => ({ ...p, bBankId: v }))}
+                    customerId={s.partial.bCustomerId}
+                    setCustomerId={(v) =>
+                      patch({ partial: { ...s.partial, bCustomerId: v } })
+                    }
+                    bankId={s.partial.bBankId}
+                    setBankId={(v) =>
+                      patch({ partial: { ...s.partial, bBankId: v } })
+                    }
                     customerOptions={customerOptions}
                     bankOptions={bankOptions}
                   />
@@ -471,7 +525,11 @@ export default function PaymentDialog({
                       {partialTotal.toFixed(2)}
                     </span>
                     <Badge
-                      className={`text-xs ${Math.abs(partialRemaining) < 0.01 ? "bg-green-100 text-green-700 border-green-200" : "bg-orange-100 text-orange-700 border-orange-200"}`}
+                      className={`text-xs ${
+                        Math.abs(partialRemaining) < 0.01
+                          ? "bg-green-100 text-green-700 border-green-200"
+                          : "bg-orange-100 text-orange-700 border-orange-200"
+                      }`}
                     >
                       {Math.abs(partialRemaining) < 0.01
                         ? "✓ Balanced"
@@ -483,7 +541,7 @@ export default function PaymentDialog({
             </div>
           )}
 
-          {mode && (
+          {s.mode && (
             <Button
               onClick={handleConfirm}
               disabled={!isValid()}

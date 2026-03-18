@@ -23,6 +23,7 @@ import EditSaleComponent from "./pages/EditServices";
 import PaymentPage from "./pages/Payments";
 import InvoicePrint from "./pages/InvoicePrint";
 import EditRefundComponent from "./pages/EditRefund";
+import BankAccountsPage from "./pages/BankAccounts";
 
 function App() {
 	return (
@@ -50,6 +51,7 @@ function App() {
 
 									<Route path="ledger" element={<LedgerComponent />} />
 									<Route path="customers" element={<CustomersPage />} />
+									<Route path="bank-accounts" element={<BankAccountsPage />} />
 									<Route path="users" element={<UsersPage />} />
 									<Route path="sales-report" element={<SalesReport />} />
 									<Route path="new-payments" element={<NewPayments />} />

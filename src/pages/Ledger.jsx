@@ -79,7 +79,6 @@ const entryBadge = (type) => {
 		SALE: "bg-green-100 text-green-700 border-green-300",
 		PAYMENT: "bg-purple-100 text-purple-700 border-purple-300",
 		REFUND: "bg-orange-100 text-orange-700 border-orange-300",
-		PURCHASE: "bg-indigo-100 text-indigo-700 border-indigo-300",
 		EXPENSE: "bg-red-100 text-red-700 border-red-300",
 	};
 
@@ -463,7 +462,6 @@ export default function LedgerComponent() {
 								<SelectItem value="SALE">Sale</SelectItem>
 								<SelectItem value="PAYMENT">Payment</SelectItem>
 								<SelectItem value="REFUND">Refund</SelectItem>
-								<SelectItem value="PURCHASE">Purchase</SelectItem>
 								<SelectItem value="EXPENSE">Expense</SelectItem>
 							</SelectContent>
 						</Select>

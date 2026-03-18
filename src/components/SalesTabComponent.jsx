@@ -132,6 +132,7 @@ export default function SalesTabComponent() {
   const [airlines, setAirlines] = useState([]);
   const [vendors, setVendors] = useState([]);
   const [customers, setCustomers] = useState([]);
+  const [banks, setBanks] = useState([]);
   const lastToastValue = useRef(null);
 
   const token = localStorage.getItem("token");
@@ -180,7 +181,15 @@ export default function SalesTabComponent() {
     fetch(`${API_BASE}/api/customers?isActive=true`, { headers })
       .then((r) => r.json())
       .then((j) => setCustomers(j.data || []));
+    fetch(`${API_BASE}/api/banks?isActive=true`, { headers })
+      .then((r) => r.json())
+      .then((j) => setBanks(j.data || []));
   }, [headers]);
+
+  const bankOptions = banks.map((b) => ({
+    value: b.id,
+    label: `${b.bankName} — ${b.accountNumber}`,
+  }));
 
   /* ── Destination search ── */
   const loadDestinationOptions = useCallback(
@@ -375,6 +384,26 @@ export default function SalesTabComponent() {
         );
         return;
       }
+      if (
+        String(s.paymentType).toUpperCase() === "BANK_TRANSFER" &&
+        !s.bankId
+      ) {
+        appToast.warning(
+          "Incomplete Sale",
+          "Please select a bank account for Bank Transfer payment",
+        );
+        return;
+      }
+      if (
+        String(s.paymentType).toUpperCase() === "PARTIAL" &&
+        (!s.paymentLegs || s.paymentLegs.length === 0)
+      ) {
+        appToast.warning(
+          "Incomplete Sale",
+          "Please configure split payment legs",
+        );
+        return;
+      }
     }
 
     const payload = {
@@ -383,6 +412,7 @@ export default function SalesTabComponent() {
         airlineId: s.airlineId,
         vendorId: s.vendorId,
         customerId: s.customerId || null,
+        bankId: s.bankId || null, // ← new: for BANK_TRANSFER
         documentNo: s.documentNo,
         pnr: s.pnr || null,
         routeType: s.routeType || null,
@@ -398,6 +428,7 @@ export default function SalesTabComponent() {
         miscCharges: Number(s.miscCharges || 0),
         paidAmount: Number(s.paidAmount || 0),
         paymentType: s.paymentType,
+        paymentLegs: s.paymentLegs || null, // ← new: for PARTIAL
         remarks: s.remarks || null,
       })),
     };
@@ -701,6 +732,7 @@ export default function SalesTabComponent() {
                       sale={item}
                       sellPrice={item.sellPrice}
                       customerOptions={customerOptions}
+                      bankOptions={bankOptions} // ← add this line
                       onConfirm={(result) =>
                         updateSale(item.id, "payment", result)
                       }

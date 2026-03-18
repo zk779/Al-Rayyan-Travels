@@ -48,6 +48,8 @@ import CustomAlertDialog from "../CustomAlertDialog";
 import { useNavigate } from "react-router-dom";
 import { appToast } from "../../../shadcn/components/ui/appToast";
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL;
+
 export default function DetailedReportTab({
     salesData,
     searchQuery,
@@ -61,6 +63,8 @@ export default function DetailedReportTab({
 }) {
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [isDeleting, setIsDeleting] = useState(false);
+    const token = localStorage.getItem("token");
+
 
     const highlightText = (text, query, field) => {
         if (!query || !text) return text;
@@ -96,8 +100,10 @@ export default function DetailedReportTab({
         if (!deleteTarget) return;
         setIsDeleting(true);
         try {
-            const response = await fetch(`/api/sales/sale/${deleteTarget.id}`, {
+            const response = await fetch(`${API_BASE}/api/sales/sale/${deleteTarget.id}`, {
                 method: "DELETE",
+                headers: { Authorization: `Bearer ${token}` },
+                
             });
             const data = await response.json();
             if (data.success) {
