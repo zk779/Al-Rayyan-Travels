@@ -118,6 +118,14 @@ const routeTypeOptions = [
   { value: "ZERO_VAT", label: "Zero VAT Route (Non-KSA)" },
 ];
 
+/* ─── Required label helper ─────────────────────────────── */
+const RequiredLabel = ({ children }) => (
+  <Label className="text-xs font-medium text-slate-600 flex items-center gap-0.5">
+    {children}
+    <span className="text-red-500 ml-0.5">*</span>
+  </Label>
+);
+
 /* ─── Component ──────────────────────────────────────────── */
 export default function SalesTabComponent() {
   const [saleDate, setSaleDate] = useState(new Date());
@@ -136,6 +144,18 @@ export default function SalesTabComponent() {
   const lastToastValue = useRef(null);
 
   const token = localStorage.getItem("token");
+  // ── CHANGE 1: read role once ──────────────────────────────
+  const userRole = localStorage.getItem("user");
+
+  // localStorage returns a string, so parse it first
+  const userData = JSON.parse(userRole);
+
+  console.log("User Role:", userData.role);
+
+  const isAdmin = String(userData.role).toUpperCase() === "ADMIN";
+
+  console.log("Is Admin:", isAdmin);
+
   const headers = useMemo(
     () => ({
       "Content-Type": "application/json",
@@ -244,6 +264,8 @@ export default function SalesTabComponent() {
         if (field === "netPrice") {
           const vendor = vendorMap[item.vendorId];
           const net = Number(value || 0);
+
+          // ── CHANGE 1a: vendor credit balance check (unchanged) ──
           if (vendor && String(vendor.category).toUpperCase() === "CREDIT") {
             const balance = Number(vendor.account?.balance || 0);
             if (net > balance) {
@@ -259,12 +281,32 @@ export default function SalesTabComponent() {
             }
           }
           lastToastValue.current = null;
+
+          // ── CHANGE 1b: net > sell check — ADMIN only ──────────
+          const sell = Number(item.sellPrice || 0);
+          if (sell > 0 && net > sell) {
+            if (!isAdmin) {
+              appToast.warning(
+                "Not Allowed",
+                "Net price cannot exceed Sell price. Only Admins can override this.",
+              );
+              return item; // block non-admins
+            }
+            // admin: allow but warn
+            appToast.warning(
+              "Warning",
+              "Net price is higher than Sell price. This will result in a loss.",
+            );
+          }
         }
 
         if (field === "payment") {
-          // value = { paymentType, paymentMeta, customerId, paidAmount, paxName }
           return { ...item, ...value };
         }
+
+        // ── CHANGE 2: paidAmount is now readonly — no manual edits ──
+        // (field still exists for PaymentDialog to write to, but direct
+        //  user input via the input box is blocked — see readOnly on the Input below)
 
         if (field === "paidAmount") {
           const sell = Number(item.sellPrice || 0);
@@ -412,7 +454,7 @@ export default function SalesTabComponent() {
         airlineId: s.airlineId,
         vendorId: s.vendorId,
         customerId: s.customerId || null,
-        bankId: s.bankId || null, // ← new: for BANK_TRANSFER
+        bankId: s.bankId || null,
         documentNo: s.documentNo,
         pnr: s.pnr || null,
         routeType: s.routeType || null,
@@ -428,7 +470,7 @@ export default function SalesTabComponent() {
         miscCharges: Number(s.miscCharges || 0),
         paidAmount: Number(s.paidAmount || 0),
         paymentType: s.paymentType,
-        paymentLegs: s.paymentLegs || null, // ← new: for PARTIAL
+        paymentLegs: s.paymentLegs || null,
         remarks: s.remarks || null,
       })),
     };
@@ -552,6 +594,7 @@ export default function SalesTabComponent() {
             (Number(item.netPrice) || 0) -
             (Number(item.vatAmount) || 0)
           ).toFixed(2);
+
           return (
             <Card
               key={item.id}
@@ -600,67 +643,73 @@ export default function SalesTabComponent() {
 
               <CardContent className="space-y-3">
                 {/* Row 1: Info */}
-                <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
-                  {[
-                    {
-                      label: "Airline *",
-                      content: (
-                        <Select
-                          options={airlineOptions}
-                          value={
-                            airlineOptions.find(
-                              (o) => o.value === item.airlineId,
-                            ) || null
-                          }
-                          onChange={(o) =>
-                            updateSale(item.id, "airlineId", o?.value)
-                          }
-                          placeholder="Select airline"
-                          menuPortalTarget={document.body}
-                          styles={compactSelectStyles}
-                        />
-                      ),
-                    },
-                    {
-                      label: "Vendor *",
-                      content: (
-                        <Select
-                          options={vendorOptions}
-                          value={
-                            vendorOptions.find(
-                              (o) => o.value === item.vendorId,
-                            ) || null
-                          }
-                          onChange={(o) =>
-                            updateSale(item.id, "vendorId", o?.value)
-                          }
-                          placeholder="Select"
-                          menuPortalTarget={document.body}
-                          styles={compactSelectStyles}
-                        />
-                      ),
-                    },
-                  ].map(({ label, content }) => (
-                    <div key={label} className="space-y-1">
-                      <Label className="text-xs font-medium text-slate-600">
-                        {label}
-                      </Label>
-                      {content}
-                    </div>
-                  ))}
+                <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+                  {/* ── CHANGE 3: Airline — required ── */}
                   <div className="space-y-1">
-                    <Label className="text-xs font-medium text-slate-600">
-                      Document No *
-                    </Label>
+                    <RequiredLabel>Airline</RequiredLabel>
+                    <Select
+                      options={airlineOptions}
+                      value={
+                        airlineOptions.find(
+                          (o) => o.value === item.airlineId,
+                        ) || null
+                      }
+                      onChange={(o) =>
+                        updateSale(item.id, "airlineId", o?.value)
+                      }
+                      placeholder="Select airline"
+                      menuPortalTarget={document.body}
+                      styles={{
+                        ...compactSelectStyles,
+                        control: (b) => ({
+                          ...compactSelectStyles.control(b),
+                          borderColor: !item.airlineId
+                            ? "#fca5a5"
+                            : b.borderColor,
+                        }),
+                      }}
+                    />
+                  </div>
+
+                  {/* ── CHANGE 3: Vendor — required ── */}
+                  <div className="space-y-1">
+                    <RequiredLabel>Vendor</RequiredLabel>
+                    <Select
+                      options={vendorOptions}
+                      value={
+                        vendorOptions.find((o) => o.value === item.vendorId) ||
+                        null
+                      }
+                      onChange={(o) =>
+                        updateSale(item.id, "vendorId", o?.value)
+                      }
+                      placeholder="Select"
+                      menuPortalTarget={document.body}
+                      styles={{
+                        ...compactSelectStyles,
+                        control: (b) => ({
+                          ...compactSelectStyles.control(b),
+                          borderColor: !item.vendorId
+                            ? "#fca5a5"
+                            : b.borderColor,
+                        }),
+                      }}
+                    />
+                  </div>
+
+                  {/* ── CHANGE 3: Document No — required ── */}
+                  <div className="space-y-1">
+                    <RequiredLabel>Document No</RequiredLabel>
                     <Input
                       value={item.documentNo}
                       onChange={(e) =>
                         updateSale(item.id, "documentNo", e.target.value)
                       }
                       placeholder="e.g. 123"
-                      className="h-8 text-sm"
+                      className={`h-8 text-sm ${!item.documentNo ? "border-red-300 focus-visible:ring-red-400" : ""}`}
                     />
                   </div>
+
                   <div className="space-y-1">
                     <Label className="text-xs font-medium text-slate-600">
                       PNR
@@ -723,16 +772,14 @@ export default function SalesTabComponent() {
                     </div>
                   </div>
 
-                  {/* Payment — new dialog-based component */}
+                  {/* ── CHANGE 3: Payment — required ── */}
                   <div className="space-y-1">
-                    <Label className="text-xs font-medium text-slate-600">
-                      Payment *
-                    </Label>
+                    <RequiredLabel>Payment</RequiredLabel>
                     <PaymentDialog
                       sale={item}
                       sellPrice={item.sellPrice}
                       customerOptions={customerOptions}
-                      bankOptions={bankOptions} // ← add this line
+                      bankOptions={bankOptions}
                       onConfirm={(result) =>
                         updateSale(item.id, "payment", result)
                       }
@@ -744,10 +791,11 @@ export default function SalesTabComponent() {
                 <div
                   className={`grid grid-cols-2 ${item.routeType === "DOMESTIC" ? "md:grid-cols-8" : "md:grid-cols-7"} gap-3`}
                 >
+                  {/* ── CHANGE 3: Net — required ── */}
                   <div className="space-y-1">
-                    <Label className="text-xs font-medium text-slate-600">
+                    <RequiredLabel>
                       Net <SaudiRiyal size={15} />
-                    </Label>
+                    </RequiredLabel>
                     <Input
                       type="number"
                       value={item.netPrice}
@@ -755,7 +803,7 @@ export default function SalesTabComponent() {
                         updateSale(item.id, "netPrice", e.target.value)
                       }
                       placeholder="0.00"
-                      className="h-8 text-sm"
+                      className={`h-8 text-sm ${!item.netPrice ? "border-red-300 focus-visible:ring-red-400" : ""}`}
                     />
                   </div>
 
@@ -785,10 +833,12 @@ export default function SalesTabComponent() {
                       className="h-8 text-sm"
                     />
                   </div>
+
+                  {/* ── CHANGE 3: Sell — required ── */}
                   <div className="space-y-1">
-                    <Label className="text-xs font-medium text-slate-600">
+                    <RequiredLabel>
                       Sell <SaudiRiyal size={15} />
-                    </Label>
+                    </RequiredLabel>
                     <Input
                       type="number"
                       value={item.sellPrice}
@@ -796,9 +846,11 @@ export default function SalesTabComponent() {
                         updateSale(item.id, "sellPrice", e.target.value)
                       }
                       placeholder="0.00"
-                      className="h-8 text-sm"
+                      className={`h-8 text-sm ${!item.sellPrice ? "border-red-300 focus-visible:ring-red-400" : ""}`}
                     />
                   </div>
+
+                  {/* ── CHANGE 2: Paid — readonly ── */}
                   <div className="space-y-1">
                     <Label className="text-xs font-medium text-slate-600">
                       Paid <SaudiRiyal size={15} />
@@ -806,11 +858,10 @@ export default function SalesTabComponent() {
                     <Input
                       type="number"
                       value={item.paidAmount}
-                      onChange={(e) =>
-                        updateSale(item.id, "paidAmount", e.target.value)
-                      }
+                      readOnly
                       placeholder="0.00"
-                      className="h-8 text-sm"
+                      className="h-8 text-sm bg-slate-50 cursor-not-allowed text-slate-500"
+                      title="Paid amount is set via the Payment dialog"
                     />
                   </div>
 
@@ -823,6 +874,7 @@ export default function SalesTabComponent() {
                       {item.vatAmount || "0.00"}
                     </div>
                   </div>
+
                   <div className="space-y-1">
                     <Label className="text-xs font-medium text-green-700">
                       Profit <SaudiRiyal size={15} />
@@ -831,6 +883,7 @@ export default function SalesTabComponent() {
                       <Calculator className="h-3 w-3" />${profit}
                     </div>
                   </div>
+
                   <div className="space-y-1 md:col-span-2 lg:col-span-1">
                     <Label className="text-xs font-medium text-slate-600">
                       Remarks
@@ -943,7 +996,6 @@ export default function SalesTabComponent() {
         </Button>
       </div>
 
-      {/* Destination Dialog */}
       <ManageDestinationsDialog
         destinationDialog={destinationDialog}
         setDestinationDialog={setDestinationDialog}
