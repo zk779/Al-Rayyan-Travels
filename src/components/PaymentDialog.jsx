@@ -164,7 +164,21 @@ function SlotFields({
             onChange={(o) => setBankId(o?.value || "")}
             placeholder="Select bank"
             menuPortalTarget={document.body}
-            styles={compact}
+            menuPosition="fixed"
+            menuShouldBlockScroll={false}
+            closeMenuOnScroll={false}
+            styles={{
+              ...compact,
+              menuPortal: (base) => ({
+                ...base,
+                zIndex: 999999,
+              }),
+              menu: (base) => ({
+                ...base,
+                zIndex: 999999,
+                pointerEvents: "auto",
+              }),
+            }}
           />
         </div>
       )}
@@ -179,7 +193,21 @@ function SlotFields({
             onChange={(o) => setCustomerId(o?.value || "")}
             placeholder="Select customer"
             menuPortalTarget={document.body}
-            styles={compact}
+            menuPosition="fixed"
+            menuShouldBlockScroll={false}
+            closeMenuOnScroll={false}
+            styles={{
+              ...compact,
+              menuPortal: (base) => ({
+                ...base,
+                zIndex: 999999,
+              }),
+              menu: (base) => ({
+                ...base,
+                zIndex: 999999,
+                pointerEvents: "auto",
+              }),
+            }}
           />
         </div>
       )}

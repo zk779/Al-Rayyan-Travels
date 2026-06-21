@@ -236,6 +236,9 @@ function SaleDetail({ sale }) {
 						<Badge variant="outline" className={cn("text-[10px] px-1.5 py-0 border mt-0.5", payStatusColor[sale.paymentStatus] || "")}>
 							{sale.paymentStatus}
 						</Badge>
+						<Badge variant="outline" className={cn("text-[10px] px-1.5 py-0 border mt-0.5", payStatusColor[sale.paymentStatus] || "")}>
+							{sale.paymentType}
+						</Badge>
 					</div>
 				</div>
 			)}
