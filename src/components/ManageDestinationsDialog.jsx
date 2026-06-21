@@ -228,8 +228,7 @@ export default function ManageDestinationsDialog({
                 onChange={addDestination}
                 placeholder="Search airports (e.g., JED, DXB, LHR)..."
                 styles={selectStyles}
-                menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
-                menuPosition="fixed"
+    // ✅ Remove menuPosition entirely, just use default behavior
                 noOptionsMessage={({ inputValue }) =>
                   inputValue.length < 2 ? 'Type 2+ characters' : 'No results'
                 }
