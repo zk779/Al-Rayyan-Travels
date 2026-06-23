@@ -12,53 +12,51 @@ import {
   useSpring,
   useTransform,
 } from "framer-motion";
-import {
-  Check,
-  CircleCheckBig,
-  Loader2,
-  SaudiRiyal,
-  SendHorizontal,
-  X,
-} from "lucide-react";
+import { Check, ChevronsRight, Loader2, RotateCcw, X } from "lucide-react";
 
 import { cn } from "../../lib/utils";
 import { Button } from "./button";
 
-const DRAG_CONSTRAINTS = { left: 0, right: 360 };
+const TRACK_WIDTH = 360; // px, drag distance == handle travel
+const DRAG_CONSTRAINTS = { left: 0, right: TRACK_WIDTH };
 const DRAG_THRESHOLD = 0.9;
 
-const BUTTON_STATES = {
-  initial: { width: "25rem" },
-  completed: { width: "22rem" },
+const ANIMATION_CONFIG = {
+  spring: { type: "spring", stiffness: 400, damping: 40, mass: 0.8 },
 };
 
-const ANIMATION_CONFIG = {
-  spring: {
-    type: "spring",
-    stiffness: 400,
-    damping: 40,
-    mass: 0.8,
+// mode -> accent colors, matching DepositTabComponent (vendor=blue, customer=violet)
+const THEME = {
+  vendor: {
+    trackFrom: "rgba(37, 99, 235, 0.85)", // blue-600
+    trackTo: "rgba(99, 102, 241, 0.85)", // indigo-500
+    solid: "bg-blue-600 hover:bg-blue-700",
+  },
+  customer: {
+    trackFrom: "rgba(124, 58, 237, 0.85)", // violet-600
+    trackTo: "rgba(168, 85, 247, 0.85)", // purple-500
+    solid: "bg-violet-600 hover:bg-violet-700",
   },
 };
 
+const fmt = (n) =>
+  `QAR ${Number(n || 0).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+
 const StatusIcon = ({ status }) => {
-  const iconMap = useMemo(
-    () => ({
-      loading: <Loader2 className="animate-spin" size={20} />,
-      success: <Check size={20} />,
-      error: <X size={20} />,
-    }),
-    []
-  );
-
+  const iconMap = {
+    loading: <Loader2 className="animate-spin" size={20} />,
+    success: <Check size={20} />,
+    error: <X size={20} />,
+  };
   if (!iconMap[status]) return null;
-
   return (
     <motion.div
-      key={crypto.randomUUID()}
       initial={{ opacity: 0, scale: 0.5 }}
       animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0 }}
+      exit={{ opacity: 0, scale: 0.5 }}
     >
       {iconMap[status]}
     </motion.div>
@@ -66,173 +64,192 @@ const StatusIcon = ({ status }) => {
 };
 
 const SlideButton = forwardRef(
-  ({ className, price, handlePayment, isProcessing, ...props }, ref) => {
+  (
+    {
+      className,
+      price,
+      handlePayment,
+      isProcessing: isProcessingProp,
+      disabled,
+      mode = "vendor",
+      label,
+      ...props
+    },
+    ref,
+  ) => {
     const [isDragging, setIsDragging] = useState(false);
-    const [completed, setCompleted] = useState(false);
+    // "idle" | "loading" | "success" | "error"
+    const [status, setStatus] = useState("idle");
     const dragHandleRef = useRef(null);
 
     const dragX = useMotionValue(0);
     const springX = useSpring(dragX, ANIMATION_CONFIG.spring);
-    const dragProgress = useTransform(
-      springX,
-      [0, DRAG_CONSTRAINTS.right],
-      [0, 1]
-    );
+    const dragProgress = useTransform(springX, [0, TRACK_WIDTH], [0, 1]);
 
-    // Animate the background color to fill as the user drags
-    const backgroundColor = useTransform(
+    const theme = THEME[mode] ?? THEME.vendor;
+
+    const trackColor = useTransform(
       dragProgress,
       [0, 1],
-      ["rgba(10, 76, 135, 0.8)", "rgba(76, 158, 217, 0.8)"]
+      [theme.trackFrom, theme.trackTo],
     );
-
-    // Animate the text color to transition from black to white as the user drags
     const placeholderTextColor = useTransform(
       dragProgress,
       [0, 1],
-      ["#000", "#fff"]
+      ["#1e293b", "#fff"], // slate-800 -> white, matches the app's text tone
     );
 
-    const handleDragStart = useCallback(() => {
-      if (completed) return;
-      setIsDragging(true);
-    }, [completed]);
+    const settled = status === "success" || status === "error";
+    const isLocked = isProcessingProp || disabled || status === "loading";
 
-    const handleDragEnd = () => {
-      if (completed) return;
+    const resetDrag = () => dragX.set(0);
+
+    const retry = () => {
+      setStatus("idle");
+      resetDrag();
+    };
+
+    const handleDragStart = useCallback(() => {
+      if (settled || isLocked) return;
+      setIsDragging(true);
+    }, [settled, isLocked]);
+
+    const handleDrag = useCallback(
+      (_event, info) => {
+        if (settled || isLocked) return;
+        const newX = Math.max(0, Math.min(info.offset.x, TRACK_WIDTH));
+        dragX.set(newX);
+      },
+      [settled, isLocked, dragX],
+    );
+
+    const handleDragEnd = useCallback(async () => {
+      if (settled || isLocked) return;
       setIsDragging(false);
 
       const progress = dragProgress.get();
-      if (progress >= DRAG_THRESHOLD) {
-        setCompleted(true);
-        handlePayment(); // Automatically trigger handlePayment when completed
-      } else {
-        dragX.set(0);
+      if (progress < DRAG_THRESHOLD) {
+        resetDrag();
+        return;
       }
-    };
 
-    const handleDrag = (_event, info) => {
-      if (completed) return;
-      const newX = Math.max(0, Math.min(info.offset.x, DRAG_CONSTRAINTS.right));
-      dragX.set(newX);
-    };
+      setStatus("loading");
+      try {
+        // Supports either a Promise-returning handlePayment (preferred) or a
+        // fire-and-forget callback. If it returns a Promise, we wait for it
+        // and reflect failure as an error state the user can retry.
+        await handlePayment?.();
+        setStatus("success");
+      } catch (err) {
+        setStatus("error");
+      }
+    }, [settled, isLocked, dragProgress, handlePayment]);
 
-    const adjustedWidth = useTransform(springX, (x) => x + 10);
+    const adjustedWidth = useTransform(springX, (x) => x + 48);
 
-    // Decide the button title and icon based on the isProcessing prop
-    const buttonTitle = useMemo(() => {
-      if (isProcessing) return "Processing..."; // Show "Processing..." when isProcessing is true
-      if (completed)
-        return (
-          <span>
-            Transaction <SaudiRiyal />
-          </span>
-        ); // Show "Transaction ✔️" once drag is completed
-      return `Make Payment (${price})`; // Default title with price
-    }, [isProcessing, completed, price]);
-
-    const buttonIcon = useMemo(() => {
-      if (isProcessing)
-        return <Loader2 className="animate-spin mr-2" size={20} />;
-      if (completed) return <Check className="mr-2" size={20} />;
-      return <SaudiRiyal className="size-4 mr-2" />;
-    }, [isProcessing, completed]);
+    const title = useMemo(() => {
+      if (status === "loading") return "Processing...";
+      if (status === "success") return label ?? "Payment recorded";
+      if (status === "error") return "Payment failed — tap to retry";
+      return `Slide to pay ${fmt(price)}`;
+    }, [status, label, price]);
 
     return (
-      <motion.div
-        animate={completed ? BUTTON_STATES.completed : BUTTON_STATES.initial}
-        transition={ANIMATION_CONFIG.spring}
-        className="shadow-button-inset dark:shadow-button-inset-dark relative flex h-9 items-center justify-center rounded-md bg-gray-100"
-      >
-        {/* Background that fills with the drag */}
-        {!completed && (
-          <motion.div
-            style={{
-              width: adjustedWidth,
-              backgroundColor,
-            }}
-            className="absolute inset-y-0 left-0 z-0 rounded-md"
-          />
-        )}
-
-        <AnimatePresence key={crypto.randomUUID()}>
-          {!completed && (
+      <div className="w-full">
+        <motion.div
+          className={cn(
+            "relative flex h-12 w-full items-center justify-center overflow-hidden rounded-xl bg-slate-100 shadow-inner",
+            isLocked && status === "idle" && "opacity-60",
+          )}
+        >
+          {/* Fill that grows with drag progress */}
+          {status === "idle" && (
             <motion.div
-              ref={dragHandleRef}
-              drag="x"
-              dragConstraints={DRAG_CONSTRAINTS}
-              dragElastic={0.05}
-              dragMomentum={false}
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
-              onDrag={handleDrag}
-              style={{ x: springX }}
-              className="absolute -left-4 z-10 flex cursor-grab items-center justify-start active:cursor-grabbing"
-            >
-              <Button
-                ref={ref}
-                disabled={isProcessing}
-                {...props}
-                size="icon"
+              style={{ width: adjustedWidth, background: trackColor }}
+              className="absolute inset-y-0 left-0 z-0 rounded-xl"
+            />
+          )}
+
+          {/* Idle: draggable handle */}
+          <AnimatePresence>
+            {status === "idle" && (
+              <motion.div
+                ref={dragHandleRef}
+                drag={isLocked ? false : "x"}
+                dragConstraints={DRAG_CONSTRAINTS}
+                dragElastic={0.05}
+                dragMomentum={false}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+                onDrag={handleDrag}
+                style={{ x: springX }}
                 className={cn(
-                  "shadow-button rounded-md drop-shadow-xl",
-                  isDragging && "scale-105 transition-transform",
-                  className
+                  "absolute left-1 z-10 flex items-center justify-center",
+                  isLocked ? "cursor-not-allowed" : "cursor-grab active:cursor-grabbing",
                 )}
               >
-                {buttonIcon}
-              </Button>
-            </motion.div>
-          )}
-        </AnimatePresence>
+                <Button
+                  ref={ref}
+                  type="button"
+                  disabled={isLocked}
+                  {...props}
+                  size="icon"
+                  className={cn(
+                    "h-10 w-10 rounded-lg shadow-md transition-transform",
+                    theme.solid,
+                    isDragging && "scale-105",
+                    className,
+                  )}
+                >
+                  <ChevronsRight size={18} />
+                </Button>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-        <AnimatePresence key={crypto.randomUUID()}>
-          {completed && (
-            <motion.div
-              className="absolute inset-0 flex items-center justify-center"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            >
-              <Button
-                ref={ref}
-                disabled={isProcessing}
-                {...props}
+          {/* Loading / Success / Error overlay */}
+          <AnimatePresence mode="wait">
+            {status !== "idle" && (
+              <motion.div
+                key={status}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
                 className={cn(
-                  "size-full rounded-md transition-all duration-300",
-                  className
+                  "absolute inset-0 flex items-center justify-center gap-2 rounded-xl font-medium text-white",
+                  status === "loading" && theme.solid,
+                  status === "success" && "bg-green-600",
+                  status === "error" && "bg-red-600",
                 )}
               >
-                <AnimatePresence key={crypto.randomUUID()} mode="wait">
-                  <StatusIcon status={status} />
-                  <span className="ml-2 font-medium flex items-center gap-2">
-                    Transaction <CircleCheckBig />
-                  </span>
-                </AnimatePresence>
-              </Button>
-            </motion.div>
-          )}
-        </AnimatePresence>
+                <StatusIcon status={status} />
+                <span>{title}</span>
+                {status === "error" && (
+                  <button
+                    type="button"
+                    onClick={retry}
+                    className="ml-1 flex items-center gap-1 rounded-md bg-white/15 px-2 py-1 text-xs hover:bg-white/25 transition-colors"
+                  >
+                    <RotateCcw size={12} /> Retry
+                  </button>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-        {!completed && (
-          <motion.div
-            className="absolute inset-0 flex items-center justify-center"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            {/* Display the placeholder text in black before drag, and change to white as user drags */}
+          {/* Idle placeholder text */}
+          {status === "idle" && (
             <motion.span
               style={{ color: placeholderTextColor }}
-              className="font-medium"
+              className="pointer-events-none relative z-[1] select-none text-sm font-medium"
             >
-              {buttonTitle}
+              {title}
             </motion.span>
-          </motion.div>
-        )}
-      </motion.div>
+          )}
+        </motion.div>
+      </div>
     );
-  }
+  },
 );
 
 SlideButton.displayName = "SlideButton";

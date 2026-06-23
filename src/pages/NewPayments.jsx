@@ -25,7 +25,6 @@ import {
   MapPin,
   FileUp,
   X,
-  ChevronRight,
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "../../shadcn/lib/utils";
@@ -113,13 +112,9 @@ const balMeta = (balance, type) => {
   };
 };
 
-// ── Step Bar ──────────────────────────────────────────────────────────────────
+// ── Step Bar (2 steps now: Find → Payment) ───────────────────────────────────
 const Steps = ({ step, isVendor }) => {
-  const labels = [
-    "Select Type",
-    isVendor ? "Find Vendor" : "Find Customer",
-    "Payment",
-  ];
+  const labels = [isVendor ? "Find Vendor" : "Find Customer", "Payment"];
   return (
     <div className="flex items-center justify-center mb-8">
       {labels.map((l, i) => (
@@ -146,7 +141,7 @@ const Steps = ({ step, isVendor }) => {
               {l}
             </span>
           </div>
-          {i < 2 && (
+          {i < 1 && (
             <div
               className={cn(
                 "w-50 h-0.5 mb-5 mx-1 rounded",
@@ -161,9 +156,13 @@ const Steps = ({ step, isVendor }) => {
 };
 
 // ── Main ──────────────────────────────────────────────────────────────────────
-export default function DepositTabComponent() {
-  const [step, setStep] = useState(1);
-  const [mode, setMode] = useState("");
+// `mode`: "vendor" | "customer" — passed in by the parent (e.g. which tab's
+//   "Add Payment" button was clicked). Required.
+// `onClose`: called when the user backs out of the flow (e.g. closes the dialog).
+// `onSuccess`: called with the completed payment payload once recorded, so the
+//   parent (Payments page) can append it to the right table and close the dialog.
+export default function DepositTabComponent({ mode, onClose, onSuccess }) {
+  const [step, setStep] = useState(1); // 1 = Find, 2 = Payment
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [entity, setEntity] = useState(null);
@@ -172,7 +171,6 @@ export default function DepositTabComponent() {
   const [calOpen, setCalOpen] = useState(false);
   const [file, setFile] = useState(null);
   const [remarks, setRemarks] = useState("");
-  const [processing, setProcessing] = useState(false);
   const [success, setSuccess] = useState(false);
 
   const isVendor = mode === "vendor";
@@ -200,24 +198,39 @@ export default function DepositTabComponent() {
     }, 700);
   };
 
+  // Returns a Promise so SlideButton can show its own loading/success/error
+  // state and let the user retry on failure. Replace the mock timeout with
+  // the real payment API call; reject on failure instead of resolving.
   const pay = () => {
-    setProcessing(true);
-    setTimeout(() => {
-      setProcessing(false);
-      setSuccess(true);
-    }, 2500);
+    return new Promise((resolve, reject) => {
+      setTimeout(() => {
+        const ok = true; // swap for the real API result
+        if (!ok) {
+          reject(new Error("Payment failed"));
+          return;
+        }
+        setSuccess(true);
+        onSuccess?.({
+          entity,
+          mode,
+          amount: parseFloat(amount) || 0,
+          date,
+          file,
+          remarks,
+        });
+        resolve();
+      }, 1800);
+    });
   };
 
-  const reset = () => {
-    setStep(1);
-    setMode("");
-    setQuery("");
-    setEntity(null);
+  const startNewPayment = () => {
+    setSuccess(false);
     setAmount("");
-    setDate(new Date());
     setFile(null);
     setRemarks("");
-    setSuccess(false);
+    setEntity(null);
+    setQuery("");
+    setStep(1);
   };
 
   // shared accent classes
@@ -228,102 +241,11 @@ export default function DepositTabComponent() {
     ? "from-blue-500 to-indigo-500"
     : "from-violet-500 to-purple-500";
 
-  // ── STEP 1 ─────────────────────────────────────────────────────────────────
+  // ── STEP 1: Find Vendor/Customer ────────────────────────────────────────
   if (step === 1)
     return (
-      <div className="max-w-7xl mx-auto p-6">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-slate-800">Payments</h1>
-          <p className="text-sm text-slate-500 mt-0.5">
-            Manage vendor disbursements and customer receipts
-          </p>
-        </div>
-        <Steps step={1} isVendor={false} />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {[
-            {
-              type: "vendor",
-              Icon: Building2,
-              title: "Vendor Payment",
-              sub: "Pay outstanding amounts to suppliers",
-              hoverBorder: "hover:border-blue-300 hover:shadow-blue-100",
-              grad: "from-blue-50 to-indigo-50",
-              iconBg: "bg-blue-100 group-hover:bg-blue-200",
-              iconClr: "text-blue-600",
-              cta: "text-blue-600",
-            },
-            {
-              type: "customer",
-              Icon: User,
-              title: "Customer Payment",
-              sub: "Record incoming payments from customers",
-              hoverBorder: "hover:border-violet-300 hover:shadow-violet-100",
-              grad: "from-violet-50 to-purple-50",
-              iconBg: "bg-violet-100 group-hover:bg-violet-200",
-              iconClr: "text-violet-600",
-              cta: "text-violet-600",
-            },
-          ].map(
-            ({
-              type,
-              Icon,
-              title,
-              sub,
-              hoverBorder,
-              grad,
-              iconBg,
-              iconClr,
-              cta,
-            }) => (
-              <button
-                key={type}
-                onClick={() => {
-                  setMode(type);
-                  setStep(2);
-                }}
-                className={cn(
-                  "group relative overflow-hidden rounded-2xl border-2 border-slate-200 bg-white p-6 text-left transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5 focus:outline-none",
-                  hoverBorder,
-                )}
-              >
-                <div
-                  className={cn(
-                    "absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-br",
-                    grad,
-                  )}
-                />
-                <div className="relative">
-                  <div
-                    className={cn(
-                      "w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-colors",
-                      iconBg,
-                    )}
-                  >
-                    <Icon className={cn("w-6 h-6", iconClr)} />
-                  </div>
-                  <p className="font-bold text-slate-800 text-lg">{title}</p>
-                  <p className="text-sm text-slate-500 mt-1">{sub}</p>
-                  <div
-                    className={cn(
-                      "mt-4 flex items-center gap-1 text-xs font-semibold",
-                      cta,
-                    )}
-                  >
-                    Get Started <ChevronRight className="w-3.5 h-3.5" />
-                  </div>
-                </div>
-              </button>
-            ),
-          )}
-        </div>
-      </div>
-    );
-
-  // ── STEP 2 ─────────────────────────────────────────────────────────────────
-  if (step === 2)
-    return (
-      <div className="max-w-7xl mx-auto p-6 space-y-4">
-        <Steps step={2} isVendor={isVendor} />
+      <div className="space-y-4">
+        <Steps step={1} isVendor={isVendor} />
 
         {/* Search box */}
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -355,6 +277,7 @@ export default function DepositTabComponent() {
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && search()}
               className="h-10"
+              autoFocus
             />
             <Button
               onClick={search}
@@ -480,7 +403,7 @@ export default function DepositTabComponent() {
                 className={cn("w-full h-11 font-semibold gap-2", accentBtn)}
                 onClick={() => {
                   setAmount(Math.abs(entity.balance).toFixed(2));
-                  setStep(3);
+                  setStep(2);
                 }}
               >
                 {isVendor ? "New Vendor Payment" : "Record Customer Payment"}
@@ -490,23 +413,21 @@ export default function DepositTabComponent() {
           </div>
         )}
 
-        <button
-          onClick={() => {
-            setStep(1);
-            setEntity(null);
-            setQuery("");
-          }}
-          className="text-sm text-slate-400 hover:text-slate-600 transition-colors"
-        >
-          ← Back to selection
-        </button>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="text-sm text-slate-400 hover:text-slate-600 transition-colors"
+          >
+            ← Cancel
+          </button>
+        )}
       </div>
     );
 
-  // ── STEP 3 ─────────────────────────────────────────────────────────────────
+  // ── STEP 2: Payment ──────────────────────────────────────────────────────
   return (
-    <div className="max-w-7xl mx-auto p-6 space-y-4">
-      <Steps step={3} isVendor={isVendor} />
+    <div className="space-y-4">
+      <Steps step={2} isVendor={isVendor} />
 
       {success ? (
         /* Success */
@@ -541,17 +462,11 @@ export default function DepositTabComponent() {
             <Button
               variant="outline"
               className="flex-1"
-              onClick={() => {
-                setSuccess(false);
-                setAmount("");
-                setFile(null);
-                setRemarks("");
-                setStep(2);
-              }}
+              onClick={startNewPayment}
             >
               New Payment
             </Button>
-            <Button className={cn("flex-1", accentBtn)} onClick={reset}>
+            <Button className={cn("flex-1", accentBtn)} onClick={onClose}>
               Done
             </Button>
           </div>
@@ -799,20 +714,17 @@ export default function DepositTabComponent() {
                 />
               </div>
 
-              <div className="">
-                <SlideButton
-                  handlePayment={pay}
-                  disabled={processing || !amount || parseFloat(amount) <= 0}
-                  price={parseFloat(amount) || 0}
-                  isProcessing={processing}
-                  className=""
-                />
-              </div>
+              <SlideButton
+                handlePayment={pay}
+                disabled={!amount || parseFloat(amount) <= 0}
+                price={parseFloat(amount) || 0}
+                mode={mode}
+              />
             </div>
           </div>
 
           <button
-            onClick={() => setStep(2)}
+            onClick={() => setStep(1)}
             className="text-sm text-slate-400 hover:text-slate-600 transition-colors"
           >
             ← Back to search
