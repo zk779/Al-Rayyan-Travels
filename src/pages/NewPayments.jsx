@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Input } from "../../shadcn/components/ui/input";
 import { Label } from "../../shadcn/components/ui/label";
 import { Textarea } from "../../shadcn/components/ui/textarea";
@@ -25,77 +25,58 @@ import {
   MapPin,
   FileUp,
   X,
+  Banknote,
+  Landmark,
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "../../shadcn/lib/utils";
 import SlideButton from "../../shadcn/components/ui/slide-button";
 
-// ── Mock Data ─────────────────────────────────────────────────────────────────
-const VENDORS = {
-  "AL-RAY": {
-    id: "V001",
-    vendorName: "Al Rayyan Travel Supplier",
-    vendorType: "Airline Ticket Supplier",
-    category: "DEBIT",
-    phone: "+974 4444 1234",
-    email: "accounts@alrayyan.qa",
-    address: "Al Rayyan Road, Doha, Qatar",
-    balance: 12500,
-    openingBalance: 15000,
-  },
-  "QAT-TP": {
-    id: "V002",
-    vendorName: "Qatar Travel Partners",
-    vendorType: "Hotel & Transfers",
-    category: "CREDIT",
-    phone: "+974 5555 9876",
-    email: "billing@qtp.qa",
-    address: "West Bay, Doha, Qatar",
-    balance: -3200,
-    openingBalance: 0,
-  },
-  "GULF-AIR": {
-    id: "V003",
-    vendorName: "Gulf Air Solutions",
-    vendorType: "GDS Aggregator",
-    category: "DEBIT",
-    phone: "+973 1111 2222",
-    email: "ar@gulfair-sol.com",
-    address: "Manama, Bahrain",
-    balance: 0,
-    openingBalance: 5000,
-  },
+// ── Backend config ─────────────────────────────────────────────────────────
+// Adjust to your actual API base URL via .env (VITE_API_BASE_URL=http://localhost:5000)
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
+
+// Cloudinary unsigned upload — replace with your real cloud name + preset
+const CLOUDINARY_CLOUD_NAME = "REPLACE_WITH_CLOUD_NAME";
+const CLOUDINARY_UPLOAD_PRESET = "REPLACE_WITH_UNSIGNED_PRESET";
+
+// Read the auth token fresh each time it's needed, rather than once at
+// render time — avoids a stale/missing token if login happens after mount,
+// and guards against environments where localStorage isn't available.
+const getToken = () => {
+  try {
+    return localStorage.getItem("token") || "";
+  } catch {
+    return "";
+  }
 };
-const CUSTOMERS = {
-  "JOHN-S": {
-    id: "C001",
-    customerName: "John Smith",
-    customerType: "WALK_IN",
-    phone: "+44 7700 900123",
-    email: "john.smith@email.com",
-    address: "London, UK",
-    balance: 4800,
-    openingBalance: 0,
-  },
-  "CORP-XYZ": {
-    id: "C002",
-    customerName: "XYZ Corporation",
-    customerType: "CORPORATE",
-    phone: "+974 3333 7777",
-    email: "finance@xyz-corp.qa",
-    address: "C Ring Road, Doha, Qatar",
-    balance: -1500,
-    openingBalance: 0,
-  },
-};
+
+const authHeaders = () => ({
+  "Content-Type": "application/json",
+  Authorization: `Bearer ${getToken()}`,
+});
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmt = (n) =>
   `QAR ${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-const balMeta = (balance, type) => {
+// Vendor DEBIT  -> positive balance = you owe them (Payable)
+// Vendor CREDIT -> positive balance = prepaid credit you're holding (good for you)
+// Customer      -> positive balance = they owe you (Receivable)
+const balMeta = (balance, mode, category) => {
+  if (mode === "vendor" && category === "CREDIT") {
+    if (balance > 0)
+      return {
+        label: "Prepaid Credit",
+        cls: "text-emerald-600 bg-emerald-50 border-emerald-200",
+      };
+    return {
+      label: "Needs Top-Up",
+      cls: "text-amber-600 bg-amber-50 border-amber-200",
+    };
+  }
   if (balance > 0)
-    return type === "vendor"
+    return mode === "vendor"
       ? { label: "Payable", cls: "text-red-600 bg-red-50 border-red-200" }
       : {
           label: "Receivable",
@@ -111,6 +92,22 @@ const balMeta = (balance, type) => {
     cls: "text-green-600 bg-green-50 border-green-200",
   };
 };
+
+// Normalize a vendor/customer record from the API into the flat shape this
+// component already expects (name, balance as a plain number, etc).
+const normalizeEntity = (raw) => ({
+  id: raw.id,
+  vendorName: raw.vendorName,
+  customerName: raw.customerName,
+  vendorType: raw.vendorType,
+  customerType: raw.customerType,
+  category: raw.category, // DEBIT | CREDIT, vendors only
+  phone: raw.phone,
+  email: raw.email,
+  address: raw.address,
+  openingBalance: raw.openingBalance ?? 0,
+  balance: raw.account?.balance ?? 0,
+});
 
 // ── Step Bar (2 steps now: Find → Payment) ───────────────────────────────────
 const Steps = ({ step, isVendor }) => {
@@ -165,18 +162,29 @@ export default function DepositTabComponent({ mode, onClose, onSuccess }) {
   const [step, setStep] = useState(1); // 1 = Find, 2 = Payment
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
+  const [results, setResults] = useState([]); // multiple matches -> picker list
+  const [searchError, setSearchError] = useState("");
   const [entity, setEntity] = useState(null);
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(new Date());
   const [calOpen, setCalOpen] = useState(false);
   const [file, setFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState("CASH"); // CASH | BANK_TRANSFER
+  const [bankId, setBankId] = useState("");
+  const [banks, setBanks] = useState([]);
   const [remarks, setRemarks] = useState("");
   const [success, setSuccess] = useState(false);
+  const [payError, setPayError] = useState("");
+  const debounceRef = useRef(null);
 
   const isVendor = mode === "vendor";
-  const newBalance = (entity?.balance ?? 0) - (parseFloat(amount) || 0);
+  const newBalance =
+    isVendor && entity?.category === "CREDIT"
+      ? (entity?.balance ?? 0) + (parseFloat(amount) || 0) // topping up increases balance
+      : (entity?.balance ?? 0) - (parseFloat(amount) || 0); // paying down decreases balance
   const { label: balLabel, cls: balCls } = entity
-    ? balMeta(entity.balance, mode)
+    ? balMeta(entity.balance, mode, entity.category)
     : { label: "", cls: "" };
   const name = entity
     ? isVendor
@@ -184,42 +192,140 @@ export default function DepositTabComponent({ mode, onClose, onSuccess }) {
       : entity.customerName
     : "";
 
-  const search = () => {
-    if (!query.trim()) return;
+  // ── Search: debounced call to GET /api/vendors or /api/customers ───────
+  useEffect(() => {
+    if (!query.trim()) {
+      setResults([]);
+      setSearchError("");
+      return;
+    }
     setSearching(true);
-    setTimeout(() => {
-      const found = (isVendor ? VENDORS : CUSTOMERS)[query.toUpperCase()];
-      setEntity(found ?? null);
-      if (!found)
-        alert(
-          isVendor ? "Try: AL-RAY, QAT-TP, GULF-AIR" : "Try: JOHN-S, CORP-XYZ",
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const endpoint = isVendor ? "vendors" : "customers";
+        const searchQuery = encodeURIComponent(query.trim());
+
+        const res = await fetch(
+          `${API_BASE}/api/${endpoint}?search=${searchQuery}`,
+          { method: "GET", headers: authHeaders() },
         );
-      setSearching(false);
-    }, 700);
+
+        if (!res.ok) {
+          throw new Error(`Request failed (${res.status})`);
+        }
+
+        const json = await res.json();
+        if (!json.success) throw new Error(json.error || "Search failed");
+
+        const list = (json.data || []).map(normalizeEntity);
+        setResults(list);
+        setSearchError(list.length === 0 ? "No matches found" : "");
+      } catch (err) {
+        setResults([]);
+        setSearchError(err.message || "Search failed");
+      } finally {
+        setSearching(false);
+      }
+    }, 400);
+
+    return () => clearTimeout(debounceRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, isVendor]);
+
+  // ── Load active banks once (for BANK_TRANSFER method) ──────────────────
+  // Fixed: was missing the /api prefix and the Authorization header,
+  // so this request was 401/404-ing on every mount regardless of mode.
+  useEffect(() => {
+    fetch(`${API_BASE}/api/banks?status=true`, { headers: authHeaders() })
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.success) setBanks(json.data || []);
+      })
+      .catch(() => {});
+  }, []);
+
+  const selectEntity = (e) => {
+    setEntity(e);
+    setResults([]);
+    setQuery("");
+  };
+
+  // ── Upload attachment to Cloudinary (unsigned), return secure_url ──────
+  const uploadAttachment = async () => {
+    if (!file) return null;
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+
+      const res = await fetch(
+        `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`,
+        { method: "POST", body: form },
+      );
+      const json = await res.json();
+      if (!json.secure_url) throw new Error("Upload failed");
+      return json.secure_url;
+    } finally {
+      setUploading(false);
+    }
   };
 
   // Returns a Promise so SlideButton can show its own loading/success/error
-  // state and let the user retry on failure. Replace the mock timeout with
-  // the real payment API call; reject on failure instead of resolving.
+  // state and let the user retry on failure.
   const pay = () => {
-    return new Promise((resolve, reject) => {
-      setTimeout(() => {
-        const ok = true; // swap for the real API result
-        if (!ok) {
-          reject(new Error("Payment failed"));
+    return new Promise(async (resolve, reject) => {
+      try {
+        setPayError("");
+        const attachmentUrl = await uploadAttachment();
+
+        const payload = {
+          partyType: isVendor ? "VENDOR" : "CUSTOMER",
+          ...(isVendor ? { vendorId: entity.id } : { customerId: entity.id }),
+          method: paymentMethod,
+          ...(paymentMethod === "BANK_TRANSFER" ? { bankId } : {}),
+          amount: parseFloat(amount) || 0,
+          attachmentUrl,
+          remarks: remarks || null,
+          transactionDate: date.toISOString(),
+        };
+
+        // Fixed: was missing the /api prefix.
+        const res = await fetch(`${API_BASE}/api/payments/vendor-customer`, {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify(payload),
+        });
+
+        if (!res.ok && res.status !== 400 && res.status !== 404) {
+          throw new Error(`Request failed (${res.status})`);
+        }
+
+        const json = await res.json();
+
+        if (!json.success) {
+          const msg = json.error || "Payment failed";
+          setPayError(msg);
+          reject(new Error(msg));
           return;
         }
+
         setSuccess(true);
         onSuccess?.({
           entity,
           mode,
           amount: parseFloat(amount) || 0,
           date,
-          file,
+          attachmentUrl,
           remarks,
+          payment: json.data,
         });
         resolve();
-      }, 1800);
+      } catch (err) {
+        setPayError(err.message || "Payment failed");
+        reject(err);
+      }
     });
   };
 
@@ -230,6 +336,9 @@ export default function DepositTabComponent({ mode, onClose, onSuccess }) {
     setRemarks("");
     setEntity(null);
     setQuery("");
+    setPaymentMethod("CASH");
+    setBankId("");
+    setPayError("");
     setStep(1);
   };
 
@@ -269,29 +378,49 @@ export default function DepositTabComponent({ mode, onClose, onSuccess }) {
           <div className="flex gap-2">
             <Input
               placeholder={
-                isVendor
-                  ? "e.g. AL-RAY, QAT-TP, GULF-AIR"
-                  : "e.g. JOHN-S, CORP-XYZ"
+                isVendor ? "Type vendor name..." : "Type customer name..."
               }
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && search()}
               className="h-10"
               autoFocus
             />
-            <Button
-              onClick={search}
-              disabled={searching || !query.trim()}
-              className={cn("h-10 px-5", accentBtn)}
-            >
-              {searching ? (
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <Search className="w-4 h-4" />
+            <div className="h-10 w-10 flex items-center justify-center">
+              {searching && (
+                <div className="w-4 h-4 border-2 border-slate-300 border-t-transparent rounded-full animate-spin" />
               )}
-            </Button>
+            </div>
           </div>
+          {searchError && (
+            <p className="text-xs text-slate-400 mt-2">{searchError}</p>
+          )}
         </div>
+
+        {/* Results picker (multiple matches) */}
+        {results.length > 0 && (
+          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm divide-y divide-slate-100 overflow-hidden">
+            {results.map((r) => (
+              <button
+                key={r.id}
+                onClick={() => selectEntity(r)}
+                className="w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors flex items-center justify-between"
+              >
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">
+                    {isVendor ? r.vendorName : r.customerName}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    {isVendor ? r.vendorType : r.customerType}
+                    {isVendor && r.category ? ` · ${r.category}` : ""}
+                  </p>
+                </div>
+                <span className="text-xs font-medium text-slate-500">
+                  {fmt(r.balance)}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Result card */}
         {entity && (
@@ -364,21 +493,29 @@ export default function DepositTabComponent({ mode, onClose, onSuccess }) {
                 <div
                   className={cn(
                     "rounded-xl border p-3.5 col-span-2",
-                    entity.balance > 0
-                      ? "bg-red-50 border-red-100"
-                      : entity.balance < 0
-                        ? "bg-blue-50 border-blue-100"
-                        : "bg-green-50 border-green-100",
+                    isVendor && entity.category === "CREDIT"
+                      ? entity.balance > 0
+                        ? "bg-emerald-50 border-emerald-100"
+                        : "bg-amber-50 border-amber-100"
+                      : entity.balance > 0
+                        ? "bg-red-50 border-red-100"
+                        : entity.balance < 0
+                          ? "bg-blue-50 border-blue-100"
+                          : "bg-green-50 border-green-100",
                   )}
                 >
                   <p
                     className={cn(
                       "text-[11px] mb-1",
-                      entity.balance > 0
-                        ? "text-red-500"
-                        : entity.balance < 0
-                          ? "text-blue-500"
-                          : "text-green-500",
+                      isVendor && entity.category === "CREDIT"
+                        ? entity.balance > 0
+                          ? "text-emerald-500"
+                          : "text-amber-500"
+                        : entity.balance > 0
+                          ? "text-red-500"
+                          : entity.balance < 0
+                            ? "text-blue-500"
+                            : "text-green-500",
                     )}
                   >
                     Current Balance {isVendor && `· ${entity.category} Vendor`}
@@ -386,16 +523,32 @@ export default function DepositTabComponent({ mode, onClose, onSuccess }) {
                   <p
                     className={cn(
                       "font-bold text-2xl",
-                      entity.balance > 0
-                        ? "text-red-700"
-                        : entity.balance < 0
-                          ? "text-blue-700"
-                          : "text-green-700",
+                      isVendor && entity.category === "CREDIT"
+                        ? entity.balance > 0
+                          ? "text-emerald-700"
+                          : "text-amber-700"
+                        : entity.balance > 0
+                          ? "text-red-700"
+                          : entity.balance < 0
+                            ? "text-blue-700"
+                            : "text-green-700",
                     )}
                   >
                     {entity.balance < 0 ? "−" : ""}
                     {fmt(entity.balance)}
                   </p>
+                  {isVendor && entity.category === "CREDIT" && (
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Pay upfront to top up credit before booking sales.
+                    </p>
+                  )}
+                  {isVendor &&
+                    entity.category === "DEBIT" &&
+                    entity.balance > 0 && (
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        Outstanding dues to settle with this vendor.
+                      </p>
+                    )}
                 </div>
               </div>
 
@@ -583,11 +736,13 @@ export default function DepositTabComponent({ mode, onClose, onSuccess }) {
                           : "bg-amber-400",
                     )}
                   />
-                  {newBalance === 0
-                    ? "This payment fully settles the balance. ✓"
-                    : newBalance < 0
-                      ? `Overpayment of ${fmt(Math.abs(newBalance))} — will create an advance.`
-                      : `${fmt(newBalance)} will remain ${isVendor ? "payable" : "receivable"} after this payment.`}
+                  {isVendor && entity.category === "CREDIT"
+                    ? `Topping up by ${fmt(parseFloat(amount))} — no cap on credit vendors.`
+                    : newBalance === 0
+                      ? "This payment fully settles the balance. ✓"
+                      : newBalance < 0
+                        ? `Overpayment of ${fmt(Math.abs(newBalance))} is not allowed for this party.`
+                        : `${fmt(newBalance)} will remain ${isVendor ? "payable" : "receivable"} after this payment.`}
                 </div>
               )}
 
@@ -613,6 +768,60 @@ export default function DepositTabComponent({ mode, onClose, onSuccess }) {
                   />
                 </div>
               </div>
+
+              {/* Payment method */}
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium text-slate-700">
+                  Payment Method <span className="text-red-400">*</span>
+                </Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("CASH")}
+                    className={cn(
+                      "flex items-center justify-center gap-2 h-10 rounded-xl border text-sm font-medium transition-colors",
+                      paymentMethod === "CASH"
+                        ? cn("border-transparent text-white", accentBtn)
+                        : "border-slate-200 text-slate-600 hover:bg-slate-50",
+                    )}
+                  >
+                    <Banknote className="w-4 h-4" /> Cash
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("BANK_TRANSFER")}
+                    className={cn(
+                      "flex items-center justify-center gap-2 h-10 rounded-xl border text-sm font-medium transition-colors",
+                      paymentMethod === "BANK_TRANSFER"
+                        ? cn("border-transparent text-white", accentBtn)
+                        : "border-slate-200 text-slate-600 hover:bg-slate-50",
+                    )}
+                  >
+                    <Landmark className="w-4 h-4" /> Bank Transfer
+                  </button>
+                </div>
+              </div>
+
+              {/* Bank selector (only for BANK_TRANSFER) */}
+              {paymentMethod === "BANK_TRANSFER" && (
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-medium text-slate-700">
+                    Bank <span className="text-red-400">*</span>
+                  </Label>
+                  <select
+                    value={bankId}
+                    onChange={(e) => setBankId(e.target.value)}
+                    className="w-full h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                  >
+                    <option value="">Select bank...</option>
+                    {banks.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.bankName} — {b.accountNumber}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Date */}
               <div className="space-y-1.5">
@@ -714,9 +923,20 @@ export default function DepositTabComponent({ mode, onClose, onSuccess }) {
                 />
               </div>
 
+              {payError && (
+                <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-xl px-3.5 py-2.5">
+                  {payError}
+                </p>
+              )}
+
               <SlideButton
                 handlePayment={pay}
-                disabled={!amount || parseFloat(amount) <= 0}
+                disabled={
+                  !amount ||
+                  parseFloat(amount) <= 0 ||
+                  uploading ||
+                  (paymentMethod === "BANK_TRANSFER" && !bankId)
+                }
                 price={parseFloat(amount) || 0}
                 mode={mode}
               />
