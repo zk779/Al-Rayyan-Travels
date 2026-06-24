@@ -58,7 +58,7 @@ const authHeaders = () => ({
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmt = (n) =>
-  `QAR ${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  `SAR ${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 // Vendor DEBIT  -> positive balance = you owe them (Payable)
 // Vendor CREDIT -> positive balance = prepaid credit you're holding (good for you)
@@ -755,7 +755,7 @@ export default function DepositTabComponent({ mode, onClose, onSuccess }) {
                 </Label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-medium select-none">
-                    QAR
+                    SAR
                   </span>
                   <Input
                     type="number"

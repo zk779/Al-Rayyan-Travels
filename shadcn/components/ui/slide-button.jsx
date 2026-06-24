@@ -40,7 +40,7 @@ const THEME = {
 };
 
 const fmt = (n) =>
-  `QAR ${Number(n || 0).toLocaleString("en-US", {
+  `SAR ${Number(n || 0).toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;

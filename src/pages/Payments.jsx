@@ -327,7 +327,7 @@ export default function PaymentPage() {
         open={paymentDialogMode !== null}
         onOpenChange={(open) => !open && closeDialog()}
       >
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl! max-h-[97vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {paymentDialogMode === "vendor"
