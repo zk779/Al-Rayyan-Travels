@@ -36,9 +36,12 @@ import SlideButton from "../../shadcn/components/ui/slide-button";
 // Adjust to your actual API base URL via .env (VITE_API_BASE_URL=http://localhost:5000)
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
-// Cloudinary unsigned upload — replace with your real cloud name + preset
-const CLOUDINARY_CLOUD_NAME = "REPLACE_WITH_CLOUD_NAME";
-const CLOUDINARY_UPLOAD_PRESET = "REPLACE_WITH_UNSIGNED_PRESET";
+// ── Attachment constraints ──────────────────────────────────────────────────
+// Must mirror the backend's multer/Cloudinary config (middleware/cloudinary.js)
+// exactly, or you'll get a valid-looking file rejected server-side after the
+// user already filled out the whole form.
+const ALLOWED_EXTENSIONS = ["pdf", "jpg", "jpeg", "png"];
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 // Read the auth token fresh each time it's needed, rather than once at
 // render time — avoids a stale/missing token if login happens after mount,
@@ -51,14 +54,34 @@ const getToken = () => {
   }
 };
 
+// For plain JSON requests (search, banks list).
 const authHeaders = () => ({
   "Content-Type": "application/json",
+  Authorization: `Bearer ${getToken()}`,
+});
+
+// For multipart/form-data requests (the payment submit, since it may carry
+// a file). IMPORTANT: do NOT set "Content-Type" here — the browser needs to
+// set it itself so it can include the multipart boundary. Setting it
+// manually silently breaks the upload.
+const authFormHeaders = () => ({
   Authorization: `Bearer ${getToken()}`,
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmt = (n) =>
   `SAR ${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const validateFile = (file) => {
+  const ext = file.name.split(".").pop()?.toLowerCase();
+  if (!ext || !ALLOWED_EXTENSIONS.includes(ext)) {
+    return `Unsupported file type ".${ext || "?"}". Allowed: ${ALLOWED_EXTENSIONS.join(", ")}`;
+  }
+  if (file.size > MAX_FILE_SIZE) {
+    return `File is too large (${(file.size / (1024 * 1024)).toFixed(1)}MB). Max is 10MB.`;
+  }
+  return null;
+};
 
 // Vendor DEBIT  -> positive balance = you owe them (Payable)
 // Vendor CREDIT -> positive balance = prepaid credit you're holding (good for you)
@@ -169,6 +192,7 @@ export default function DepositTabComponent({ mode, onClose, onSuccess }) {
   const [date, setDate] = useState(new Date());
   const [calOpen, setCalOpen] = useState(false);
   const [file, setFile] = useState(null);
+  const [fileError, setFileError] = useState("");
   const [uploading, setUploading] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("CASH"); // CASH | BANK_TRANSFER
   const [bankId, setBankId] = useState("");
@@ -234,8 +258,6 @@ export default function DepositTabComponent({ mode, onClose, onSuccess }) {
   }, [query, isVendor]);
 
   // ── Load active banks once (for BANK_TRANSFER method) ──────────────────
-  // Fixed: was missing the /api prefix and the Authorization header,
-  // so this request was 401/404-ing on every mount regardless of mode.
   useEffect(() => {
     fetch(`${API_BASE}/api/banks?status=true`, { headers: authHeaders() })
       .then((r) => r.json())
@@ -251,61 +273,60 @@ export default function DepositTabComponent({ mode, onClose, onSuccess }) {
     setQuery("");
   };
 
-  // ── Upload attachment to Cloudinary (unsigned), return secure_url ──────
-  const uploadAttachment = async () => {
-    if (!file) return null;
-    setUploading(true);
-    try {
-      const form = new FormData();
-      form.append("file", file);
-      form.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-
-      const res = await fetch(
-        `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`,
-        { method: "POST", body: form },
-      );
-      const json = await res.json();
-      if (!json.secure_url) throw new Error("Upload failed");
-      return json.secure_url;
-    } finally {
-      setUploading(false);
+  // ── File select handler ──────────────────────────────────────────────────
+  const handleFileSelect = (selected) => {
+    if (!selected) return;
+    const err = validateFile(selected);
+    if (err) {
+      setFileError(err);
+      setFile(null);
+      return;
     }
+    setFileError("");
+    setFile(selected);
   };
 
+  // ── Submit payment ───────────────────────────────────────────────────────
+  // The file (if any) travels in the same multipart request as the rest of
+  // the form fields. The backend's upload.single("attachment") middleware
+  // uploads it to Cloudinary and writes the resulting secure_url straight
+  // into the payment record — there's no separate client-side Cloudinary
+  // call and no attachmentUrl for the client to fabricate.
+  //
   // Returns a Promise so SlideButton can show its own loading/success/error
   // state and let the user retry on failure.
   const pay = () => {
     return new Promise(async (resolve, reject) => {
       try {
         setPayError("");
-        const attachmentUrl = await uploadAttachment();
+        setUploading(true);
 
-        const payload = {
-          partyType: isVendor ? "VENDOR" : "CUSTOMER",
-          ...(isVendor ? { vendorId: entity.id } : { customerId: entity.id }),
-          method: paymentMethod,
-          ...(paymentMethod === "BANK_TRANSFER" ? { bankId } : {}),
-          amount: parseFloat(amount) || 0,
-          attachmentUrl,
-          remarks: remarks || null,
-          transactionDate: date.toISOString(),
-        };
+        const form = new FormData();
+        form.append("partyType", isVendor ? "VENDOR" : "CUSTOMER");
+        if (isVendor) form.append("vendorId", entity.id);
+        else form.append("customerId", entity.id);
+        form.append("method", paymentMethod);
+        if (paymentMethod === "BANK_TRANSFER") form.append("bankId", bankId);
+        form.append("amount", String(parseFloat(amount) || 0));
+        if (remarks) form.append("remarks", remarks);
+        form.append("transactionDate", date.toISOString());
+        if (file) form.append("attachment", file); // field name must match upload.single("attachment")
 
-        // Fixed: was missing the /api prefix.
         const res = await fetch(`${API_BASE}/api/payments/vendor-customer`, {
           method: "POST",
-          headers: authHeaders(),
-          body: JSON.stringify(payload),
+          headers: authFormHeaders(),
+          body: form,
         });
 
-        if (!res.ok && res.status !== 400 && res.status !== 404) {
+        let json;
+        try {
+          json = await res.json();
+        } catch {
           throw new Error(`Request failed (${res.status})`);
         }
 
-        const json = await res.json();
-
         if (!json.success) {
-          const msg = json.error || "Payment failed";
+          const msg = json.error || `Payment failed (${res.status})`;
           setPayError(msg);
           reject(new Error(msg));
           return;
@@ -317,7 +338,7 @@ export default function DepositTabComponent({ mode, onClose, onSuccess }) {
           mode,
           amount: parseFloat(amount) || 0,
           date,
-          attachmentUrl,
+          attachmentUrl: json.data?.attachmentUrl ?? null,
           remarks,
           payment: json.data,
         });
@@ -325,6 +346,8 @@ export default function DepositTabComponent({ mode, onClose, onSuccess }) {
       } catch (err) {
         setPayError(err.message || "Payment failed");
         reject(err);
+      } finally {
+        setUploading(false);
       }
     });
   };
@@ -333,6 +356,7 @@ export default function DepositTabComponent({ mode, onClose, onSuccess }) {
     setSuccess(false);
     setAmount("");
     setFile(null);
+    setFileError("");
     setRemarks("");
     setEntity(null);
     setQuery("");
@@ -892,6 +916,7 @@ export default function DepositTabComponent({ mode, onClose, onSuccess }) {
                       onClick={(e) => {
                         e.preventDefault();
                         setFile(null);
+                        setFileError("");
                       }}
                       className="text-slate-300 hover:text-red-400 transition-colors"
                     >
@@ -901,12 +926,13 @@ export default function DepositTabComponent({ mode, onClose, onSuccess }) {
                   <input
                     type="file"
                     accept=".pdf,.jpg,.jpeg,.png"
-                    onChange={(e) =>
-                      e.target.files[0] && setFile(e.target.files[0])
-                    }
+                    onChange={(e) => handleFileSelect(e.target.files?.[0])}
                     className="hidden"
                   />
                 </label>
+                {fileError && (
+                  <p className="text-xs text-red-500">{fileError}</p>
+                )}
               </div>
 
               {/* Remarks */}
@@ -935,6 +961,7 @@ export default function DepositTabComponent({ mode, onClose, onSuccess }) {
                   !amount ||
                   parseFloat(amount) <= 0 ||
                   uploading ||
+                  !!fileError ||
                   (paymentMethod === "BANK_TRANSFER" && !bankId)
                 }
                 price={parseFloat(amount) || 0}
