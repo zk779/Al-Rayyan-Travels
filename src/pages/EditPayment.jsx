@@ -105,7 +105,8 @@ async function uploadAttachment(file, setUploading) {
 // ── EditPayment ───────────────────────────────────────────────────────────────
 // Props:
 //   payment   – the full payment object from GET /api/vendor-customer-payments/:id
-//               (includes vendor/customer/bank/ledgerEntries)
+//               (must include vendor/customer with a nested `account` relation,
+//               e.g. vendor: { id, vendorName, category, account: { balance } })
 //   onClose   – called to close the dialog/drawer
 //   onSuccess – called after a successful PUT so the parent can refresh the list
 export default function EditPayment({ payment, onClose, onSuccess }) {
@@ -114,16 +115,26 @@ export default function EditPayment({ payment, onClose, onSuccess }) {
   const entity = isVendor ? payment.vendor : payment.customer;
   const name = isVendor ? entity?.vendorName : entity?.customerName;
 
-  // Restore the balance as it was BEFORE this payment so the "balance after"
-  // preview is accurate. The old amount is reversed back first.
+  // ── Reconstruct the balance as it was BEFORE this payment ─────────────────
+  // IMPORTANT: the account lives on the nested entity (payment.vendor.account /
+  // payment.customer.account), NOT on payment.account — that field doesn't
+  // exist in the API payload. Reading payment.account?.balance silently
+  // evaluated to 0, which is why "total payable" showed the paid amount
+  // instead of the real pre-payment balance.
+  //
+  // liveBalance = balance AFTER this payment was already applied (current DB value)
+  // oldAmount   = the amount this payment originally moved
+  //
+  // Same sign convention as the backend's `restoredBalance` logic in PUT /:id:
+  //   - credit vendor: paying INCREASES balance -> pre-payment = live - amount
+  //   - debit vendor:   paying DECREASES balance -> pre-payment = live + amount
+  //   - customer:       paying DECREASES balance -> pre-payment = live + amount
+  const liveBalance = entity?.account?.balance ?? 0;
   const oldAmount = payment.amount;
-  const currentBalance = isVendor
-    ? entity?.category === "CREDIT"
-      ? (payment.account?.balance ?? 0) - oldAmount // credit vendor: balance was +amount
-      : (payment.account?.balance ?? 0) + oldAmount // debit vendor: balance was -amount
-    : (payment.account?.balance ?? 0) + oldAmount; // customer: balance was -amount
-  // NOTE: if your GET endpoint already returns the pre-payment balance you can
-  // use that directly. The formula above reconstructs it from current balance.
+  const currentBalance =
+    isVendor && entity?.category === "CREDIT"
+      ? liveBalance - oldAmount
+      : liveBalance + oldAmount;
 
   // ── Form state (pre-filled from existing payment) ────────────────────────
   const [amount, setAmount] = useState(String(payment.amount));
@@ -142,8 +153,8 @@ export default function EditPayment({ payment, onClose, onSuccess }) {
   const parsedAmount = parseFloat(amount) || 0;
   const newBalance =
     isVendor && entity?.category === "CREDIT"
-      ? currentBalance + parsedAmount
-      : currentBalance - parsedAmount;
+      ? currentBalance + parsedAmount // credit vendor: adding increases balance
+      : currentBalance - parsedAmount; // debit vendor & customer: paying reduces balance
 
   const { label: balLabel, cls: balCls } = balMeta(
     currentBalance,
