@@ -26,9 +26,6 @@ export default function NewSaleComponent() {
       <Card>
         <CardHeader>
           <CardTitle className="text-2xl">Sales Services</CardTitle>
-          <CardDescription>
-            Manage sales transactions and refund processing
-          </CardDescription>
         </CardHeader>
 
         <CardContent>

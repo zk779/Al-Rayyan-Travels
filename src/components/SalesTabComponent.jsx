@@ -537,9 +537,6 @@ export default function SalesTabComponent() {
                   </span>
                 </div>
               </div>
-              <p className="text-xs text-gray-500">
-                Generated automatically based on date
-              </p>
             </div>
             <div className="space-y-2">
               <Label className="text-sm font-medium text-gray-700">
@@ -564,9 +561,6 @@ export default function SalesTabComponent() {
                   />
                 </PopoverContent>
               </Popover>
-              <p className="text-xs text-gray-500">
-                Invoice number updates on date change
-              </p>
             </div>
           </div>
 
@@ -595,7 +589,7 @@ export default function SalesTabComponent() {
             <Card
               key={item.id}
               data-row-id={item.id}
-              className="border-l-4 border-l-gray-500 shadow-sm"
+              className="border-l-4 border-l-gray-500 shadow-sm gap-0!"
             >
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
@@ -901,7 +895,7 @@ export default function SalesTabComponent() {
       </div>
 
       {/* Summary */}
-      <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-l-4 border-l-blue-500 shadow-md">
+      <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-l-4 border-l-blue-500 shadow-md gap-0!">
         <CardHeader className="pb-3">
           <CardTitle className="text-lg flex items-center gap-2 text-blue-800">
             <Calculator className="h-5 w-5" /> Financial Summary
