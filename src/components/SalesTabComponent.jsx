@@ -512,8 +512,6 @@ export default function SalesTabComponent() {
   return (
     <div className="space-y-4">
       {/* Date & Invoice */}
-      <Card className="bg-slate-50 mb-2">
-        <CardContent className="py-3">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label className="text-sm font-medium text-gray-700">
@@ -571,8 +569,6 @@ export default function SalesTabComponent() {
               </p>
             </div>
           </div>
-        </CardContent>
-      </Card>
 
       {/* Header */}
       <div className="flex items-center justify-between">
