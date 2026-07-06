@@ -1,357 +1,341 @@
+import { useState } from "react";
 import { format } from "date-fns";
 import {
-	Calendar,
-	User,
-	CreditCard,
-	FileText,
-	DollarSign,
-	TrendingUp,
-	TrendingDown,
-	Phone,
-	CheckCircle2,
-	XCircle,
-	AlertCircle,
-	Hash,
-	Mail,
-	Clock,
+  Calendar,
+  User,
+  CreditCard,
+  FileText,
+  DollarSign,
+  TrendingUp,
+  TrendingDown,
+  Phone,
+  Hash,
+  Mail,
+  Clock,
+  XCircle,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
+import { Badge } from "../../shadcn/components/ui/badge";
+import { TableCell, TableRow } from "../../shadcn/components/ui/table";
+import { cn } from "../../shadcn/lib/utils";
 
-import {
-	Dialog,
-	DialogContent,
-	DialogHeader,
-	DialogTitle,
-} from "../../shadcn/components/ui/dialog";
+/* ======================= SHARED HELPERS ======================= */
 
-export default function ViewSaleData({ isOpen, onClose, saleData }) {
-	if (!saleData) return null;
+const money = (val) => {
+  const n = Number(val || 0);
+  return `$${Math.abs(n).toFixed(2)}`;
+};
 
-	const sale = saleData.sales?.[0] || {};
+const paymentTypeColor = {
+  CASH: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  CREDIT: "bg-sky-50 text-sky-700 border-sky-200",
+  BANK_TRANSFER: "bg-violet-50 text-violet-700 border-violet-200",
+};
 
-	const money = (val) => {
-		const n = Number(val || 0);
-		return `$${Math.abs(n).toFixed(2)}`;
-	};
+const statusColor = {
+  COMPLETED: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  PAID: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  PENDING: "bg-amber-50 text-amber-700 border-amber-200",
+  DUE: "bg-amber-50 text-amber-700 border-amber-200",
+  PARTIAL: "bg-amber-50 text-amber-700 border-amber-200",
+  REFUNDED: "bg-rose-50 text-rose-700 border-rose-200",
+  CANCELLED: "bg-slate-100 text-slate-600 border-slate-200",
+};
 
-	// Status badge variants
-	const getStatusBadge = (status) => {
-		const statusMap = {
-			COMPLETED: {
-				bg: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
-				icon: CheckCircle2,
-			},
-			PAID: {
-				bg: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
-				icon: CheckCircle2,
-			},
-			PENDING: {
-				bg: "bg-amber-50 text-amber-700 ring-amber-600/20",
-				icon: AlertCircle,
-			},
-			REFUNDED: {
-				bg: "bg-red-50 text-red-700 ring-red-600/20",
-				icon: XCircle,
-			},
-			CANCELLED: {
-				bg: "bg-slate-100 text-slate-600 ring-slate-500/20",
-				icon: XCircle,
-			},
-		};
+// tint tokens per section — drives header icon chip, border, and background together
+const TINT = {
+  sky: { border: "border-sky-200", bg: "bg-sky-50/40", chip: "bg-sky-100 text-sky-600" },
+  violet: { border: "border-violet-200", bg: "bg-violet-50/40", chip: "bg-violet-100 text-violet-600" },
+  slate: { border: "border-slate-200", bg: "bg-slate-50/60", chip: "bg-slate-200 text-slate-600" },
+  emerald: { border: "border-emerald-200", bg: "bg-emerald-50/40", chip: "bg-emerald-100 text-emerald-600" },
+  rose: { border: "border-rose-200", bg: "bg-rose-50/40", chip: "bg-rose-100 text-rose-600" },
+  amber: { border: "border-amber-200", bg: "bg-amber-50/40", chip: "bg-amber-100 text-amber-600" },
+};
 
-		const config = statusMap[status?.toUpperCase()] || statusMap.PENDING;
-		const Icon = config.icon;
+const pill = (label, map) => (
+  <Badge
+    variant="outline"
+    className={cn(
+      "text-[10px] px-1.5 py-0 border",
+      map[label?.toUpperCase()] || "bg-slate-100 text-slate-600 border-slate-200",
+    )}
+  >
+    {label || "N/A"}
+  </Badge>
+);
 
-		return (
-			<span
-				className={`${config.bg} ring-1 ring-inset px-2.5 py-1 rounded-full text-xs font-medium inline-flex items-center gap-1 whitespace-nowrap`}
-			>
-				<Icon className="h-3 w-3 shrink-0" />
-				{status || "N/A"}
-			</span>
-		);
-	};
-
-	const getPaymentTypeBadge = (type) => {
-		const typeMap = {
-			CASH: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
-			CREDIT: "bg-blue-50 text-blue-700 ring-blue-600/20",
-			BANK_TRANSFER: "bg-violet-50 text-violet-700 ring-violet-600/20",
-		};
-
-		return (
-			<span
-				className={`px-2.5 py-1 rounded-full text-xs font-medium ring-1 ring-inset whitespace-nowrap ${
-					typeMap[type?.toUpperCase()] || "bg-slate-100 text-slate-600 ring-slate-500/20"
-				}`}
-			>
-				{type || "N/A"}
-			</span>
-		);
-	};
-
-	// Small reusable field
-	const Field = ({ label, value, icon: Icon, mono }) => (
-		<div className="min-w-0">
-			<p className="text-[11px] sm:text-xs text-slate-500 flex items-center gap-1 mb-0.5">
-				{Icon && <Icon className="h-3 w-3 shrink-0" />}
-				<span className="truncate">{label}</span>
-			</p>
-			<p
-				className={`font-semibold text-sm sm:text-base text-slate-900 truncate ${
-					mono ? "font-mono tracking-tight" : ""
-				}`}
-				title={typeof value === "string" ? value : undefined}
-			>
-				{value || "N/A"}
-			</p>
-		</div>
-	);
-
-	const profitPositive = (sale.profit || 0) > 0;
-	const profitNegative = (sale.profit || 0) < 0;
-
-	return (
-		<Dialog open={isOpen} onOpenChange={onClose}>
-			<DialogContent className="w-[calc(100vw-1.5rem)] sm:w-full max-w-4xl lg:max-w-6xl max-h-[92vh] overflow-y-auto p-0 gap-0 rounded-xl sm:rounded-2xl">
-				{/* Header */}
-				<DialogHeader className="px-4 sm:px-6 pt-5 pb-4 border-b border-slate-200 sticky top-0 bg-white/95 backdrop-blur-sm z-10 rounded-t-xl sm:rounded-t-2xl">
-					<DialogTitle className="flex flex-wrap items-center justify-between gap-2 text-lg sm:text-2xl">
-						<span className="flex items-center gap-2 text-slate-900">
-							<span className="flex items-center justify-center h-8 w-8 sm:h-10 sm:w-10 rounded-lg bg-blue-600 text-white shrink-0">
-								<FileText className="h-4 w-4 sm:h-5 sm:w-5" />
-							</span>
-							<span className="leading-tight">Sale Details</span>
-						</span>
-						{saleData.invoiceNo && (
-							<span className="text-xs sm:text-sm font-mono font-medium text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md">
-								#{saleData.invoiceNo}
-							</span>
-						)}
-					</DialogTitle>
-				</DialogHeader>
-
-				<div className="px-4 sm:px-6 py-5 space-y-5 sm:space-y-6">
-					{/* Invoice + Created By — combined top strip */}
-					<div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-						{/* Invoice Information */}
-						<div className="rounded-xl p-4 sm:p-5 border border-blue-100 bg-gradient-to-br from-blue-50 to-indigo-50">
-							<h3 className="text-sm font-semibold mb-3 flex items-center gap-1.5 text-blue-900">
-								<FileText className="h-4 w-4 text-blue-600" />
-								Invoice
-							</h3>
-							<div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
-								<Field label="Invoice No." value={saleData.invoiceNo} icon={Hash} />
-								<Field
-									label="Sale Date"
-									icon={Calendar}
-									value={
-										saleData.saleDate
-											? format(new Date(saleData.saleDate), "MMM dd, yyyy")
-											: null
-									}
-								/>
-								<Field label="Total Items" value={saleData.salesCount || 0} />
-							</div>
-						</div>
-
-						{/* Created By */}
-						<div className="rounded-xl p-4 sm:p-5 border border-slate-200 bg-slate-50">
-							<h3 className="text-sm font-semibold mb-3 flex items-center gap-1.5 text-slate-700">
-								<User className="h-4 w-4 text-slate-500" />
-								Created by
-							</h3>
-							<div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-								<Field label="Agent" value={saleData.createdByName} />
-								<Field label="Email" value={saleData.createdByEmail} icon={Mail} />
-								<Field
-									label="Created at"
-									icon={Clock}
-									value={
-										saleData.createdAt
-											? format(new Date(saleData.createdAt), "MMM dd, yyyy HH:mm")
-											: null
-									}
-								/>
-							</div>
-						</div>
-					</div>
-
-					{/* Transaction Details */}
-					<div className="rounded-xl border border-blue-200 bg-white p-4 sm:p-6">
-						<h3 className="text-sm sm:text-base font-semibold mb-4 flex items-center gap-2 text-slate-900">
-							<CreditCard className="h-4 sm:h-5 w-4 sm:w-5 text-blue-600" />
-							Transaction Details
-						</h3>
-
-						<div className="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:gap-8">
-							{/* Left Column */}
-							<div className="grid grid-cols-2 sm:grid-cols-3 gap-4 sm:gap-5 content-start">
-								<Field label="Document No." value={sale.documentNo} mono />
-								<div className="min-w-0">
-									<p className="text-[11px] sm:text-xs text-slate-500 mb-0.5">
-										Airline Code
-									</p>
-									<span className="inline-block text-sm px-2.5 py-0.5 bg-blue-50 border border-blue-200 rounded-md font-semibold text-blue-800">
-										{sale.airlineCode || "N/A"}
-									</span>
-								</div>
-								<Field label="Vendor" value={sale.vendorName} />
-								<div className="min-w-0">
-									<p className="text-[11px] sm:text-xs text-slate-500 mb-1">
-										Payment Type
-									</p>
-									{getPaymentTypeBadge(sale.paymentType)}
-								</div>
-								<div className="min-w-0">
-									<p className="text-[11px] sm:text-xs text-slate-500 mb-1">
-										Payment Status
-									</p>
-									{getStatusBadge(sale.paymentStatus)}
-								</div>
-								<div className="min-w-0">
-									<p className="text-[11px] sm:text-xs text-slate-500 mb-1">
-										Sale Status
-									</p>
-									{getStatusBadge(sale.status)}
-								</div>
-							</div>
-
-							{/* Right Column */}
-							<div className="space-y-3 sm:space-y-4">
-								{sale.customerId && (
-									<div className="rounded-lg p-3.5 sm:p-4 border border-violet-200 bg-violet-50">
-										<h4 className="font-semibold mb-2.5 flex items-center gap-1.5 text-violet-900 text-sm">
-											<User className="h-3.5 w-3.5" />
-											Customer
-										</h4>
-										<div className="grid grid-cols-2 gap-3">
-											<Field label="Name" value={sale.customerName} />
-											<Field
-												label="Phone"
-												value={sale.customerPhone}
-												icon={Phone}
-												mono
-											/>
-										</div>
-									</div>
-								)}
-
-								{sale.isRefund && (
-									<div className="rounded-lg p-3.5 sm:p-4 border border-red-200 bg-red-50 flex items-center gap-2 text-red-700">
-										<XCircle className="h-4 sm:h-5 w-4 sm:w-5 shrink-0" />
-										<span className="font-semibold text-sm">
-											This sale is a refund
-										</span>
-									</div>
-								)}
-
-								{sale.remarks && (
-									<div className="rounded-lg p-3.5 sm:p-4 border border-amber-200 bg-amber-50">
-										<p className="text-[11px] text-amber-700 mb-1 font-medium">
-											Remarks
-										</p>
-										<p className="text-sm text-amber-900 italic break-words">
-											{sale.remarks}
-										</p>
-									</div>
-								)}
-							</div>
-						</div>
-					</div>
-
-					{/* Financial Summary */}
-					<div className="rounded-xl p-4 sm:p-6 border border-emerald-200 bg-gradient-to-br from-emerald-50 to-teal-50">
-						<h3 className="text-sm sm:text-base font-semibold mb-4 flex items-center gap-2 text-slate-900">
-							<DollarSign className="h-4 sm:h-5 w-4 sm:w-5 text-emerald-600" />
-							Financial Summary
-						</h3>
-						<div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-							<div className="bg-white rounded-lg p-3.5 sm:p-4 border border-emerald-100">
-								<p className="text-xs text-slate-500 mb-1">Net Price</p>
-								<p
-									className={`text-xl sm:text-2xl font-bold ${
-										sale.netPrice < 0 ? "text-red-600" : "text-slate-900"
-									}`}
-								>
-									{sale.netPrice < 0 ? "-" : ""}
-									{money(sale.netPrice)}
-								</p>
-							</div>
-							<div className="bg-white rounded-lg p-3.5 sm:p-4 border border-emerald-100">
-								<p className="text-xs text-slate-500 mb-1">Sell Price</p>
-								<p
-									className={`text-xl sm:text-2xl font-bold ${
-										sale.sellPrice < 0 ? "text-red-600" : "text-slate-900"
-									}`}
-								>
-									{sale.sellPrice < 0 ? "-" : ""}
-									{money(sale.sellPrice)}
-								</p>
-							</div>
-							<div className="bg-white rounded-lg p-3.5 sm:p-4 border border-emerald-100">
-								<p className="text-xs text-slate-500 mb-1 flex items-center gap-1">
-									{profitPositive ? (
-										<TrendingUp className="h-3 w-3 text-emerald-600" />
-									) : profitNegative ? (
-										<TrendingDown className="h-3 w-3 text-red-600" />
-									) : (
-										<TrendingUp className="h-3 w-3" />
-									)}
-									Profit
-								</p>
-								<p
-									className={`text-xl sm:text-2xl font-bold ${
-										profitPositive
-											? "text-emerald-600"
-											: profitNegative
-												? "text-red-600"
-												: "text-slate-900"
-									}`}
-								>
-									{profitNegative ? "-" : ""}
-									{money(sale.profit)}
-								</p>
-							</div>
-						</div>
-					</div>
-
-					{/* Invoice Totals */}
-					<div className="rounded-xl p-4 sm:p-6 border border-slate-200 bg-slate-50">
-						<h3 className="text-sm sm:text-base font-semibold mb-4 text-slate-900">
-							Invoice Totals
-						</h3>
-						<div className="grid grid-cols-3 gap-3 sm:gap-4 text-center sm:text-left">
-							<div>
-								<p className="text-xs text-slate-500 mb-1">Total Net</p>
-								<p className="text-base sm:text-xl font-bold text-slate-900">
-									{money(saleData.totalNet)}
-								</p>
-							</div>
-							<div>
-								<p className="text-xs text-slate-500 mb-1">Total Sell</p>
-								<p className="text-base sm:text-xl font-bold text-slate-900">
-									{money(saleData.totalSell)}
-								</p>
-							</div>
-							<div>
-								<p className="text-xs text-slate-500 mb-1">Total Profit</p>
-								<p
-									className={`text-base sm:text-xl font-bold ${
-										saleData.totalProfit > 0
-											? "text-emerald-600"
-											: saleData.totalProfit < 0
-												? "text-red-600"
-												: "text-slate-900"
-									}`}
-								>
-									{saleData.totalProfit < 0 ? "-" : ""}
-									{money(saleData.totalProfit)}
-								</p>
-							</div>
-						</div>
-					</div>
-				</div>
-			</DialogContent>
-		</Dialog>
-	);
+// Small icon + label + value block
+function Field({ label, value, icon: Icon, mono }) {
+  return (
+    <div className="flex items-start gap-2 min-w-0">
+      {Icon && <Icon className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />}
+      <div className="min-w-0">
+        <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">{label}</p>
+        <p
+          className={cn("text-xs font-semibold text-gray-800 truncate", mono && "font-mono")}
+          title={typeof value === "string" ? value : undefined}
+        >
+          {value ?? "N/A"}
+        </p>
+      </div>
+    </div>
+  );
 }
+
+// Bigger stat block for money figures (financial summary / invoice totals)
+function StatBlock({ label, value, tone = "slate", icon: Icon }) {
+  const toneClass =
+    tone === "emerald" ? "text-emerald-700" : tone === "rose" ? "text-rose-700" : "text-slate-800";
+  return (
+    <div className="bg-white rounded-md p-2.5 border border-black/5 min-w-0">
+      <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium flex items-center gap-1 mb-0.5">
+        {Icon && <Icon className="w-3 h-3" />}
+        {label}
+      </p>
+      <p className={cn("text-sm font-bold truncate", toneClass)}>{value}</p>
+    </div>
+  );
+}
+
+/* ======================= SECTION HEADER ======================= */
+
+function SectionHeader({ label, icon: Icon, tint }) {
+  const t = TINT[tint] ?? TINT.slate;
+  return (
+    <div className="flex items-center gap-1.5 mb-2">
+      <span className={cn("w-5 h-5 rounded-md flex items-center justify-center shrink-0", t.chip)}>
+        <Icon className="w-3 h-3" />
+      </span>
+      <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">{label}</p>
+    </div>
+  );
+}
+
+/* ======================= SECTION CONTENT ======================= */
+
+// Builds section descriptors. `full: true` sections span both grid columns
+// (used for anything with several fields or money figures that need room).
+function buildSections(invoice, sale) {
+  if (!sale) return [];
+  const sections = [];
+
+  sections.push({
+    key: "invoice",
+    label: "Invoice",
+    icon: FileText,
+    tint: "sky",
+    content: (
+      <div className="grid grid-cols-2 gap-2.5">
+        <Field label="Invoice No." value={invoice?.invoiceNo} icon={Hash} mono />
+        <Field
+          label="Sale Date"
+          icon={Calendar}
+          value={invoice?.saleDate ? format(new Date(invoice.saleDate), "MMM dd, yyyy") : null}
+        />
+        <Field label="Total Items" value={invoice?.salesCount ?? invoice?.sales?.length ?? "-"} />
+      </div>
+    ),
+  });
+
+  sections.push({
+    key: "createdBy",
+    label: "Created By",
+    icon: User,
+    tint: "slate",
+    content: (
+      <div className="grid grid-cols-2 gap-2.5">
+        <Field label="Agent" value={invoice?.createdByName ?? sale.agent} icon={User} />
+        <Field label="Email" value={invoice?.createdByEmail} icon={Mail} />
+        <Field
+          label="Created At"
+          icon={Clock}
+          value={invoice?.createdAt ? format(new Date(invoice.createdAt), "MMM dd, yyyy HH:mm") : null}
+        />
+      </div>
+    ),
+  });
+
+  sections.push({
+    key: "transaction",
+    label: "Transaction",
+    icon: CreditCard,
+    tint: "violet",
+    full: true,
+    content: (
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5">
+        <Field label="Document No." value={sale.documentNo} icon={Hash} mono />
+        <Field label="Airline" value={sale.airlineCode} />
+        <Field label="Vendor" value={sale.vendorName} />
+        <div className="min-w-0">
+          <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1">Payment Type</p>
+          {pill(sale.paymentType, paymentTypeColor)}
+        </div>
+        <div className="min-w-0">
+          <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1">Payment Status</p>
+          {pill(sale.paymentStatus, statusColor)}
+        </div>
+        <div className="min-w-0">
+          <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1">Sale Status</p>
+          {pill(sale.status, statusColor)}
+        </div>
+      </div>
+    ),
+  });
+
+  if (sale.customerId) {
+    sections.push({
+      key: "customer",
+      label: "Customer",
+      icon: User,
+      tint: "violet",
+      content: (
+        <div className="grid grid-cols-2 gap-2.5">
+          <Field label="Name" value={sale.customerName} icon={User} />
+          <Field label="Phone" value={sale.customerPhone} icon={Phone} mono />
+        </div>
+      ),
+    });
+  }
+
+  sections.push({
+    key: "financial",
+    label: "Financial Summary",
+    icon: DollarSign,
+    tint: "emerald",
+    content: (
+      <div className="grid grid-cols-3 gap-2">
+        <StatBlock label="Net" value={money(sale.netPrice)} />
+        <StatBlock label="Sell" value={money(sale.sellPrice)} />
+        <StatBlock
+          label="Profit"
+          value={`${sale.profit < 0 ? "-" : ""}${money(sale.profit)}`}
+          tone={sale.profit < 0 ? "rose" : "emerald"}
+          icon={sale.profit < 0 ? TrendingDown : TrendingUp}
+        />
+      </div>
+    ),
+  });
+
+  if (invoice?.totalNet != null || invoice?.totalSell != null || invoice?.totalProfit != null) {
+    sections.push({
+      key: "invoiceTotals",
+      label: "Invoice Totals",
+      icon: TrendingUp,
+      tint: "slate",
+      content: (
+        <div className="grid grid-cols-3 gap-2">
+          <StatBlock label="Total Net" value={money(invoice.totalNet)} />
+          <StatBlock label="Total Sell" value={money(invoice.totalSell)} />
+          <StatBlock
+            label="Total Profit"
+            value={`${invoice.totalProfit < 0 ? "-" : ""}${money(invoice.totalProfit)}`}
+            tone={invoice.totalProfit < 0 ? "rose" : "emerald"}
+          />
+        </div>
+      ),
+    });
+  }
+
+  if (sale.isRefund) {
+    sections.push({
+      key: "refund",
+      label: "Refund",
+      icon: XCircle,
+      tint: "rose",
+      content: (
+        <div className="flex items-center gap-2 text-rose-700 text-xs font-semibold">
+          <XCircle className="w-3.5 h-3.5" />
+          This sale is a refund
+        </div>
+      ),
+    });
+  }
+
+  if (sale.remarks) {
+    sections.push({
+      key: "remarks",
+      label: "Remarks",
+      icon: FileText,
+      tint: "amber",
+      full: true,
+      content: <p className="text-xs text-gray-600 italic">{sale.remarks}</p>,
+    });
+  }
+
+  return sections;
+}
+
+/* ======================= INLINE DETAIL CONTENT ======================= */
+
+// The content rendered inside the expanded row.
+export default function SaleExpandedDetails({ invoice, sale }) {
+  const sections = buildSections(invoice, sale);
+  if (sections.length === 0) return null;
+
+  return (
+    <div className="py-3 px-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
+        {sections.map((sec) => {
+          const t = TINT[sec.tint] ?? TINT.slate;
+          return (
+            <div
+              key={sec.key}
+              className={cn("rounded-lg border p-3", t.border, t.bg, sec.full && "lg:col-span-2")}
+            >
+              <SectionHeader label={sec.label} icon={sec.icon} tint={sec.tint} />
+              {sec.content}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ======================= REUSABLE EXPANDABLE ROW ======================= */
+
+// Drop-in replacement for a table row that expands in place — same mechanics
+// as the ledger's LedgerRow (click row -> toggle -> render detail row below).
+export function ExpandableSaleRow({
+  invoice,
+  sale,
+  colSpan,
+  renderRow,
+  rowClassName,
+  expanded: expandedProp,
+  onToggle,
+}) {
+  const [internalExpanded, setInternalExpanded] = useState(false);
+  const isControlled = expandedProp !== undefined;
+  const expanded = isControlled ? expandedProp : internalExpanded;
+  const toggle = () => (isControlled ? onToggle?.() : setInternalExpanded((p) => !p));
+  const sections = buildSections(invoice, sale);
+  const hasDetails = sections.length > 0;
+
+  return (
+    <>
+      <TableRow
+        className={cn(
+          "group transition-colors",
+          hasDetails ? "cursor-pointer hover:bg-slate-50" : "hover:bg-slate-50/50",
+          expanded && "bg-slate-50",
+          rowClassName,
+        )}
+        onClick={() => hasDetails && toggle()}
+      >
+        {renderRow(expanded, toggle)}
+      </TableRow>
+
+      {expanded && hasDetails && (
+        <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
+          <TableCell colSpan={colSpan} className="py-0">
+            <SaleExpandedDetails invoice={invoice} sale={sale} />
+          </TableCell>
+        </TableRow>
+      )}
+    </>
+  );
+}
+
+export { ChevronDown, ChevronUp };

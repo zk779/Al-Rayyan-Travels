@@ -844,6 +844,11 @@ export default function SalesTabComponent() {
                   <div className="space-y-1">
                     <Label className="text-xs font-medium text-slate-600">
                       Paid <SaudiRiyal size={15} />
+                      {item.sellPrice > 0 && (
+                        <span className="text-red-500 ml-1">
+                          {(item.sellPrice - item.paidAmount).toFixed(2)} Due
+                        </span>
+                      )}
                     </Label>
                     <Input
                       type="number"

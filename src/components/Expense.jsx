@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   DollarSign,
   Plus,
@@ -9,9 +9,9 @@ import {
   Trash2,
   MoreHorizontal,
   Eye,
-  Calendar,
-  Users,
-  Building2,
+  Calendar as CalendarIcon,
+  Landmark,
+  Banknote,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -32,7 +32,6 @@ import {
   SelectValue,
 } from "../../shadcn/components/ui/select";
 import { Badge } from "../../shadcn/components/ui/badge";
-import { Checkbox } from "../../shadcn/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -50,11 +49,9 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "../../shadcn/components/ui/dialog";
 import {
   DropdownMenu,
@@ -74,637 +71,475 @@ import {
 } from "../../shadcn/components/ui/alert-dialog";
 import { Textarea } from "../../shadcn/components/ui/textarea";
 
-// Mock data
-const initialExpenses = [
-  {
-    id: "1",
-    date: "2024-03-15",
-    category: "Travel",
-    amount: 450.0,
-    description: "Business trip to Los Angeles",
-    branch: "Main Branch",
-    status: "Approved",
-    employee: null,
-  },
-  {
-    id: "2",
-    date: "2024-03-14",
-    category: "Salary",
-    amount: 3500.0,
-    description: "Monthly salary - March 2024",
-    branch: "Main Branch",
-    status: "Approved",
-    employee: "John Smith",
-  },
-  {
-    id: "3",
-    date: "2024-03-13",
-    category: "Marketing",
-    amount: 800.0,
-    description: "Google Ads campaign",
-    branch: "Airport Branch",
-    status: "Pending",
-    employee: null,
-  },
-];
+// ── Backend config — adjust these paths if your routes are mounted elsewhere ──
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
+const EXPENSES_URL = `${API_BASE}/api/expenses`;
+const BRANCHES_URL = `${API_BASE}/api/branches`;
+const BANKS_URL = `${API_BASE}/api/banks?status=true`;
 
-const categories = [
-  "Office Supplies",
-  "Salary",
-  "Travel",
-  "Technology",
-  "Marketing",
-  "Meals",
-  "Training",
-  "Other",
-];
+const getToken = () => {
+  try {
+    return localStorage.getItem("token") || "";
+  } catch {
+    return "";
+  }
+};
+const authHeaders = () => ({
+  "Content-Type": "application/json",
+  Authorization: `Bearer ${getToken()}`,
+});
 
-const branches = [
-  { id: "main", name: "Main Branch" },
-  { id: "airport", name: "Airport Branch" },
-  { id: "mall", name: "Mall Branch" },
-  { id: "downtown", name: "Downtown Branch" },
+// enum value <-> display label
+const CATEGORIES = [
+  { value: "OFFICE_SUPPLIES", label: "Office Supplies" },
+  { value: "SALARY", label: "Salary" },
+  { value: "TRAVEL", label: "Travel" },
+  { value: "MARKETING", label: "Marketing" },
+  { value: "MEALS", label: "Meals" },
+  { value: "TRAINING", label: "Training" },
 ];
+const STATUSES = [
+  { value: "APPROVED", label: "Approved" },
+  { value: "REJECTED", label: "Rejected" },
+];
+const catLabel = (v) => CATEGORIES.find((c) => c.value === v)?.label ?? v;
+const statusColor = (s) => (s === "APPROVED" ? "default" : "destructive");
 
-const employees = {
-  main: [
-    { id: "emp1", name: "John Smith", position: "Manager", salary: 3500 },
-    { id: "emp2", name: "Sarah Johnson", position: "Agent", salary: 2800 },
-    { id: "emp3", name: "Mike Wilson", position: "Supervisor", salary: 3200 },
-  ],
-  airport: [
-    { id: "emp4", name: "Emily Davis", position: "Manager", salary: 3600 },
-    { id: "emp5", name: "David Brown", position: "Agent", salary: 2900 },
-  ],
-  mall: [
-    { id: "emp6", name: "Lisa Garcia", position: "Agent", salary: 2700 },
-    { id: "emp7", name: "Tom Anderson", position: "Supervisor", salary: 3100 },
-  ],
-  downtown: [
-    { id: "emp8", name: "Anna Martinez", position: "Manager", salary: 3500 },
-    { id: "emp9", name: "Chris Taylor", position: "Agent", salary: 2800 },
-  ],
+const emptyForm = {
+  expenseDate: new Date(),
+  category: "",
+  branchId: "",
+  amount: "",
+  status: "APPROVED",
+  paymentMode: "CASH",
+  bankId: "",
+  description: "",
 };
 
-const statuses = ["Pending", "Approved", "Rejected"];
-
 export default function ExpensePage() {
-  const [expenses, setExpenses] = useState(initialExpenses);
-  const [selectedExpenses, setSelectedExpenses] = useState([]);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [expenses, setExpenses] = useState([]);
+  const [branches, setBranches] = useState([]);
+  const [banks, setBanks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
 
-  // Dialog states
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [editingExpense, setEditingExpense] = useState(null);
-  const [viewingExpense, setViewingExpense] = useState(null);
-  const [deleteExpenseId, setDeleteExpenseId] = useState(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [viewing, setViewing] = useState(null);
+  const [deleteId, setDeleteId] = useState(null);
+  const [editingId, setEditingId] = useState(null);
+  const [form, setForm] = useState(emptyForm);
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState("");
 
-  // Form state
-  const [expenseForm, setExpenseForm] = useState({
-    date: new Date(),
-    category: "",
-    amount: "",
-    description: "",
-    branch: "",
-    status: "Pending",
-    employee: "",
-    selectedBranchId: "",
-  });
-
-  // Salary workflow states
-  const [showBranchSelection, setShowBranchSelection] = useState(false);
-  const [showEmployeeSelection, setShowEmployeeSelection] = useState(false);
-  const [selectedBranch, setSelectedBranch] = useState(null);
-  const [selectedEmployee, setSelectedEmployee] = useState(null);
-
-  // Calculate totals
-  const totalExpenses = expenses.reduce(
-    (sum, expense) => sum + expense.amount,
-    0
-  );
-  const approvedExpenses = expenses
-    .filter((expense) => expense.status === "Approved")
-    .reduce((sum, expense) => sum + expense.amount, 0);
-  const pendingExpenses = expenses
-    .filter((expense) => expense.status === "Pending")
-    .reduce((sum, expense) => sum + expense.amount, 0);
-
-  // Filter expenses
-  const filteredExpenses = expenses.filter((expense) => {
-    const matchesStatus =
-      statusFilter === "all" ||
-      expense.status.toLowerCase() === statusFilter.toLowerCase();
-    const matchesCategory =
-      categoryFilter === "all" || expense.category === categoryFilter;
-    const matchesSearch =
-      expense.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      expense.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      expense.branch.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (expense.employee &&
-        expense.employee.toLowerCase().includes(searchQuery.toLowerCase()));
-
-    return matchesStatus && matchesCategory && matchesSearch;
-  });
-
-  // Handle category change for salary workflow
-  const handleCategoryChange = (category) => {
-    setExpenseForm({
-      ...expenseForm,
-      category,
-      branch: "",
-      employee: "",
-      selectedBranchId: "",
-    });
-    setShowBranchSelection(category === "Salary");
-    setShowEmployeeSelection(false);
-    setSelectedBranch(null);
-    setSelectedEmployee(null);
-  };
-
-  // Handle branch selection for salary
-  const handleBranchSelection = (branchId) => {
-    const branch = branches.find((b) => b.id === branchId);
-    setSelectedBranch(branch);
-    setExpenseForm({
-      ...expenseForm,
-      branch: branch.name,
-      selectedBranchId: branchId,
-      employee: "",
-      amount: "",
-    });
-    setShowEmployeeSelection(true);
-    setSelectedEmployee(null);
-  };
-
-  // Handle employee selection for salary
-  const handleEmployeeSelection = (employeeId) => {
-    const employee = employees[expenseForm.selectedBranchId]?.find(
-      (emp) => emp.id === employeeId
-    );
-    if (employee) {
-      setSelectedEmployee(employee);
-      setExpenseForm({
-        ...expenseForm,
-        employee: employee.name,
-        amount: employee.salary.toString(),
-        description: `Monthly salary for ${employee.name} - ${employee.position}`,
-      });
+  // ── Load data ──────────────────────────────────────────────────────────
+  const loadExpenses = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch(EXPENSES_URL, { headers: authHeaders() });
+      const json = await res.json();
+      if (json.success) setExpenses(json.data || []);
+      else setError(json.error || "Failed to load expenses");
+    } catch {
+      setError("Failed to load expenses");
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Selection handlers
-  const handleSelectAll = (checked) => {
-    setSelectedExpenses(
-      checked ? filteredExpenses.map((expense) => expense.id) : []
-    );
+  useEffect(() => {
+    loadExpenses();
+    fetch(BRANCHES_URL, { headers: authHeaders() })
+      .then((r) => r.json())
+      .then((j) => j.success && setBranches(j.data || []))
+      .catch(() => {});
+    fetch(BANKS_URL, { headers: authHeaders() })
+      .then((r) => r.json())
+      .then((j) => j.success && setBanks(j.data || []))
+      .catch(() => {});
+  }, []);
+
+  // ── Derived data ──────────────────────────────────────────────────────
+  const filtered = useMemo(() => {
+    return expenses.filter((e) => {
+      const matchesStatus = statusFilter === "all" || e.status === statusFilter;
+      const matchesCategory =
+        categoryFilter === "all" || e.category === categoryFilter;
+      const q = search.toLowerCase();
+      const matchesSearch =
+        !q ||
+        e.description?.toLowerCase().includes(q) ||
+        catLabel(e.category).toLowerCase().includes(q) ||
+        e.branch?.name?.toLowerCase().includes(q);
+      return matchesStatus && matchesCategory && matchesSearch;
+    });
+  }, [expenses, search, statusFilter, categoryFilter]);
+
+  const totals = useMemo(() => {
+    const total = expenses.reduce((s, e) => s + e.amount, 0);
+    const approved = expenses
+      .filter((e) => e.status === "APPROVED")
+      .reduce((s, e) => s + e.amount, 0);
+    const rejected = expenses
+      .filter((e) => e.status === "REJECTED")
+      .reduce((s, e) => s + e.amount, 0);
+    return { total, approved, rejected };
+  }, [expenses]);
+
+  // ── Form helpers ──────────────────────────────────────────────────────
+  const openAdd = () => {
+    setEditingId(null);
+    setForm(emptyForm);
+    setFormError("");
+    setFormOpen(true);
   };
 
-  const handleSelectExpense = (expenseId, checked) => {
-    setSelectedExpenses(
-      checked
-        ? [...selectedExpenses, expenseId]
-        : selectedExpenses.filter((id) => id !== expenseId)
-    );
-  };
-
-  // CRUD operations
-  const handleAddExpense = () => {
-    const newExpense = {
-      id: Date.now().toString(),
-      ...expenseForm,
-      date: format(expenseForm.date, "yyyy-MM-dd"),
-      amount: Number.parseFloat(expenseForm.amount),
-    };
-    setExpenses([newExpense, ...expenses]);
-    resetForm();
-    setIsAddDialogOpen(false);
-  };
-
-  const handleEditExpense = (expense) => {
-    setEditingExpense(expense);
-    setExpenseForm({
-      date: new Date(expense.date),
+  const openEdit = (expense) => {
+    setEditingId(expense.id);
+    setForm({
+      expenseDate: new Date(expense.expenseDate),
       category: expense.category,
-      amount: expense.amount.toString(),
-      description: expense.description,
-      branch: expense.branch,
+      branchId: expense.branchId,
+      amount: String(expense.amount),
       status: expense.status,
-      employee: expense.employee || "",
-      selectedBranchId:
-        expense.category === "Salary"
-          ? branches.find((b) => b.name === expense.branch)?.id || ""
-          : "",
+      paymentMode: expense.paymentMode,
+      bankId: expense.bankId ?? "",
+      description: expense.description ?? "",
     });
+    setFormError("");
+    setFormOpen(true);
+  };
 
-    // Set salary workflow states for editing
-    if (expense.category === "Salary") {
-      setShowBranchSelection(true);
-      setShowEmployeeSelection(true);
-      const branch = branches.find((b) => b.name === expense.branch);
-      setSelectedBranch(branch);
-      if (branch && expense.employee) {
-        const employee = employees[branch.id]?.find(
-          (emp) => emp.name === expense.employee
-        );
-        setSelectedEmployee(employee);
+  const save = async () => {
+    setSaving(true);
+    setFormError("");
+    try {
+      const payload = {
+        expenseDate: form.expenseDate.toISOString(),
+        category: form.category,
+        branchId: form.branchId,
+        amount: Number(form.amount),
+        status: form.status,
+        paymentMode: form.paymentMode,
+        bankId: form.paymentMode === "BANK_TRANSFER" ? form.bankId : null,
+        description: form.description || null,
+      };
+
+      const url = editingId ? `${EXPENSES_URL}/${editingId}` : EXPENSES_URL;
+      const method = editingId ? "PUT" : "POST";
+      const res = await fetch(url, {
+        method,
+        headers: authHeaders(),
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+
+      if (!json.success) {
+        setFormError(json.error || "Save failed");
+        return;
       }
-    }
 
-    setIsEditDialogOpen(true);
-  };
-
-  const handleUpdateExpense = () => {
-    const updatedExpense = {
-      ...editingExpense,
-      ...expenseForm,
-      date: format(expenseForm.date, "yyyy-MM-dd"),
-      amount: Number.parseFloat(expenseForm.amount),
-    };
-    setExpenses(
-      expenses.map((expense) =>
-        expense.id === editingExpense.id ? updatedExpense : expense
-      )
-    );
-    setEditingExpense(null);
-    resetForm();
-    setIsEditDialogOpen(false);
-  };
-
-  const handleViewExpense = (expense) => {
-    setViewingExpense(expense);
-    setIsViewDialogOpen(true);
-  };
-
-  const handleDeleteExpense = (id) => {
-    setDeleteExpenseId(id);
-    setIsDeleteDialogOpen(true);
-  };
-
-  const confirmDelete = () => {
-    setExpenses(expenses.filter((expense) => expense.id !== deleteExpenseId));
-    setSelectedExpenses(
-      selectedExpenses.filter((id) => id !== deleteExpenseId)
-    );
-    setDeleteExpenseId(null);
-    setIsDeleteDialogOpen(false);
-  };
-
-  const handleBulkDelete = () => {
-    setExpenses(
-      expenses.filter((expense) => !selectedExpenses.includes(expense.id))
-    );
-    setSelectedExpenses([]);
-  };
-
-  const resetForm = () => {
-    setExpenseForm({
-      date: new Date(),
-      category: "",
-      amount: "",
-      description: "",
-      branch: "",
-      status: "Pending",
-      employee: "",
-      selectedBranchId: "",
-    });
-    setShowBranchSelection(false);
-    setShowEmployeeSelection(false);
-    setSelectedBranch(null);
-    setSelectedEmployee(null);
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "Approved":
-        return "default";
-      case "Pending":
-        return "secondary";
-      case "Rejected":
-        return "destructive";
-      default:
-        return "outline";
+      setFormOpen(false);
+      loadExpenses();
+    } catch {
+      setFormError("Save failed");
+    } finally {
+      setSaving(false);
     }
   };
+
+  const confirmDelete = async () => {
+    try {
+      const res = await fetch(`${EXPENSES_URL}/${deleteId}`, {
+        method: "DELETE",
+        headers: authHeaders(),
+      });
+      const json = await res.json();
+      if (json.success)
+        setExpenses((prev) => prev.filter((e) => e.id !== deleteId));
+    } finally {
+      setDeleteId(null);
+    }
+  };
+
+  const canSave =
+    form.expenseDate &&
+    form.category &&
+    form.branchId &&
+    form.amount &&
+    Number(form.amount) > 0 &&
+    (form.paymentMode === "CASH" || form.bankId);
 
   return (
     <div className="w-full mx-auto p-6 space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
+          <h1 className="text-3xl font-bold text-slate-900">
             Expense Management
           </h1>
-          <p className="text-gray-600 mt-1">
+          <p className="text-slate-500 mt-1">
             Track and manage company expenses
           </p>
         </div>
-        <Button
-          className="bg-gradient-primary"
-          onClick={() => setIsAddDialogOpen(true)}
-        >
+        <Button onClick={openAdd} className="bg-indigo-600 hover:bg-indigo-700">
           <Plus className="h-4 w-4 mr-2" />
           Add Expense
         </Button>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card>
+      {error && (
+        <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-2.5">
+          {error}
+        </p>
+      )}
+
+      {/* Summary cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="border-slate-200">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
+            <CardTitle className="text-sm font-medium text-slate-500">
               Total Expenses
             </CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <DollarSign className="h-4 w-4 text-slate-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              ${totalExpenses.toFixed(2)}
+            <div className="text-2xl font-bold text-slate-900">
+              ${totals.total.toFixed(2)}
             </div>
-            <p className="text-xs text-muted-foreground">
-              {expenses.length} total expenses
+            <p className="text-xs text-slate-400">
+              {expenses.length} total records
             </p>
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Approved</CardTitle>
+        <Card className="border-emerald-100 bg-emerald-50/40">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-emerald-700">
+              Approved
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              ${approvedExpenses.toFixed(2)}
+            <div className="text-2xl font-bold text-emerald-700">
+              ${totals.approved.toFixed(2)}
             </div>
-            <p className="text-xs text-muted-foreground">
-              {expenses.filter((e) => e.status === "Approved").length} approved
+            <p className="text-xs text-emerald-600/70">
+              {expenses.filter((e) => e.status === "APPROVED").length} approved
             </p>
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending</CardTitle>
+        <Card className="border-red-100 bg-red-50/40">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-red-700">
+              Rejected
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-orange-600">
-              ${pendingExpenses.toFixed(2)}
+            <div className="text-2xl font-bold text-red-700">
+              ${totals.rejected.toFixed(2)}
             </div>
-            <p className="text-xs text-muted-foreground">
-              {expenses.filter((e) => e.status === "Pending").length} pending
+            <p className="text-xs text-red-600/70">
+              {expenses.filter((e) => e.status === "REJECTED").length} rejected
             </p>
           </CardContent>
         </Card>
       </div>
 
       {/* Filters */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="space-y-2">
-              <Label>Search</Label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                <Input
-                  placeholder="Search expenses..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
+      <Card className="border-slate-200">
+        <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="space-y-2">
+            <Label>Search</Label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 h-4 w-4" />
+              <Input
+                placeholder="Search expenses..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9"
+              />
             </div>
-
-            <div className="space-y-2">
-              <Label>Status</Label>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="approved">Approved</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="rejected">Rejected</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Category</Label>
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
-                  {categories.map((category) => (
-                    <SelectItem key={category} value={category}>
-                      {category}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>&nbsp;</Label>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setSearchQuery("");
-                  setStatusFilter("all");
-                  setCategoryFilter("all");
-                }}
-                className="w-full"
-              >
-                Clear Filters
-              </Button>
-            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Status</Label>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                {STATUSES.map((s) => (
+                  <SelectItem key={s.value} value={s.value}>
+                    {s.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Category</Label>
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                {CATEGORIES.map((c) => (
+                  <SelectItem key={c.value} value={c.value}>
+                    {c.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>&nbsp;</Label>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => {
+                setSearch("");
+                setStatusFilter("all");
+                setCategoryFilter("all");
+              }}
+            >
+              Clear Filters
+            </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* Expenses Table */}
-      <Card>
+      {/* Table */}
+      <Card className="border-slate-200">
         <CardHeader>
-          <div className="flex justify-between items-center">
-            <CardTitle>Expenses</CardTitle>
-            {selectedExpenses.length > 0 && (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={handleBulkDelete}
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete Selected ({selectedExpenses.length})
-              </Button>
-            )}
-          </div>
+          <CardTitle>Expenses</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
+        <CardContent className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead className="text-right">Amount</TableHead>
+                <TableHead>Branch</TableHead>
+                <TableHead>Payment</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="w-16">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
                 <TableRow>
-                  <TableHead className="w-12">
-                    <Checkbox
-                      checked={
-                        selectedExpenses.length === filteredExpenses.length &&
-                        filteredExpenses.length > 0
-                      }
-                      onCheckedChange={handleSelectAll}
-                    />
-                  </TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Branch</TableHead>
-                  <TableHead>Employee</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="w-20">Actions</TableHead>
+                  <TableCell
+                    colSpan={7}
+                    className="text-center py-8 text-slate-400"
+                  >
+                    Loading...
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredExpenses.length === 0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={9}
-                      className="text-center py-8 text-gray-500"
-                    >
-                      No expenses found
+              ) : filtered.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={7}
+                    className="text-center py-8 text-slate-400"
+                  >
+                    No expenses found
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filtered.map((e) => (
+                  <TableRow key={e.id} className="hover:bg-slate-50">
+                    <TableCell>
+                      {format(new Date(e.expenseDate), "MMM dd, yyyy")}
+                    </TableCell>
+                    <TableCell>{catLabel(e.category)}</TableCell>
+                    <TableCell className="text-right font-medium">
+                      ${e.amount.toFixed(2)}
+                    </TableCell>
+                    <TableCell>{e.branch?.name ?? "-"}</TableCell>
+                    <TableCell>
+                      <span className="flex items-center gap-1.5 text-sm text-slate-600">
+                        {e.paymentMode === "BANK_TRANSFER" ? (
+                          <Landmark className="h-3.5 w-3.5" />
+                        ) : (
+                          <Banknote className="h-3.5 w-3.5" />
+                        )}
+                        {e.paymentMode === "BANK_TRANSFER"
+                          ? (e.bank?.bankName ?? "Bank")
+                          : "Cash"}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={statusColor(e.status)}>
+                        {e.status === "APPROVED" ? "Approved" : "Rejected"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => setViewing(e)}>
+                            <Eye className="h-4 w-4 mr-2" />
+                            View
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => openEdit(e)}>
+                            <Edit className="h-4 w-4 mr-2" />
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => setDeleteId(e.id)}
+                            className="text-red-600"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
-                ) : (
-                  filteredExpenses.map((expense) => (
-                    <TableRow key={expense.id} className="hover:bg-gray-50">
-                      <TableCell>
-                        <Checkbox
-                          checked={selectedExpenses.includes(expense.id)}
-                          onCheckedChange={(checked) =>
-                            handleSelectExpense(expense.id, checked)
-                          }
-                        />
-                      </TableCell>
-                      <TableCell>
-                        {format(new Date(expense.date), "MMM dd, yyyy")}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          {expense.category === "Salary" && (
-                            <Users className="h-4 w-4 text-blue-500" />
-                          )}
-                          {expense.category}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        ${expense.amount.toFixed(2)}
-                      </TableCell>
-                      <TableCell>{expense.description}</TableCell>
-                      <TableCell>{expense.branch}</TableCell>
-                      <TableCell>
-                        {expense.employee ? (
-                          <div className="flex items-center gap-1">
-                            <Users className="h-3 w-3 text-gray-400" />
-                            {expense.employee}
-                          </div>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={getStatusColor(expense.status)}>
-                          {expense.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={() => handleViewExpense(expense)}
-                            >
-                              <Eye className="h-4 w-4 mr-2" />
-                              View
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleEditExpense(expense)}
-                            >
-                              <Edit className="h-4 w-4 mr-2" />
-                              Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleDeleteExpense(expense.id)}
-                              className="text-red-600"
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                ))
+              )}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
 
-      {/* Add/Edit Expense Dialog */}
-      <Dialog
-        open={isAddDialogOpen || isEditDialogOpen}
-        onOpenChange={(open) => {
-          if (!open) {
-            setIsAddDialogOpen(false);
-            setIsEditDialogOpen(false);
-            setEditingExpense(null);
-            resetForm();
-          }
-        }}
-      >
+      {/* Add/Edit dialog */}
+      <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {editingExpense ? "Edit Expense" : "Add New Expense"}
+              {editingId ? "Edit Expense" : "Add New Expense"}
             </DialogTitle>
-            <DialogDescription>
-              {editingExpense
-                ? "Update expense details"
-                : "Enter expense information"}
-            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            {/* Date */}
+
+          <div className="space-y-4 py-2">
+            {/* Expense date */}
             <div className="space-y-2">
-              <Label>Date</Label>
+              <Label>Expense Date</Label>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
-                    className="w-full justify-start text-left font-normal bg-transparent"
+                    className="w-full justify-start font-normal"
                   >
-                    <Calendar className="mr-2 h-4 w-4" />
-                    {expenseForm.date
-                      ? format(expenseForm.date, "PPP")
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {form.expenseDate
+                      ? format(form.expenseDate, "PPP")
                       : "Pick a date"}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0">
                   <CalendarComponent
                     mode="single"
-                    selected={expenseForm.date}
-                    onSelect={(date) =>
-                      setExpenseForm({ ...expenseForm, date })
-                    }
+                    selected={form.expenseDate}
+                    onSelect={(d) => setForm({ ...form, expenseDate: d })}
                     initialFocus
                   />
                 </PopoverContent>
@@ -715,155 +550,120 @@ export default function ExpensePage() {
             <div className="space-y-2">
               <Label>Category</Label>
               <Select
-                value={expenseForm.category}
-                onValueChange={handleCategoryChange}
+                value={form.category}
+                onValueChange={(v) => setForm({ ...form, category: v })}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger>
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  {categories.map((category) => (
-                    <SelectItem key={category} value={category}>
-                      <div className="flex items-center gap-2">
-                        {category === "Salary" && <Users className="h-4 w-4" />}
-                        {category}
-                      </div>
+                  {CATEGORIES.map((c) => (
+                    <SelectItem key={c.value} value={c.value}>
+                      {c.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
-            {/* Salary Workflow - Branch Selection */}
-            {showBranchSelection && (
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2">
-                  <Building2 className="h-4 w-4" />
-                  Select Branch
-                </Label>
-                <Select
-                  value={expenseForm.selectedBranchId}
-                  onValueChange={handleBranchSelection}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Choose branch for salary expense" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {branches.map((branch) => (
-                      <SelectItem key={branch.id} value={branch.id}>
-                        <div className="flex items-center gap-2">
-                          <Building2 className="h-4 w-4" />
-                          {branch.name}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {/* Salary Workflow - Employee Selection */}
-            {showEmployeeSelection && selectedBranch && (
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2">
-                  <Users className="h-4 w-4" />
-                  Select Employee ({selectedBranch.name})
-                </Label>
-                <Select
-                  value={selectedEmployee?.id || ""}
-                  onValueChange={handleEmployeeSelection}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Choose employee for salary" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {employees[expenseForm.selectedBranchId]?.map(
-                      (employee) => (
-                        <SelectItem key={employee.id} value={employee.id}>
-                          <div className="flex items-center justify-between w-full">
-                            <div className="flex items-center gap-2">
-                              <Users className="h-4 w-4" />
-                              <div>
-                                <div className="font-medium">
-                                  {employee.name}
-                                </div>
-                                <div className="text-sm text-gray-500">
-                                  {employee.position}
-                                </div>
-                              </div>
-                            </div>
-                            <div className="text-sm font-medium">
-                              ${employee.salary}
-                            </div>
-                          </div>
-                        </SelectItem>
-                      )
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {/* Regular Branch Selection (for non-salary expenses) */}
-            {!showBranchSelection && (
-              <div className="space-y-2">
-                <Label>Branch</Label>
-                <Select
-                  value={expenseForm.branch}
-                  onValueChange={(value) =>
-                    setExpenseForm({ ...expenseForm, branch: value })
-                  }
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select branch" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {branches.map((branch) => (
-                      <SelectItem key={branch.id} value={branch.name}>
-                        {branch.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+            {/* Branch */}
+            <div className="space-y-2">
+              <Label>Branch</Label>
+              <Select
+                value={form.branchId}
+                onValueChange={(v) => setForm({ ...form, branchId: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select branch" />
+                </SelectTrigger>
+                <SelectContent>
+                  {branches.map((b) => (
+                    <SelectItem key={b.id} value={b.id}>
+                      {b.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
             {/* Amount */}
             <div className="space-y-2">
               <Label>Amount</Label>
               <Input
                 type="number"
+                min="0"
                 step="0.01"
                 placeholder="0.00"
-                value={expenseForm.amount}
-                onChange={(e) =>
-                  setExpenseForm({ ...expenseForm, amount: e.target.value })
-                }
-                disabled={expenseForm.category === "Salary" && selectedEmployee}
+                value={form.amount}
+                onChange={(e) => setForm({ ...form, amount: e.target.value })}
               />
-              {expenseForm.category === "Salary" && selectedEmployee && (
-                <p className="text-sm text-gray-500">
-                  Amount auto-filled based on employee salary
-                </p>
-              )}
             </div>
+
+            {/* Payment mode */}
+            <div className="space-y-2">
+              <Label>Payment Mode</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant={form.paymentMode === "CASH" ? "default" : "outline"}
+                  onClick={() =>
+                    setForm({ ...form, paymentMode: "CASH", bankId: "" })
+                  }
+                >
+                  <Banknote className="h-4 w-4 mr-2" />
+                  Cash
+                </Button>
+                <Button
+                  type="button"
+                  variant={
+                    form.paymentMode === "BANK_TRANSFER" ? "default" : "outline"
+                  }
+                  onClick={() =>
+                    setForm({ ...form, paymentMode: "BANK_TRANSFER" })
+                  }
+                >
+                  <Landmark className="h-4 w-4 mr-2" />
+                  Bank Transfer
+                </Button>
+              </div>
+            </div>
+
+            {/* Bank selector */}
+            {form.paymentMode === "BANK_TRANSFER" && (
+              <div className="space-y-2">
+                <Label>Bank</Label>
+                <Select
+                  value={form.bankId}
+                  onValueChange={(v) => setForm({ ...form, bankId: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select bank" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {banks.map((b) => (
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.bankName} — {b.accountNumber}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {/* Status */}
             <div className="space-y-2">
               <Label>Status</Label>
               <Select
-                value={expenseForm.status}
-                onValueChange={(value) =>
-                  setExpenseForm({ ...expenseForm, status: value })
-                }
+                value={form.status}
+                onValueChange={(v) => setForm({ ...form, status: v })}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {statuses.map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {status}
+                  {STATUSES.map((s) => (
+                    <SelectItem key={s.value} value={s.value}>
+                      {s.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -874,127 +674,102 @@ export default function ExpensePage() {
             <div className="space-y-2">
               <Label>Description</Label>
               <Textarea
-                placeholder="Enter expense description"
-                value={expenseForm.description}
+                placeholder="Optional notes..."
+                value={form.description}
                 onChange={(e) =>
-                  setExpenseForm({
-                    ...expenseForm,
-                    description: e.target.value,
-                  })
+                  setForm({ ...form, description: e.target.value })
                 }
+                rows={2}
               />
             </div>
+
+            {formError && (
+              <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-3.5 py-2.5">
+                {formError}
+              </p>
+            )}
           </div>
+
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setIsAddDialogOpen(false);
-                setIsEditDialogOpen(false);
-                setEditingExpense(null);
-                resetForm();
-              }}
-            >
+            <Button variant="outline" onClick={() => setFormOpen(false)}>
               Cancel
             </Button>
             <Button
-              onClick={editingExpense ? handleUpdateExpense : handleAddExpense}
-              disabled={
-                !expenseForm.description ||
-                !expenseForm.amount ||
-                !expenseForm.category
-              }
+              onClick={save}
+              disabled={!canSave || saving}
+              className="bg-indigo-600 hover:bg-indigo-700"
             >
-              {editingExpense ? "Update" : "Add"} Expense
+              {saving
+                ? "Saving..."
+                : editingId
+                  ? "Update Expense"
+                  : "Add Expense"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* View Expense Dialog */}
-      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+      {/* View dialog */}
+      <Dialog open={!!viewing} onOpenChange={(o) => !o && setViewing(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Expense Details</DialogTitle>
           </DialogHeader>
-          {viewingExpense && (
-            <div className="space-y-4 py-4">
+          {viewing && (
+            <div className="space-y-4 py-2">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-sm font-medium text-gray-500">
-                    Date
-                  </Label>
-                  <p className="text-base">
-                    {format(new Date(viewingExpense.date), "MMMM dd, yyyy")}
+                  <Label className="text-xs text-slate-400">Date</Label>
+                  <p>
+                    {format(new Date(viewing.expenseDate), "MMMM dd, yyyy")}
                   </p>
                 </div>
                 <div>
-                  <Label className="text-sm font-medium text-gray-500">
-                    Category
-                  </Label>
-                  <p className="text-base flex items-center gap-2">
-                    {viewingExpense.category === "Salary" && (
-                      <Users className="h-4 w-4 text-blue-500" />
-                    )}
-                    {viewingExpense.category}
-                  </p>
+                  <Label className="text-xs text-slate-400">Category</Label>
+                  <p>{catLabel(viewing.category)}</p>
                 </div>
               </div>
               <div>
-                <Label className="text-sm font-medium text-gray-500">
-                  Amount
-                </Label>
+                <Label className="text-xs text-slate-400">Amount</Label>
                 <p className="text-2xl font-bold">
-                  ${viewingExpense.amount.toFixed(2)}
+                  ${viewing.amount.toFixed(2)}
                 </p>
               </div>
               <div>
-                <Label className="text-sm font-medium text-gray-500">
-                  Description
-                </Label>
-                <p className="text-base">{viewingExpense.description}</p>
+                <Label className="text-xs text-slate-400">Description</Label>
+                <p>{viewing.description || "-"}</p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-sm font-medium text-gray-500">
-                    Branch
-                  </Label>
-                  <p className="text-base">{viewingExpense.branch}</p>
+                  <Label className="text-xs text-slate-400">Branch</Label>
+                  <p>{viewing.branch?.name ?? "-"}</p>
                 </div>
                 <div>
-                  <Label className="text-sm font-medium text-gray-500">
-                    Status
-                  </Label>
-                  <Badge variant={getStatusColor(viewingExpense.status)}>
-                    {viewingExpense.status}
+                  <Label className="text-xs text-slate-400">Status</Label>
+                  <Badge variant={statusColor(viewing.status)}>
+                    {viewing.status}
                   </Badge>
                 </div>
               </div>
-              {viewingExpense.employee && (
-                <div>
-                  <Label className="text-sm font-medium text-gray-500">
-                    Employee
-                  </Label>
-                  <p className="text-base flex items-center gap-2">
-                    <Users className="h-4 w-4 text-gray-400" />
-                    {viewingExpense.employee}
-                  </p>
-                </div>
-              )}
+              <div>
+                <Label className="text-xs text-slate-400">Payment</Label>
+                <p>
+                  {viewing.paymentMode === "BANK_TRANSFER"
+                    ? `Bank Transfer — ${viewing.bank?.bankName ?? ""}`
+                    : "Cash"}
+                </p>
+              </div>
             </div>
           )}
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsViewDialogOpen(false)}
-            >
+            <Button variant="outline" onClick={() => setViewing(null)}>
               Close
             </Button>
-            {viewingExpense && (
+            {viewing && (
               <Button
                 onClick={() => {
-                  setIsViewDialogOpen(false);
-                  handleEditExpense(viewingExpense);
+                  setViewing(null);
+                  openEdit(viewing);
                 }}
               >
                 Edit
@@ -1004,17 +779,17 @@ export default function ExpensePage() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
+      {/* Delete confirm */}
       <AlertDialog
-        open={isDeleteDialogOpen}
-        onOpenChange={setIsDeleteDialogOpen}
+        open={!!deleteId}
+        onOpenChange={(o) => !o && setDeleteId(null)}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the
-              expense record.
+              This permanently deletes the expense and reverses its ledger
+              entries and account balances.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
