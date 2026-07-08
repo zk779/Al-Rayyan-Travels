@@ -236,8 +236,27 @@ export default function EditSalesTab({ saleId }) {
         if (item.id !== id) return item;
 
         // Payment dialog result: { paymentType, paymentMeta, customerId, bankId, paidAmount, paxName }
+        // Payment dialog result: { paymentType, paymentMeta, customerId, bankId, paidAmount, paxName }
         if (field === "payment") {
-          return { ...item, ...value };
+          const merged = { ...item, ...value };
+          // Mirror the paid amount into sellPrice too — sellPrice stays
+          // fully editable afterward, this just sets its initial value.
+          if (value?.paidAmount !== undefined) {
+            merged.sellPrice = value.paidAmount;
+          }
+          // Tabby/Tamara: the amount EditPaymentDialog returns is the merchant's
+          // net settlement after fees, not money actually collected from the
+          // customer up front — so don't carry it into Paid. Sell price still
+          // gets updated as usual above; Paid stays 0 for Tabby/Tamara sales.
+          const meta = value?.paymentMeta;
+          const isTabbyOrTamara =
+            meta?.orderAmount != null ||
+            meta?.aOrderAmount != null ||
+            meta?.bOrderAmount != null;
+          if (isTabbyOrTamara) {
+            merged.paidAmount = 0;
+          }
+          return merged;
         }
 
         if (field === "paidAmount") {
@@ -771,12 +790,13 @@ export default function EditSalesTab({ saleId }) {
                     </Label>
                     <Input
                       type="number"
+                      readOnly
                       value={item.paidAmount || ""}
                       onChange={(e) =>
                         updateSale(item.id, "paidAmount", e.target.value)
                       }
                       placeholder="0.00"
-                      className="h-8 text-sm"
+                      className="h-8 text-sm cursor-not-allowed"
                     />
                   </div>
                   <div className="space-y-1">

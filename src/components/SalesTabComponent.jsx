@@ -300,12 +300,24 @@ export default function SalesTabComponent() {
           }
         }
 
-       if (field === "payment") {
+        if (field === "payment") {
           const merged = { ...item, ...value };
           // Mirror the paid amount into sellPrice too — sellPrice stays
           // fully editable afterward, this just sets its initial value.
           if (value?.paidAmount !== undefined) {
             merged.sellPrice = value.paidAmount;
+          }
+          // Tabby/Tamara: the amount PaymentDialog returns is the merchant's
+          // net settlement after fees, not money actually collected from the
+          // customer up front — so don't carry it into Paid. Sell price still
+          // gets updated as usual above; Paid stays 0 for Tabby/Tamara sales.
+          const meta = value?.paymentMeta;
+          const isTabbyOrTamara =
+            meta?.orderAmount != null ||
+            meta?.aOrderAmount != null ||
+            meta?.bOrderAmount != null;
+          if (isTabbyOrTamara) {
+            merged.paidAmount = 0;
           }
           return merged;
         }
@@ -519,57 +531,57 @@ export default function SalesTabComponent() {
   return (
     <div className="space-y-4">
       {/* Date & Invoice */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label className="text-sm font-medium text-gray-700">
-                Invoice Number
-              </Label>
-              <div className="relative">
-                <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                  {fetchingInvoice ? (
-                    <div className="h-4 w-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <Receipt className="h-4 w-4 text-indigo-500" />
-                  )}
-                </div>
-                <Input
-                  value={invoiceNo}
-                  readOnly
-                  placeholder={fetchingInvoice ? "Loading..." : "No invoice"}
-                  className="pl-10 pr-16 font-mono text-sm font-semibold bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200 text-indigo-900 cursor-not-allowed focus-visible:ring-indigo-500"
-                />
-                <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800">
-                    Auto
-                  </span>
-                </div>
-              </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label className="text-sm font-medium text-gray-700">
+            Invoice Number
+          </Label>
+          <div className="relative">
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+              {fetchingInvoice ? (
+                <div className="h-4 w-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Receipt className="h-4 w-4 text-indigo-500" />
+              )}
             </div>
-            <div className="space-y-2">
-              <Label className="text-sm font-medium text-gray-700">
-                Transaction Date
-              </Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start text-left font-normal h-10"
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4 text-gray-500" />
-                    {format(saleDate, "PPP")}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar
-                    mode="single"
-                    selected={saleDate}
-                    onSelect={(d) => d && setSaleDate(d)}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
+            <Input
+              value={invoiceNo}
+              readOnly
+              placeholder={fetchingInvoice ? "Loading..." : "No invoice"}
+              className="pl-10 pr-16 font-mono text-sm font-semibold bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200 text-indigo-900 cursor-not-allowed focus-visible:ring-indigo-500"
+            />
+            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800">
+                Auto
+              </span>
             </div>
           </div>
+        </div>
+        <div className="space-y-2">
+          <Label className="text-sm font-medium text-gray-700">
+            Transaction Date
+          </Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className="w-full justify-start text-left font-normal h-10"
+              >
+                <CalendarIcon className="mr-2 h-4 w-4 text-gray-500" />
+                {format(saleDate, "PPP")}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0">
+              <Calendar
+                mode="single"
+                selected={saleDate}
+                onSelect={(d) => d && setSaleDate(d)}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
+      </div>
 
       {/* Header */}
       <div className="flex items-center justify-between">

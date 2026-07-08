@@ -353,8 +353,6 @@ export default function PaymentDialog({
 
   const sell = Number(sellPrice) || 0;
 
-  console.log(customerOptions);
-
   /* Restore state from sale when dialog re-opens */
   useEffect(() => {
     if (!open) return;
