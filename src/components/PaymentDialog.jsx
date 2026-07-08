@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   CreditCard,
   Banknote,
@@ -84,6 +84,43 @@ const colorMap = {
 
 const METHOD_META = Object.fromEntries(METHODS.map((m) => [m.value, m]));
 
+/* ─── Tabby / Tamara fee calculation ─────────────────────
+   Fee            = 6.99% of Order Amount
+   Deducted       = Fee + 1.5 SAR
+   VAT            = 15% of Deducted
+   Total Deduction = Deducted + VAT
+   Net Amount     = Order Amount - Total Deduction
+   e.g. Order 1000 -> Fee 69.9 -> Deducted 71.4 -> VAT 10.71
+        -> Total Deduction 82.11 -> Net Amount 917.89
+--------------------------------------------------------- */
+const TABBY_FEE_RATE = 0.0699;
+const TABBY_FIXED_FEE = 1.5;
+const TABBY_VAT_RATE = 0.15;
+
+const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
+
+function calculateTabbyNetAmount(orderAmount) {
+  const order = Number(orderAmount) || 0;
+  const fee = order * TABBY_FEE_RATE;
+  const deducted = fee + TABBY_FIXED_FEE;
+  const vat = deducted * TABBY_VAT_RATE;
+  const totalDeduction = deducted + vat;
+  const amount = order - totalDeduction;
+  return {
+    fee: round2(fee),
+    deducted: round2(deducted),
+    vat: round2(vat),
+    totalDeduction: round2(totalDeduction),
+    amount: round2(amount),
+  };
+}
+
+// Looks up the customerType of a selected customer from the options list.
+// IMPORTANT: customerOptions items must include a `customerType` field, e.g.
+// { value: customer.id, label: customer.customerName, customerType: customer.customerType }
+const getCustomerType = (id, customerOptions) =>
+  customerOptions?.find((o) => o.value === id)?.customerType;
+
 const compact = {
   control: (b) => ({
     ...b,
@@ -115,6 +152,8 @@ const emptyPartial = (combo = "") => ({
   bCustomerId: "",
   aBankId: "",
   bBankId: "",
+  aOrderAmount: "",
+  bOrderAmount: "",
 });
 
 /* ─── Single payment slot ────────────────────────────────── */
@@ -126,6 +165,8 @@ function SlotFields({
   setCustomerId,
   bankId,
   setBankId,
+  orderAmount,
+  setOrderAmount,
   customerOptions,
   bankOptions,
 }) {
@@ -136,33 +177,44 @@ function SlotFields({
       CREDIT: "bg-violet-50 border-violet-200",
     }[methodValue] ?? "bg-slate-50 border-slate-200";
 
+  // Only the CREDIT slot has a customer selector, so this is the only
+  // place we need to detect a Tabby/Tamara customer.
+  const selectedCustomerType =
+    methodValue === "CREDIT"
+      ? getCustomerType(customerId, customerOptions)
+      : null;
+  const isTabbyOrTamara = selectedCustomerType === "TABBY_OR_TAMARA";
+
+  const tabbyCalc = useMemo(() => {
+    if (!isTabbyOrTamara || !orderAmount) return null;
+    return calculateTabbyNetAmount(orderAmount);
+  }, [isTabbyOrTamara, orderAmount]);
+
+  // Auto-fill Amount whenever the Order Amount (or the fee calc) changes.
+  useEffect(() => {
+    if (isTabbyOrTamara && tabbyCalc) {
+      setAmount(String(tabbyCalc.amount));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTabbyOrTamara, tabbyCalc]);
+
   return (
     <div className={`space-y-2 p-3 rounded-lg border ${slotColor}`}>
       <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
         {METHOD_META[methodValue]?.label}
       </p>
-      <div className="space-y-1">
-        <Label className="text-xs font-medium text-slate-600">
-          Amount <SaudiRiyal size={11} className="inline" />
-        </Label>
-        <Input
-          type="number"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          placeholder="0.00"
-          className="h-8 text-sm"
-        />
-      </div>
-      {methodValue === "BANK_TRANSFER" && (
+
+      {/* Customer selector now sits at the TOP of the slot, above Amount */}
+      {methodValue === "CREDIT" && (
         <div className="space-y-1">
           <Label className="text-xs font-medium text-slate-600">
-            Bank Account *
+            Customer *
           </Label>
           <Select
-            options={bankOptions}
-            value={bankOptions?.find((o) => o.value === bankId) || null}
-            onChange={(o) => setBankId(o?.value || "")}
-            placeholder="Select bank"
+            options={customerOptions}
+            value={customerOptions?.find((o) => o.value === customerId) || null}
+            onChange={(o) => setCustomerId(o?.value || "")}
+            placeholder="Select customer"
             menuPortalTarget={document.body}
             menuPosition="fixed"
             menuShouldBlockScroll={false}
@@ -182,16 +234,84 @@ function SlotFields({
           />
         </div>
       )}
-      {methodValue === "CREDIT" && (
+
+      {/* Order Amount — appears as soon as a Tabby/Tamara customer is picked */}
+      {methodValue === "CREDIT" && isTabbyOrTamara && (
+        <div className="space-y-2 p-3 rounded-lg border bg-fuchsia-50 border-fuchsia-200">
+          <p className="text-xs font-semibold text-fuchsia-700 uppercase tracking-wide">
+            Tabby / Tamara — Order Amount
+          </p>
+          <div className="space-y-1">
+            <Label className="text-xs font-medium text-slate-600">
+              Order Amount <SaudiRiyal size={11} className="inline" />
+            </Label>
+            <Input
+              type="number"
+              value={orderAmount}
+              onChange={(e) => setOrderAmount(e.target.value)}
+              placeholder="e.g. 1000"
+              className="h-8 text-sm bg-white"
+              autoFocus
+            />
+          </div>
+
+          {tabbyCalc && (
+            <div className="text-xs text-slate-600 space-y-1 pt-2 border-t border-fuchsia-200">
+              <div className="flex justify-between">
+                <span>Fee (6.99% + 1.5 SAR)</span>
+                <span className="font-medium">
+                  {tabbyCalc.deducted.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>VAT (15% of fee)</span>
+                <span className="font-medium">{tabbyCalc.vat.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Total deduction</span>
+                <span className="font-medium">
+                  {tabbyCalc.totalDeduction.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm font-semibold text-fuchsia-700 pt-1 border-t border-fuchsia-200 mt-1">
+                <span>Net Amount</span>
+                <span>{tabbyCalc.amount.toFixed(2)}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="space-y-1">
+        <Label className="text-xs font-medium text-slate-600">
+          Amount <SaudiRiyal size={11} className="inline" />
+          {isTabbyOrTamara && (
+            <span className="ml-1 font-normal normal-case text-slate-400">
+              (auto-calculated)
+            </span>
+          )}
+        </Label>
+        <Input
+          type="number"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          placeholder="0.00"
+          className={`h-8 text-sm ${isTabbyOrTamara ? "bg-slate-100 cursor-not-allowed text-slate-500" : ""}`}
+          readOnly={isTabbyOrTamara}
+          disabled={isTabbyOrTamara}
+        />
+      </div>
+
+      {methodValue === "BANK_TRANSFER" && (
         <div className="space-y-1">
           <Label className="text-xs font-medium text-slate-600">
-            Customer *
+            Bank Account *
           </Label>
           <Select
-            options={customerOptions}
-            value={customerOptions?.find((o) => o.value === customerId) || null}
-            onChange={(o) => setCustomerId(o?.value || "")}
-            placeholder="Select customer"
+            options={bankOptions}
+            value={bankOptions?.find((o) => o.value === bankId) || null}
+            onChange={(o) => setBankId(o?.value || "")}
+            placeholder="Select bank"
             menuPortalTarget={document.body}
             menuPosition="fixed"
             menuShouldBlockScroll={false}
@@ -228,9 +348,12 @@ export default function PaymentDialog({
   const [amount, setAmount] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [bankId, setBankId] = useState("");
+  const [orderAmount, setOrderAmount] = useState("");
   const [partial, setPartial] = useState(emptyPartial());
 
   const sell = Number(sellPrice) || 0;
+
+  console.log(customerOptions);
 
   /* Restore state from sale when dialog re-opens */
   useEffect(() => {
@@ -241,6 +364,7 @@ export default function PaymentDialog({
       setAmount("");
       setCustomerId("");
       setBankId("");
+      setOrderAmount("");
       setPartial(emptyPartial());
       return;
     }
@@ -249,8 +373,10 @@ export default function PaymentDialog({
       setAmount(sale.paidAmount || "");
       setCustomerId(sale.customerId || "");
       setBankId(meta.bankId || "");
+      setOrderAmount(meta.orderAmount || "");
       setPartial(emptyPartial());
     } else {
+      setOrderAmount("");
       setPartial({
         combo: meta.combo ?? "",
         aAmount: meta.aAmount ?? "",
@@ -259,6 +385,8 @@ export default function PaymentDialog({
         bCustomerId: meta.bCustomerId ?? "",
         aBankId: meta.aBankId ?? "",
         bBankId: meta.bBankId ?? "",
+        aOrderAmount: meta.aOrderAmount ?? "",
+        bOrderAmount: meta.bOrderAmount ?? "",
       });
     }
   }, [open]);
@@ -268,9 +396,25 @@ export default function PaymentDialog({
     (Number(partial.aAmount) || 0) + (Number(partial.bAmount) || 0);
   const partialRemaining = sell - partialTotal;
 
+  // Tabby/Tamara detection — non-partial CREDIT slot
+  const isTabbyOrTamara =
+    mode === "CREDIT" &&
+    getCustomerType(customerId, customerOptions) === "TABBY_OR_TAMARA";
+
+  // Tabby/Tamara detection — per leg, for Partial combos that include CREDIT
+  const aIsTabbyOrTamara =
+    selectedCombo?.a === "CREDIT" &&
+    getCustomerType(partial.aCustomerId, customerOptions) === "TABBY_OR_TAMARA";
+  const bIsTabbyOrTamara =
+    selectedCombo?.b === "CREDIT" &&
+    getCustomerType(partial.bCustomerId, customerOptions) === "TABBY_OR_TAMARA";
+
   const isValid = () => {
     if (!mode) return false;
     if (mode === "CREDIT" && !customerId) return false;
+    if (mode === "CREDIT" && isTabbyOrTamara) {
+      if (!orderAmount || Number(orderAmount) <= 0) return false;
+    }
     if (mode === "BANK_TRANSFER" && !bankId) return false;
     if (mode === "PARTIAL") {
       if (!partial.combo || !partial.aAmount || !partial.bAmount) return false;
@@ -279,6 +423,16 @@ export default function PaymentDialog({
       if (selectedCombo?.a === "BANK_TRANSFER" && !partial.aBankId)
         return false;
       if (selectedCombo?.b === "BANK_TRANSFER" && !partial.bBankId)
+        return false;
+      if (
+        aIsTabbyOrTamara &&
+        (!partial.aOrderAmount || Number(partial.aOrderAmount) <= 0)
+      )
+        return false;
+      if (
+        bIsTabbyOrTamara &&
+        (!partial.bOrderAmount || Number(partial.bOrderAmount) <= 0)
+      )
         return false;
     }
     return true;
@@ -290,7 +444,16 @@ export default function PaymentDialog({
     if (mode !== "PARTIAL") {
       result = {
         paymentType: mode,
-        paymentMeta: { type: mode, bankId: bankId || null },
+        paymentMeta: {
+          type: mode,
+          bankId: bankId || null,
+          ...(isTabbyOrTamara
+            ? {
+                orderAmount,
+                feeBreakdown: calculateTabbyNetAmount(orderAmount),
+              }
+            : {}),
+        },
         // top-level fields the sales payload mapper reads directly
         bankId: mode === "BANK_TRANSFER" ? bankId : null,
         customerId: mode === "CREDIT" ? customerId : "",
@@ -312,6 +475,18 @@ export default function PaymentDialog({
           bCustomerId: partial.bCustomerId || null,
           aBankId: partial.aBankId || null,
           bBankId: partial.bBankId || null,
+          ...(aIsTabbyOrTamara
+            ? {
+                aOrderAmount: partial.aOrderAmount,
+                aFeeBreakdown: calculateTabbyNetAmount(partial.aOrderAmount),
+              }
+            : {}),
+          ...(bIsTabbyOrTamara
+            ? {
+                bOrderAmount: partial.bOrderAmount,
+                bFeeBreakdown: calculateTabbyNetAmount(partial.bOrderAmount),
+              }
+            : {}),
         },
         // paymentLegs — exactly what the backend iterates over
         paymentLegs: [
@@ -389,6 +564,7 @@ export default function PaymentDialog({
                     setAmount("");
                     setCustomerId("");
                     setBankId("");
+                    setOrderAmount("");
                     setPartial(emptyPartial());
                   }}
                   className={`flex items-center gap-2 p-3 rounded-lg border-2 text-sm font-medium transition-all
@@ -427,8 +603,13 @@ export default function PaymentDialog({
               amount={amount}
               setAmount={setAmount}
               customerId={customerId}
-              setCustomerId={setCustomerId}
+              setCustomerId={(id) => {
+                setCustomerId(id);
+                setOrderAmount(""); // fresh order amount whenever the customer changes
+              }}
               customerOptions={customerOptions}
+              orderAmount={orderAmount}
+              setOrderAmount={setOrderAmount}
             />
           )}
 
@@ -465,10 +646,18 @@ export default function PaymentDialog({
                     setAmount={(v) => setPartial((p) => ({ ...p, aAmount: v }))}
                     customerId={partial.aCustomerId}
                     setCustomerId={(v) =>
-                      setPartial((p) => ({ ...p, aCustomerId: v }))
+                      setPartial((p) => ({
+                        ...p,
+                        aCustomerId: v,
+                        aOrderAmount: "",
+                      }))
                     }
                     bankId={partial.aBankId}
                     setBankId={(v) => setPartial((p) => ({ ...p, aBankId: v }))}
+                    orderAmount={partial.aOrderAmount}
+                    setOrderAmount={(v) =>
+                      setPartial((p) => ({ ...p, aOrderAmount: v }))
+                    }
                     customerOptions={customerOptions}
                     bankOptions={bankOptions}
                   />
@@ -478,10 +667,18 @@ export default function PaymentDialog({
                     setAmount={(v) => setPartial((p) => ({ ...p, bAmount: v }))}
                     customerId={partial.bCustomerId}
                     setCustomerId={(v) =>
-                      setPartial((p) => ({ ...p, bCustomerId: v }))
+                      setPartial((p) => ({
+                        ...p,
+                        bCustomerId: v,
+                        bOrderAmount: "",
+                      }))
                     }
                     bankId={partial.bBankId}
                     setBankId={(v) => setPartial((p) => ({ ...p, bBankId: v }))}
+                    orderAmount={partial.bOrderAmount}
+                    setOrderAmount={(v) =>
+                      setPartial((p) => ({ ...p, bOrderAmount: v }))
+                    }
                     customerOptions={customerOptions}
                     bankOptions={bankOptions}
                   />

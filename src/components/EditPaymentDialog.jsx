@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   CreditCard,
   Banknote,
@@ -84,6 +84,59 @@ const colorMap = {
 
 const METHOD_META = Object.fromEntries(METHODS.map((m) => [m.value, m]));
 
+/* ─── Tabby / Tamara fee calculation ─────────────────────
+   Fee            = 6.99% of Order Amount
+   Deducted       = Fee + 1.5 SAR
+   VAT            = 15% of Deducted
+   Total Deduction = Deducted + VAT
+   Net Amount     = Order Amount - Total Deduction
+   e.g. Order 1000 -> Fee 69.9 -> Deducted 71.4 -> VAT 10.71
+        -> Total Deduction 82.11 -> Net Amount 917.89
+--------------------------------------------------------- */
+const TABBY_FEE_RATE = 0.0699;
+const TABBY_FIXED_FEE = 1.5;
+const TABBY_VAT_RATE = 0.15;
+
+const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
+
+function calculateTabbyNetAmount(orderAmount) {
+  const order = Number(orderAmount) || 0;
+  const fee = order * TABBY_FEE_RATE;
+  const deducted = fee + TABBY_FIXED_FEE;
+  const vat = deducted * TABBY_VAT_RATE;
+  const totalDeduction = deducted + vat;
+  const amount = order - totalDeduction;
+  return {
+    fee: round2(fee),
+    deducted: round2(deducted),
+    vat: round2(vat),
+    totalDeduction: round2(totalDeduction),
+    amount: round2(amount),
+  };
+}
+
+// Inverse of calculateTabbyNetAmount — reconstructs the Order Amount from an
+// already-known Net Amount. Used when re-opening a saved payment that has a
+// paidAmount but no stored orderAmount (e.g. older sales, or a customer that
+// only just became Tabby/Tamara). Derivation:
+//   netAmount = orderAmount * (1 - FEE_RATE * (1+VAT_RATE)) - FIXED_FEE * (1+VAT_RATE)
+//   netAmount = orderAmount * 0.919615 - 1.725
+//   => orderAmount = (netAmount + 1.725) / 0.919615
+const TABBY_ORDER_MULTIPLIER = 1 - TABBY_FEE_RATE * (1 + TABBY_VAT_RATE);
+const TABBY_ORDER_CONSTANT = TABBY_FIXED_FEE * (1 + TABBY_VAT_RATE);
+
+function reverseTabbyOrderAmount(netAmount) {
+  const net = Number(netAmount) || 0;
+  const orderAmount = (net + TABBY_ORDER_CONSTANT) / TABBY_ORDER_MULTIPLIER;
+  return round2(orderAmount);
+}
+
+// Looks up the customerType of a selected customer from the options list.
+// IMPORTANT: customerOptions items must include a `customerType` field, e.g.
+// { value: customer.id, label: customer.customerName, customerType: customer.customerType }
+const getCustomerType = (id, customerOptions) =>
+  customerOptions?.find((o) => o.value === id)?.customerType;
+
 const compact = {
   control: (b) => ({
     ...b,
@@ -119,6 +172,8 @@ const emptyPartial = (combo = "") => ({
   bCustomerId: "",
   aBankId: "",
   bBankId: "",
+  aOrderAmount: "",
+  bOrderAmount: "",
 });
 
 /* ─── Resolves initial state from sale prop ─────────────────
@@ -138,6 +193,7 @@ function resolveState(sale, sell) {
         amount: String(sale.paidAmount ?? sell),
         customerId: sale.customerId || "",
         bankId: meta.bankId || sale.bankId || "",
+        orderAmount: meta.orderAmount ?? "",
         partial: emptyPartial(),
       };
     }
@@ -146,6 +202,7 @@ function resolveState(sale, sell) {
       amount: "",
       customerId: "",
       bankId: "",
+      orderAmount: "",
       partial: {
         combo: meta.combo ?? "",
         aAmount: String(meta.aAmount ?? ""),
@@ -154,6 +211,8 @@ function resolveState(sale, sell) {
         bCustomerId: meta.bCustomerId ?? "",
         aBankId: meta.aBankId ?? "",
         bBankId: meta.bBankId ?? "",
+        aOrderAmount: meta.aOrderAmount ?? "",
+        bOrderAmount: meta.bOrderAmount ?? "",
       },
     };
   }
@@ -174,6 +233,7 @@ function resolveState(sale, sell) {
       amount: "",
       customerId: "",
       bankId: "",
+      orderAmount: "",
       partial: {
         combo: found?.value ?? "",
         aAmount: String(legA?.amount ?? ""),
@@ -183,6 +243,8 @@ function resolveState(sale, sell) {
         bCustomerId: legB?.customer?.id ?? legB?.customerId ?? "",
         aBankId: legA?.bank?.id ?? legA?.bankId ?? "",
         bBankId: legB?.bank?.id ?? legB?.bankId ?? "",
+        aOrderAmount: "",
+        bOrderAmount: "",
       },
     };
   }
@@ -194,6 +256,7 @@ function resolveState(sale, sell) {
     // ✅ FIX: Prisma returns customer/bank as nested objects on the sale
     customerId: sale.customer?.id ?? sale.customerId ?? "",
     bankId: sale.bank?.id ?? sale.bankId ?? "",
+    orderAmount: "",
     partial: emptyPartial(),
   };
 }
@@ -207,6 +270,8 @@ function SlotFields({
   setCustomerId,
   bankId,
   setBankId,
+  orderAmount,
+  setOrderAmount,
   customerOptions,
   bankOptions,
 }) {
@@ -217,38 +282,51 @@ function SlotFields({
       CREDIT: "bg-violet-50 border-violet-200",
     }[methodValue] ?? "bg-slate-50 border-slate-200";
 
+  // Only the CREDIT slot has a customer selector, so this is the only
+  // place we need to detect a Tabby/Tamara customer.
+  const selectedCustomerType =
+    methodValue === "CREDIT"
+      ? getCustomerType(customerId, customerOptions)
+      : null;
+  const isTabbyOrTamara = selectedCustomerType === "TABBY_OR_TAMARA";
+
+  const tabbyCalc = useMemo(() => {
+    if (!isTabbyOrTamara || !orderAmount) return null;
+    return calculateTabbyNetAmount(orderAmount);
+  }, [isTabbyOrTamara, orderAmount]);
+
+  // Seed Order Amount by reverse-calculating it from an already-known Amount.
+  // This only fires once per slot (guarded by the ref) so it doesn't fight
+  // with the forward auto-fill effect below once Order Amount has a value.
+  const seededOrderAmount = useRef(false);
+  useEffect(() => {
+    if (
+      isTabbyOrTamara &&
+      !orderAmount &&
+      Number(amount) > 0 &&
+      !seededOrderAmount.current
+    ) {
+      seededOrderAmount.current = true;
+      setOrderAmount(String(reverseTabbyOrderAmount(amount)));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTabbyOrTamara, orderAmount, amount]);
+
+  // Auto-fill Amount whenever the Order Amount (or the fee calc) changes.
+  useEffect(() => {
+    if (isTabbyOrTamara && tabbyCalc) {
+      setAmount(String(tabbyCalc.amount));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTabbyOrTamara, tabbyCalc]);
+
   return (
     <div className={`space-y-2 p-3 rounded-lg border ${slotColor}`}>
       <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
         {METHOD_META[methodValue]?.label}
       </p>
-      <div className="space-y-1">
-        <Label className="text-xs font-medium text-slate-600">
-          Amount <SaudiRiyal size={11} className="inline" />
-        </Label>
-        <Input
-          type="number"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          placeholder="0.00"
-          className="h-8 text-sm"
-        />
-      </div>
-      {methodValue === "BANK_TRANSFER" && (
-        <div className="space-y-1">
-          <Label className="text-xs font-medium text-slate-600">
-            Bank Account *
-          </Label>
-          <Select
-            options={bankOptions}
-            value={bankOptions?.find((o) => o.value === bankId) || null}
-            onChange={(o) => setBankId(o?.value || "")}
-            placeholder="Select bank"
-            menuPortalTarget={document.body}
-            styles={compact}
-          />
-        </div>
-      )}
+
+      {/* Customer selector sits at the TOP of the slot, above Amount */}
       {methodValue === "CREDIT" && (
         <div className="space-y-1">
           <Label className="text-xs font-medium text-slate-600">
@@ -259,6 +337,89 @@ function SlotFields({
             value={customerOptions?.find((o) => o.value === customerId) || null}
             onChange={(o) => setCustomerId(o?.value || "")}
             placeholder="Select customer"
+            menuPortalTarget={document.body}
+            styles={compact}
+          />
+        </div>
+      )}
+
+      {/* Order Amount — appears as soon as a Tabby/Tamara customer is picked */}
+      {methodValue === "CREDIT" && isTabbyOrTamara && (
+        <div className="space-y-2 p-3 rounded-lg border bg-fuchsia-50 border-fuchsia-200">
+          <p className="text-xs font-semibold text-fuchsia-700 uppercase tracking-wide">
+            Tabby / Tamara — Order Amount
+          </p>
+          <div className="space-y-1">
+            <Label className="text-xs font-medium text-slate-600">
+              Order Amount <SaudiRiyal size={11} className="inline" />
+            </Label>
+            <Input
+              type="number"
+              value={orderAmount}
+              onChange={(e) => setOrderAmount(e.target.value)}
+              placeholder="e.g. 1000"
+              className="h-8 text-sm bg-white"
+              autoFocus
+            />
+          </div>
+
+          {tabbyCalc && (
+            <div className="text-xs text-slate-600 space-y-1 pt-2 border-t border-fuchsia-200">
+              <div className="flex justify-between">
+                <span>Fee (6.99% + 1.5 SAR)</span>
+                <span className="font-medium">
+                  {tabbyCalc.deducted.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>VAT (15% of fee)</span>
+                <span className="font-medium">{tabbyCalc.vat.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Total deduction</span>
+                <span className="font-medium">
+                  {tabbyCalc.totalDeduction.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm font-semibold text-fuchsia-700 pt-1 border-t border-fuchsia-200 mt-1">
+                <span>Net Amount</span>
+                <span>{tabbyCalc.amount.toFixed(2)}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="space-y-1">
+        <Label className="text-xs font-medium text-slate-600">
+          Amount <SaudiRiyal size={11} className="inline" />
+          {isTabbyOrTamara && (
+            <span className="ml-1 font-normal normal-case text-slate-400">
+              (auto-calculated)
+            </span>
+          )}
+        </Label>
+        <Input
+          type="number"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          placeholder="0.00"
+          className={`h-8 text-sm ${isTabbyOrTamara ? "bg-slate-100 cursor-not-allowed text-slate-500" : ""}`}
+          readOnly={isTabbyOrTamara}
+          disabled={isTabbyOrTamara}
+        />
+      </div>
+
+      {methodValue === "BANK_TRANSFER" && (
+        <div className="space-y-1">
+          <Label className="text-xs font-medium text-slate-600">
+            Bank Account *
+          </Label>
+          <Select
+            options={bankOptions}
+            value={bankOptions?.find((o) => o.value === bankId) || null}
+            onChange={(o) => setBankId(o?.value || "")}
+            placeholder="Select bank"
             menuPortalTarget={document.body}
             styles={compact}
           />
@@ -294,10 +455,28 @@ export default function EditPaymentDialog({
     (Number(s.partial.aAmount) || 0) + (Number(s.partial.bAmount) || 0);
   const partialRemaining = sell - partialTotal;
 
+  // Tabby/Tamara detection — non-partial CREDIT slot
+  const isTabbyOrTamara =
+    s.mode === "CREDIT" &&
+    getCustomerType(s.customerId, customerOptions) === "TABBY_OR_TAMARA";
+
+  // Tabby/Tamara detection — per leg, for Partial combos that include CREDIT
+  const aIsTabbyOrTamara =
+    selectedCombo?.a === "CREDIT" &&
+    getCustomerType(s.partial.aCustomerId, customerOptions) ===
+      "TABBY_OR_TAMARA";
+  const bIsTabbyOrTamara =
+    selectedCombo?.b === "CREDIT" &&
+    getCustomerType(s.partial.bCustomerId, customerOptions) ===
+      "TABBY_OR_TAMARA";
+
   /* ── Validation ── */
   const isValid = () => {
     if (!s.mode) return false;
     if (s.mode === "CREDIT" && !s.customerId) return false;
+    if (s.mode === "CREDIT" && isTabbyOrTamara) {
+      if (!s.orderAmount || Number(s.orderAmount) <= 0) return false;
+    }
     if (s.mode === "BANK_TRANSFER" && !s.bankId) return false;
     if (s.mode === "PARTIAL") {
       if (!s.partial.combo || !s.partial.aAmount || !s.partial.bAmount)
@@ -307,6 +486,16 @@ export default function EditPaymentDialog({
       if (selectedCombo?.a === "BANK_TRANSFER" && !s.partial.aBankId)
         return false;
       if (selectedCombo?.b === "BANK_TRANSFER" && !s.partial.bBankId)
+        return false;
+      if (
+        aIsTabbyOrTamara &&
+        (!s.partial.aOrderAmount || Number(s.partial.aOrderAmount) <= 0)
+      )
+        return false;
+      if (
+        bIsTabbyOrTamara &&
+        (!s.partial.bOrderAmount || Number(s.partial.bOrderAmount) <= 0)
+      )
         return false;
     }
     return true;
@@ -318,7 +507,16 @@ export default function EditPaymentDialog({
       s.mode !== "PARTIAL"
         ? {
             paymentType: s.mode,
-            paymentMeta: { type: s.mode, bankId: s.bankId || null },
+            paymentMeta: {
+              type: s.mode,
+              bankId: s.bankId || null,
+              ...(isTabbyOrTamara
+                ? {
+                    orderAmount: s.orderAmount,
+                    feeBreakdown: calculateTabbyNetAmount(s.orderAmount),
+                  }
+                : {}),
+            },
             customerId: s.mode === "CREDIT" ? s.customerId : "",
             bankId: s.mode === "BANK_TRANSFER" ? s.bankId : null,
             paidAmount: s.amount || String(sell),
@@ -337,6 +535,22 @@ export default function EditPaymentDialog({
               bCustomerId: s.partial.bCustomerId || null,
               aBankId: s.partial.aBankId || null,
               bBankId: s.partial.bBankId || null,
+              ...(aIsTabbyOrTamara
+                ? {
+                    aOrderAmount: s.partial.aOrderAmount,
+                    aFeeBreakdown: calculateTabbyNetAmount(
+                      s.partial.aOrderAmount,
+                    ),
+                  }
+                : {}),
+              ...(bIsTabbyOrTamara
+                ? {
+                    bOrderAmount: s.partial.bOrderAmount,
+                    bFeeBreakdown: calculateTabbyNetAmount(
+                      s.partial.bOrderAmount,
+                    ),
+                  }
+                : {}),
             },
             customerId: s.partial.aCustomerId || s.partial.bCustomerId || "",
             bankId: null,
@@ -398,6 +612,7 @@ export default function EditPaymentDialog({
                       amount: "",
                       customerId: "",
                       bankId: "",
+                      orderAmount: "",
                       partial: emptyPartial(),
                     })
                   }
@@ -441,8 +656,12 @@ export default function EditPaymentDialog({
               amount={s.amount}
               setAmount={(v) => patch({ amount: v })}
               customerId={s.customerId}
-              setCustomerId={(v) => patch({ customerId: v })}
+              setCustomerId={(v) =>
+                patch({ customerId: v, orderAmount: "" }) // fresh order amount whenever the customer changes
+              }
               customerOptions={customerOptions}
+              orderAmount={s.orderAmount}
+              setOrderAmount={(v) => patch({ orderAmount: v })}
             />
           )}
 
@@ -485,11 +704,21 @@ export default function EditPaymentDialog({
                     }
                     customerId={s.partial.aCustomerId}
                     setCustomerId={(v) =>
-                      patch({ partial: { ...s.partial, aCustomerId: v } })
+                      patch({
+                        partial: {
+                          ...s.partial,
+                          aCustomerId: v,
+                          aOrderAmount: "",
+                        },
+                      })
                     }
                     bankId={s.partial.aBankId}
                     setBankId={(v) =>
                       patch({ partial: { ...s.partial, aBankId: v } })
+                    }
+                    orderAmount={s.partial.aOrderAmount}
+                    setOrderAmount={(v) =>
+                      patch({ partial: { ...s.partial, aOrderAmount: v } })
                     }
                     customerOptions={customerOptions}
                     bankOptions={bankOptions}
@@ -502,11 +731,21 @@ export default function EditPaymentDialog({
                     }
                     customerId={s.partial.bCustomerId}
                     setCustomerId={(v) =>
-                      patch({ partial: { ...s.partial, bCustomerId: v } })
+                      patch({
+                        partial: {
+                          ...s.partial,
+                          bCustomerId: v,
+                          bOrderAmount: "",
+                        },
+                      })
                     }
                     bankId={s.partial.bBankId}
                     setBankId={(v) =>
                       patch({ partial: { ...s.partial, bBankId: v } })
+                    }
+                    orderAmount={s.partial.bOrderAmount}
+                    setOrderAmount={(v) =>
+                      patch({ partial: { ...s.partial, bOrderAmount: v } })
                     }
                     customerOptions={customerOptions}
                     bankOptions={bankOptions}

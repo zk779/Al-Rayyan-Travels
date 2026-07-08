@@ -204,6 +204,7 @@ export default function EditSalesTab({ saleId }) {
   const customerOptions = customers.map((c) => ({
     value: c.id,
     label: c.customerName,
+    customerType: c.customerType,
   }));
   const bankOptions = banks.map((b) => ({
     value: b.id,

@@ -34,6 +34,7 @@ import {
   TrendingUp,
   UserCheck,
   SaudiRiyal,
+  Wallet,
 } from "lucide-react";
 import { appToast } from "../../shadcn/components/ui/appToast"; // adjust path as needed
 import CustomAlertDialog from "../components/CustomAlertDialog"; // adjust path as needed
@@ -42,6 +43,34 @@ const { Option } = Select;
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 const API_URL = `${API_BASE}/api/customers`;
+
+// Central place to describe each CustomerType enum value.
+// Add/remove an entry here whenever the Prisma enum changes — nothing
+// else in the component needs to know about the raw enum values.
+const CUSTOMER_TYPE_META = {
+  WALK_IN: {
+    label: "Walk In",
+    tagColor: "green",
+    icon: Users,
+  },
+  CORPORATE: {
+    label: "Corporate",
+    tagColor: "blue",
+    icon: Building2,
+  },
+  TABBY_OR_TAMARA: {
+    label: "Tabby / Tamara",
+    tagColor: "purple",
+    icon: Wallet,
+  },
+};
+
+const getCustomerTypeMeta = (type) =>
+  CUSTOMER_TYPE_META[type] || {
+    label: type || "Unknown",
+    tagColor: "default",
+    icon: Users,
+  };
 
 const CustomersPage = () => {
   const [customers, setCustomers] = useState([]);
@@ -173,6 +202,9 @@ const CustomersPage = () => {
   const corporateCustomers = customers.filter(
     (c) => c.customerType === "CORPORATE",
   ).length;
+  const TABBY_OR_TAMARACustomers = customers.filter(
+    (c) => c.customerType === "TABBY_OR_TAMARA",
+  ).length;
 
   /* ========================= MODAL ========================= */
   const showModal = (customer = null) => {
@@ -301,34 +333,31 @@ const CustomersPage = () => {
     {
       title: "Customer Details",
       width: "30%",
-      render: (_, record) => (
-        <div className="py-2">
-          <div className="flex items-start gap-3">
-            <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-3 rounded-lg">
-              {record.customerType === "CORPORATE" ? (
-                <Building2 className="w-5 h-5 text-white" />
-              ) : (
-                <Users className="w-5 h-5 text-white" />
-              )}
-            </div>
-            <div>
-              <div className="font-semibold text-gray-900 text-base mb-1">
-                {record.customerName}
+      render: (_, record) => {
+        const meta = getCustomerTypeMeta(record.customerType);
+        const TypeIcon = meta.icon;
+        return (
+          <div className="py-2">
+            <div className="flex items-start gap-3">
+              <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-3 rounded-lg">
+                <TypeIcon className="w-5 h-5 text-white" />
               </div>
-              <Tag
-                color={record.customerType === "CORPORATE" ? "blue" : "green"}
-                className="text-xs"
-              >
-                {record.customerType === "CORPORATE" ? "Corporate" : "Walk In"}
-              </Tag>
-              <div className="text-sm text-gray-600 mt-2">
-                <UserCheck className="w-3 h-3 inline mr-1" />
-                {record.contactPerson}
+              <div>
+                <div className="font-semibold text-gray-900 text-base mb-1">
+                  {record.customerName}
+                </div>
+                <Tag color={meta.tagColor} className="text-xs">
+                  {meta.label}
+                </Tag>
+                <div className="text-sm text-gray-600 mt-2">
+                  <UserCheck className="w-3 h-3 inline mr-1" />
+                  {record.contactPerson}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      ),
+        );
+      },
     },
     {
       title: "Contact Information",
@@ -525,11 +554,12 @@ const CustomersPage = () => {
             value={filterType}
             onChange={setFilterType}
             allowClear
-            className="w-40"
+            className="w-44"
             size="large"
           >
             <Option value="WALK_IN">Walk In</Option>
             <Option value="CORPORATE">Corporate</Option>
+            <Option value="TABBY_OR_TAMARA">Tabby / Tamara</Option>
           </Select>
           <Select
             placeholder="Status"
@@ -649,6 +679,7 @@ const CustomersPage = () => {
               <Select placeholder="Select type" size="large">
                 <Option value="WALK_IN">Walk In Customer</Option>
                 <Option value="CORPORATE">Corporate Client</Option>
+                <Option value="TABBY_OR_TAMARA">Tabby / Tamara</Option>
               </Select>
             </Form.Item>
             <Form.Item

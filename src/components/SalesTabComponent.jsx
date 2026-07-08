@@ -380,6 +380,7 @@ export default function SalesTabComponent() {
   const customerOptions = customers.map((c) => ({
     value: c.id,
     label: c.customerName,
+    customerType: c.customerType,
   }));
 
   /* ── Totals ── */
