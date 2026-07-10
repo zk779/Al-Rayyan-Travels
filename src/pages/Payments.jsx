@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { Button } from "../../shadcn/components/ui/button";
-import { Input } from "../../shadcn/components/ui/input";
 import { Card, CardContent } from "../../shadcn/components/ui/card";
 import {
   Tabs,
@@ -10,20 +9,6 @@ import {
   TabsList,
   TabsTrigger,
 } from "../../shadcn/components/ui/tabs";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "../../shadcn/components/ui/table";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "../../shadcn/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
@@ -37,17 +22,10 @@ import {
   SheetTitle,
 } from "../../shadcn/components/ui/sheet";
 import { Skeleton } from "../../shadcn/components/ui/skeleton";
+import { cn } from "../../shadcn/lib/utils";
 import {
-  Plus,
-  Search,
-  MoreVertical,
-  Edit2,
-  Trash2,
   Building2,
   User,
-  Banknote,
-  CreditCard,
-  Eye,
   TrendingUp,
   TrendingDown,
   DollarSign,
@@ -57,14 +35,16 @@ import {
   Paperclip,
   ExternalLink,
 } from "lucide-react";
-import { cn } from "../../shadcn/lib/utils";
-import DepositTabComponent from "./NewPayments";
+import PaymentsTable, { MethodBadge, CategoryBadge } from "../components/PaymentsTable";
 
 // TODO: point this at your existing edit-payment component. It's assumed to
 // accept { payment, onClose, onSuccess } — adjust the import path and props
 // below to match whatever you actually built. Paste that file's code and I'll
 // wire this up exactly.
-import EditPaymentDialog from "./EditPayment";
+import EditVendorPayment from "./EditVendorPayment";
+import EditCustomerPayment from "./EditCustomerPayment";
+import VendorDepositTab from "../components/PaymentComponents/VendorPayment";
+import CustomerDepositTab from "../components/PaymentComponents/CustomerPayment";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
@@ -137,72 +117,6 @@ function StatCard({ label, value, sub, icon: Icon, trend }) {
         </div>
       </CardContent>
     </Card>
-  );
-}
-
-function MethodBadge({ method }) {
-  return method === "BANK_TRANSFER" ? (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
-      <CreditCard className="h-3 w-3" /> Bank
-    </span>
-  ) : (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700">
-      <Banknote className="h-3 w-3" /> Cash
-    </span>
-  );
-}
-
-function CategoryBadge({ category }) {
-  if (!category) return null;
-  return category === "DEBIT" ? (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-rose-50 text-rose-600">
-      Debit
-    </span>
-  ) : (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-600">
-      Credit
-    </span>
-  );
-}
-
-// Small identity avatar so rows read at a glance, like most modern
-// finance/CRM tables (Stripe, Linear, etc).
-function InitialsAvatar({ name, isVendor }) {
-  const initials =
-    name
-      ?.split(" ")
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((w) => w[0])
-      .join("")
-      .toUpperCase() || "?";
-  return (
-    <div
-      className={cn(
-        "w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-semibold text-white flex-shrink-0 shadow-sm",
-        isVendor
-          ? "bg-gradient-to-br from-violet-500 to-violet-600"
-          : "bg-gradient-to-br from-sky-500 to-sky-600",
-      )}
-    >
-      {initials}
-    </div>
-  );
-}
-
-function TableSkeleton({ cols }) {
-  return (
-    <>
-      {[...Array(4)].map((_, i) => (
-        <TableRow key={i}>
-          {[...Array(cols)].map((__, j) => (
-            <TableCell key={j}>
-              <Skeleton className="h-4 w-full" />
-            </TableCell>
-          ))}
-        </TableRow>
-      ))}
-    </>
   );
 }
 
@@ -487,269 +401,60 @@ function DeleteConfirmDialog({
   );
 }
 
-// ─── Payments Table ───────────────────────────────────────────────────────────
-const COL_COUNT = 8; // party, [category|bank], amount, date, method, attachment, remarks, actions
-
-function PaymentsTable({
-  partyType,
-  payments,
-  loading,
-  search,
-  onSearch,
-  onAdd,
-  onView,
-  onEdit,
-  onDelete,
-  onPreview,
-}) {
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase();
-    return payments.filter((p) => {
-      const name = p.vendor?.vendorName ?? p.customer?.customerName ?? "";
-      return (
-        name.toLowerCase().includes(q) ||
-        p.method.toLowerCase().includes(q) ||
-        String(p.amount).includes(q) ||
-        (p.remarks ?? "").toLowerCase().includes(q)
-      );
-    });
-  }, [payments, search]);
-
+// ─── Add Payment Dialog ────────────────────────────────────────────────────────
+// Renders VendorDepositTab or CustomerDepositTab depending on which
+// partyType tab the "Add Payment" button was clicked from.
+function AddPaymentDialog({ partyType, open, onClose, onSuccess }) {
   const isVendor = partyType === "VENDOR";
-
   return (
-    <div className="space-y-4">
-      <div className="flex gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <Input
-            placeholder={`Search by ${isVendor ? "vendor" : "customer"}, amount, method…`}
-            className="pl-9 bg-white border-slate-200 focus-visible:ring-slate-400"
-            value={search}
-            onChange={(e) => onSearch(e.target.value)}
-          />
-        </div>
-        <Button
-          onClick={onAdd}
-          className={cn(
-            "gap-2",
-            isVendor
-              ? "bg-sky-600 hover:bg-sky-700"
-              : "bg-violet-600 hover:bg-violet-700",
-          )}
-        >
-          <Plus className="h-4 w-4" />
-          Add Payment
-        </Button>
-      </div>
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-2xl! max-h-[95vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>
+            {isVendor ? "New Vendor Payment" : "New Customer Payment"}
+          </DialogTitle>
+        </DialogHeader>
+        {open &&
+          (isVendor ? (
+            <VendorDepositTab onClose={onClose} onSuccess={onSuccess} />
+          ) : (
+            <CustomerDepositTab onClose={onClose} onSuccess={onSuccess} />
+          ))}
+      </DialogContent>
+    </Dialog>
+  );
+}
 
-      <div className="rounded-2xl border border-slate-100 overflow-hidden bg-white shadow-sm">
-        <div
-          className={cn(
-            "h-1 bg-gradient-to-r",
-            isVendor
-              ? "from-sky-500 to-blue-500"
-              : "from-violet-500 to-purple-500",
-          )}
-        />
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-slate-50 hover:bg-slate-50 border-slate-100">
-              <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                {isVendor ? "Vendor" : "Customer"}
-              </TableHead>
-              {isVendor && (
-                <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  Category
-                </TableHead>
-              )}
-              <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">
-                Amount
-              </TableHead>
-              <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                Date
-              </TableHead>
-              <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                Method
-              </TableHead>
-              {!isVendor && (
-                <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  Bank
-                </TableHead>
-              )}
-              <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                Attachment
-              </TableHead>
-              <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                Remarks
-              </TableHead>
-              <TableHead className="w-10" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading && <TableSkeleton cols={COL_COUNT} />}
 
-            {!loading &&
-              filtered.map((p) => (
-                <TableRow
-                  key={p.id}
-                  className="hover:bg-slate-50/70 cursor-pointer border-slate-50 group transition-colors"
-                  onClick={() => onView(p)}
-                >
-                  <TableCell>
-                    <div className="flex items-center gap-2.5">
-                      <InitialsAvatar
-                        name={p.vendor?.vendorName ?? p.customer?.customerName}
-                        isVendor={isVendor}
-                      />
-                      <span className="text-sm font-medium text-slate-800">
-                        {p.vendor?.vendorName ??
-                          p.customer?.customerName ??
-                          "—"}
-                      </span>
-                    </div>
-                  </TableCell>
-
-                  {isVendor && (
-                    <TableCell>
-                      <CategoryBadge category={p.vendor?.category} />
-                    </TableCell>
-                  )}
-
-                  <TableCell className="text-right">
-                    <span className="text-sm font-semibold text-slate-900 tabular-nums">
-                      SAR{" "}
-                      {p.amount.toLocaleString("en-US", {
-                        minimumFractionDigits: 2,
-                      })}
-                    </span>
-                  </TableCell>
-
-                  <TableCell>
-                    <span className="text-sm text-slate-500">
-                      {new Date(p.transactionDate).toLocaleDateString("en-GB", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric",
-                      })}
-                    </span>
-                  </TableCell>
-
-                  <TableCell>
-                    <MethodBadge method={p.method} />
-                  </TableCell>
-
-                  {!isVendor && (
-                    <TableCell>
-                      <span className="text-sm text-slate-500">
-                        {p.bank?.bankName ?? "—"}
-                      </span>
-                    </TableCell>
-                  )}
-
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    {p.attachmentUrl ? (
-                      <button
-                        onClick={() => onPreview(p.attachmentUrl)}
-                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
-                      >
-                        <Paperclip className="h-3.5 w-3.5" /> View
-                      </button>
-                    ) : (
-                      <span className="text-xs text-slate-300">—</span>
-                    )}
-                  </TableCell>
-
-                  <TableCell>
-                    <span
-                      className="text-sm text-slate-400 truncate max-w-[140px] block"
-                      title={p.remarks || undefined}
-                    >
-                      {p.remarks || "—"}
-                    </span>
-                  </TableCell>
-
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0"
-                        >
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => onView(p)}>
-                          <Eye className="h-4 w-4 mr-2" /> View Details
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onEdit(p)}>
-                          <Edit2 className="h-4 w-4 mr-2" /> Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => onDelete(p)}
-                          className="text-red-600 focus:text-red-600"
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" /> Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))}
-
-            {!loading && filtered.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={COL_COUNT} className="text-center py-16">
-                  <div className="flex flex-col items-center gap-3 text-slate-400">
-                    <FileText className="h-8 w-8 opacity-40" />
-                    <p className="text-sm">No payments found.</p>
-                    {search ? (
-                      <p className="text-xs">
-                        Try adjusting your search query.
-                      </p>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={onAdd}
-                        className="gap-2 mt-1"
-                      >
-                        <Plus className="h-3.5 w-3.5" /> Add your first payment
-                      </Button>
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
-
-      {!loading && filtered.length > 0 && (
-        <p className="text-xs text-slate-400 text-right">
-          Showing {filtered.length} of {payments.length} payments
-        </p>
-      )}
-    </div>
+// ─── Edit Payment Dialog ───────────────────────────────────────────────────────
+// Renders EditVendorPayment or EditCustomerPayment depending on the payment's partyType.
+function EditPaymentDialog({ payment, onClose, onSuccess }) {
+  if (!payment) return null;
+  return payment.partyType === "VENDOR" ? (
+    <EditVendorPayment payment={payment} onClose={onClose} onSuccess={onSuccess} />
+  ) : (
+    <EditCustomerPayment payment={payment} onClose={onClose} onSuccess={onSuccess} />
   );
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function PaymentPage() {
+
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchVendor, setSearchVendor] = useState("");
   const [searchCustomer, setSearchCustomer] = useState("");
-  const [addMode, setAddMode] = useState(null); // "vendor" | "customer" | null
   const [editTarget, setEditTarget] = useState(null); // full payment object | null
   const [drawerPaymentId, setDrawerPaymentId] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState(null);
+
+  // Add-payment dialog: which partyType tab triggered it ("VENDOR" | "CUSTOMER" | null)
+  const [addPartyType, setAddPartyType] = useState(null);
+  const addDialogOpen = addPartyType !== null;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -775,10 +480,7 @@ export default function PaymentPage() {
   // Re-running this after every overlay-open-state change, shortly after the
   // close animation finishes, guarantees it always gets cleaned up.
   const anyOverlayOpen =
-    drawerOpen ||
-    addMode !== null ||
-    editTarget !== null ||
-    deleteTarget !== null;
+    drawerOpen || editTarget !== null || deleteTarget !== null || addDialogOpen;
   useEffect(() => {
     if (anyOverlayOpen) return;
     const timer = setTimeout(() => {
@@ -823,13 +525,13 @@ export default function PaymentPage() {
     }
   };
 
-  const handleAddSuccess = () => {
-    setAddMode(null);
+  const handleEditSuccess = () => {
+    setEditTarget(null);
     load();
   };
 
-  const handleEditSuccess = () => {
-    setEditTarget(null);
+  const handleAddSuccess = () => {
+    setAddPartyType(null);
     load();
   };
 
@@ -940,7 +642,7 @@ export default function PaymentPage() {
               loading={loading}
               search={searchVendor}
               onSearch={setSearchVendor}
-              onAdd={() => setAddMode("vendor")}
+              onAdd={() => setAddPartyType("VENDOR")}
               onView={handleView}
               onEdit={setEditTarget}
               onDelete={setDeleteTarget}
@@ -955,7 +657,7 @@ export default function PaymentPage() {
               loading={loading}
               search={searchCustomer}
               onSearch={setSearchCustomer}
-              onAdd={() => setAddMode("customer")}
+              onAdd={() => setAddPartyType("CUSTOMER")}
               onView={handleView}
               onEdit={setEditTarget}
               onDelete={setDeleteTarget}
@@ -965,47 +667,32 @@ export default function PaymentPage() {
         </Tabs>
       </div>
 
-      {/* Add dialog */}
+      {/* Add payment dialog — Vendor or Customer flow, based on which tab triggered it */}
+      <AddPaymentDialog
+        partyType={addPartyType}
+        open={addDialogOpen}
+        onClose={() => setAddPartyType(null)}
+        onSuccess={handleAddSuccess}
+      />
       <Dialog
-        open={addMode !== null}
-        onOpenChange={(o) => !o && setAddMode(null)}
-      >
-        <DialogContent className="max-w-4xl! max-h-[97vh] overflow-y-auto">
-          <DialogHeader>
+         open={editTarget !== null}
+         onOpenChange={(o) => !o && setEditTarget(null)}
+       >
+         <DialogContent className="max-w-4xl! max-h-[97vh] overflow-y-auto">
+           <DialogHeader>
             <DialogTitle>
-              {addMode === "vendor"
-                ? "New Vendor Payment"
-                : "New Customer Payment"}
+              {editTarget?.partyType === "VENDOR" ? "Edit Vendor Payment" : "Edit Customer Payment"}
             </DialogTitle>
-          </DialogHeader>
-          {addMode && (
-            <DepositTabComponent
-              mode={addMode}
-              onClose={() => setAddMode(null)}
-              onSuccess={handleAddSuccess}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit dialog */}
-      <Dialog
-        open={editTarget !== null}
-        onOpenChange={(o) => !o && setEditTarget(null)}
-      >
-        <DialogContent className="max-w-4xl! max-h-[97vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Edit Payment</DialogTitle>
-          </DialogHeader>
-          {editTarget && (
-            <EditPaymentDialog
-              payment={editTarget}
-              onClose={() => setEditTarget(null)}
-              onSuccess={handleEditSuccess}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
+           </DialogHeader>
+           {editTarget && (
+             <EditPaymentDialog
+               payment={editTarget}
+               onClose={() => setEditTarget(null)}
+               onSuccess={handleEditSuccess}
+             />
+           )}
+         </DialogContent>
+       </Dialog>
 
       {/* Detail drawer */}
       <PaymentDetailDrawer
