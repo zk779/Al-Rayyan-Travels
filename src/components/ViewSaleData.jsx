@@ -120,83 +120,83 @@ function buildSections(invoice, sale) {
   if (!sale) return [];
   const sections = [];
 
-  sections.push({
-    key: "invoice",
-    label: "Invoice",
-    icon: FileText,
-    tint: "sky",
-    content: (
-      <div className="grid grid-cols-2 gap-2.5">
-        <Field label="Invoice No." value={invoice?.invoiceNo} icon={Hash} mono />
-        <Field
-          label="Sale Date"
-          icon={Calendar}
-          value={invoice?.saleDate ? format(new Date(invoice.saleDate), "MMM dd, yyyy") : null}
-        />
-        <Field label="Total Items" value={invoice?.salesCount ?? invoice?.sales?.length ?? "-"} />
-      </div>
-    ),
-  });
+  // sections.push({
+  //   key: "invoice",
+  //   label: "Invoice",
+  //   icon: FileText,
+  //   tint: "sky",
+  //   content: (
+  //     <div className="grid grid-cols-2 gap-2.5">
+  //       <Field label="Invoice No." value={invoice?.invoiceNo} icon={Hash} mono />
+  //       <Field
+  //         label="Sale Date"
+  //         icon={Calendar}
+  //         value={invoice?.saleDate ? format(new Date(invoice.saleDate), "MMM dd, yyyy") : null}
+  //       />
+  //       <Field label="Total Items" value={invoice?.salesCount ?? invoice?.sales?.length ?? "-"} />
+  //     </div>
+  //   ),
+  // });
 
-  sections.push({
-    key: "createdBy",
-    label: "Created By",
-    icon: User,
-    tint: "slate",
-    content: (
-      <div className="grid grid-cols-2 gap-2.5">
-        <Field label="Agent" value={invoice?.createdByName ?? sale.agent} icon={User} />
-        <Field label="Email" value={invoice?.createdByEmail} icon={Mail} />
-        <Field
-          label="Created At"
-          icon={Clock}
-          value={invoice?.createdAt ? format(new Date(invoice.createdAt), "MMM dd, yyyy HH:mm") : null}
-        />
-      </div>
-    ),
-  });
+  // sections.push({
+  //   key: "createdBy",
+  //   label: "Created By",
+  //   icon: User,
+  //   tint: "slate",
+  //   content: (
+  //     <div className="grid grid-cols-2 gap-2.5">
+  //       <Field label="Agent" value={invoice?.createdByName ?? sale.agent} icon={User} />
+  //       <Field label="Email" value={invoice?.createdByEmail} icon={Mail} />
+  //       <Field
+  //         label="Created At"
+  //         icon={Clock}
+  //         value={invoice?.createdAt ? format(new Date(invoice.createdAt), "MMM dd, yyyy HH:mm") : null}
+  //       />
+  //     </div>
+  //   ),
+  // });
 
-  sections.push({
-    key: "transaction",
-    label: "Transaction",
-    icon: CreditCard,
-    tint: "violet",
-    full: true,
-    content: (
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5">
-        <Field label="Document No." value={sale.documentNo} icon={Hash} mono />
-        <Field label="Airline" value={sale.airlineCode} />
-        <Field label="Vendor" value={sale.vendorName} />
-        <div className="min-w-0">
-          <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1">Payment Type</p>
-          {pill(sale.paymentType, paymentTypeColor)}
-        </div>
-        <div className="min-w-0">
-          <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1">Payment Status</p>
-          {pill(sale.paymentStatus, statusColor)}
-        </div>
-        <div className="min-w-0">
-          <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1">Sale Status</p>
-          {pill(sale.status, statusColor)}
-        </div>
-      </div>
-    ),
-  });
+  // sections.push({
+  //   key: "transaction",
+  //   label: "Transaction",
+  //   icon: CreditCard,
+  //   tint: "violet",
+  //   full: true,
+  //   content: (
+  //     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5">
+  //       <Field label="Document No." value={sale.documentNo} icon={Hash} mono />
+  //       <Field label="Airline" value={sale.airlineCode} />
+  //       <Field label="Vendor" value={sale.vendorName} />
+  //       <div className="min-w-0">
+  //         <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1">Payment Type</p>
+  //         {pill(sale.paymentType, paymentTypeColor)}
+  //       </div>
+  //       <div className="min-w-0">
+  //         <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1">Payment Status</p>
+  //         {pill(sale.paymentStatus, statusColor)}
+  //       </div>
+  //       <div className="min-w-0">
+  //         <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1">Sale Status</p>
+  //         {pill(sale.status, statusColor)}
+  //       </div>
+  //     </div>
+  //   ),
+  // });
 
-  if (sale.customerId) {
-    sections.push({
-      key: "customer",
-      label: "Customer",
-      icon: User,
-      tint: "violet",
-      content: (
-        <div className="grid grid-cols-2 gap-2.5">
-          <Field label="Name" value={sale.customerName} icon={User} />
-          <Field label="Phone" value={sale.customerPhone} icon={Phone} mono />
-        </div>
-      ),
-    });
-  }
+  // if (sale.customerId) {
+  //   sections.push({
+  //     key: "customer",
+  //     label: "Customer",
+  //     icon: User,
+  //     tint: "violet",
+  //     content: (
+  //       <div className="grid grid-cols-2 gap-2.5">
+  //         <Field label="Name" value={sale.customerName} icon={User} />
+  //         <Field label="Phone" value={sale.customerPhone} icon={Phone} mono />
+  //       </div>
+  //     ),
+  //   });
+  // }
 
   sections.push({
     key: "financial",
@@ -217,25 +217,25 @@ function buildSections(invoice, sale) {
     ),
   });
 
-  if (invoice?.totalNet != null || invoice?.totalSell != null || invoice?.totalProfit != null) {
-    sections.push({
-      key: "invoiceTotals",
-      label: "Invoice Totals",
-      icon: TrendingUp,
-      tint: "slate",
-      content: (
-        <div className="grid grid-cols-3 gap-2">
-          <StatBlock label="Total Net" value={money(invoice.totalNet)} />
-          <StatBlock label="Total Sell" value={money(invoice.totalSell)} />
-          <StatBlock
-            label="Total Profit"
-            value={`${invoice.totalProfit < 0 ? "-" : ""}${money(invoice.totalProfit)}`}
-            tone={invoice.totalProfit < 0 ? "rose" : "emerald"}
-          />
-        </div>
-      ),
-    });
-  }
+  // if (invoice?.totalNet != null || invoice?.totalSell != null || invoice?.totalProfit != null) {
+  //   sections.push({
+  //     key: "invoiceTotals",
+  //     label: "Invoice Totals",
+  //     icon: TrendingUp,
+  //     tint: "slate",
+  //     content: (
+  //       <div className="grid grid-cols-3 gap-2">
+  //         <StatBlock label="Total Net" value={money(invoice.totalNet)} />
+  //         <StatBlock label="Total Sell" value={money(invoice.totalSell)} />
+  //         <StatBlock
+  //           label="Total Profit"
+  //           value={`${invoice.totalProfit < 0 ? "-" : ""}${money(invoice.totalProfit)}`}
+  //           tone={invoice.totalProfit < 0 ? "rose" : "emerald"}
+  //         />
+  //       </div>
+  //     ),
+  //   });
+  // }
 
   if (sale.isRefund) {
     sections.push({
@@ -275,7 +275,7 @@ export default function SaleExpandedDetails({ invoice, sale }) {
 
   return (
     <div className="py-3 px-4">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
+      <div className="grid grid-cols-1 lg:grid-cols-1 gap-2.5">
         {sections.map((sec) => {
           const t = TINT[sec.tint] ?? TINT.slate;
           return (
