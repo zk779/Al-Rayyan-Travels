@@ -162,6 +162,10 @@ export default function ExpensePage() {
   };
 
   // Users are only ever needed for SALARY expenses — fetch lazily, once.
+  // NOTE: assumes each user record includes a `branchId` field so we can
+  // filter the list down to the selected branch on the client.
+  // If your API instead supports server-side filtering, replace this with:
+  //   fetch(`${USERS_URL}?branchId=${branchId}`, ...)
   const ensureUsersLoaded = async () => {
     if (usersLoaded || usersLoading) return;
     try {
@@ -193,6 +197,12 @@ export default function ExpensePage() {
   useEffect(() => {
     if (form.category === "SALARY") ensureUsersLoaded();
   }, [form.category]);
+
+  // Users belonging to the currently selected branch only
+  const branchUsers = useMemo(() => {
+    if (!form.branchId) return [];
+    return users.filter((u) => u.branchId === form.branchId);
+  }, [users, form.branchId]);
 
   // ── Derived data ──────────────────────────────────────────────────────
   const filtered = useMemo(() => {
@@ -246,6 +256,16 @@ export default function ExpensePage() {
     setFormError("");
     setFormOpen(true);
     if (expense.category === "SALARY") ensureUsersLoaded();
+  };
+
+  // Selecting a branch invalidates any previously chosen employee,
+  // since that employee may not belong to the new branch.
+  const handleBranchChange = (v) => {
+    setForm((prev) => ({
+      ...prev,
+      branchId: v,
+      userId: "",
+    }));
   };
 
   const handleCategoryChange = (v) => {
@@ -312,8 +332,8 @@ export default function ExpensePage() {
 
   const canSave =
     form.expenseDate &&
-    form.category &&
     form.branchId &&
+    form.category &&
     form.amount &&
     Number(form.amount) > 0 &&
     (form.paymentMode === "CASH" || form.bankId) &&
@@ -567,7 +587,7 @@ export default function ExpensePage() {
 
       {/* Add/Edit dialog */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto p-0 gap-0">
+        <DialogContent className="max-w-4xl! max-h-[90vh] overflow-y-auto p-0 gap-0">
           <DialogHeader className="px-6 pt-6 pb-4 border-b border-slate-100">
             <DialogTitle className="text-xl">
               {editingId ? "Edit Expense" : "Add New Expense"}
@@ -587,6 +607,26 @@ export default function ExpensePage() {
                 Details
               </div>
 
+              {/* Branch — selected first, drives which employees are available */}
+              <div className="space-y-1.5">
+                <Label className="flex items-center gap-1.5">
+                  <Building2 className="h-3.5 w-3.5 text-slate-400" />
+                  Branch
+                </Label>
+                <Select value={form.branchId} onValueChange={handleBranchChange}>
+                  <SelectTrigger  className="w-full">
+                    <SelectValue placeholder="Select branch" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {branches.map((b) => (
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 {/* Category */}
                 <div className="space-y-1.5">
@@ -595,7 +635,7 @@ export default function ExpensePage() {
                     value={form.category}
                     onValueChange={handleCategoryChange}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger  className="w-full">
                       <SelectValue placeholder="Select category" />
                     </SelectTrigger>
                     <SelectContent>
@@ -635,60 +675,49 @@ export default function ExpensePage() {
                 </div>
               </div>
 
-              {/* Employee — only for SALARY */}
+              {/* Employee — only for SALARY, filtered to the selected branch */}
               {form.category === "SALARY" && (
                 <div className="space-y-1.5 rounded-lg border border-indigo-100 bg-indigo-50/50 p-3">
                   <Label className="flex items-center gap-1.5 text-indigo-900">
                     <UserIcon className="h-3.5 w-3.5" />
                     Employee
                   </Label>
-                  <Select
-                    value={form.userId}
-                    onValueChange={(v) => setForm({ ...form, userId: v })}
-                  >
-                    <SelectTrigger className="bg-white">
-                      <SelectValue
-                        placeholder={
-                          usersLoading ? "Loading employees..." : "Select employee"
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {users.map((u) => (
-                        <SelectItem key={u.id} value={u.id}>
-                          {u.fullName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-indigo-700/70">
-                    Required for salary expenses.
-                  </p>
+                  {!form.branchId ? (
+                    <p className="text-xs text-indigo-700/70">
+                      Select a branch first to see its employees.
+                    </p>
+                  ) : (
+                    <>
+                      <Select
+                        value={form.userId}
+                        onValueChange={(v) => setForm({ ...form, userId: v })}
+                      >
+                        <SelectTrigger className="bg-white w-full">
+                          <SelectValue
+                            placeholder={
+                              usersLoading
+                                ? "Loading employees..."
+                                : branchUsers.length === 0
+                                  ? "No employees in this branch"
+                                  : "Select employee"
+                            }
+                          />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {branchUsers.map((u) => (
+                            <SelectItem key={u.id} value={u.id}>
+                              {u.fullName}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-indigo-700/70">
+                        Required for salary expenses.
+                      </p>
+                    </>
+                  )}
                 </div>
               )}
-
-              {/* Branch */}
-              <div className="space-y-1.5">
-                <Label className="flex items-center gap-1.5">
-                  <Building2 className="h-3.5 w-3.5 text-slate-400" />
-                  Branch
-                </Label>
-                <Select
-                  value={form.branchId}
-                  onValueChange={(v) => setForm({ ...form, branchId: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select branch" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {branches.map((b) => (
-                      <SelectItem key={b.id} value={b.id}>
-                        {b.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
 
             {/* ── Section: Payment ── */}
