@@ -15,6 +15,10 @@ import {
   XCircle,
   ChevronDown,
   ChevronUp,
+  Wallet,
+  Building2,
+  Banknote,
+  SplitSquareHorizontal,
 } from "lucide-react";
 import { Badge } from "../../shadcn/components/ui/badge";
 import { TableCell, TableRow } from "../../shadcn/components/ui/table";
@@ -31,6 +35,7 @@ const paymentTypeColor = {
   CASH: "bg-emerald-50 text-emerald-700 border-emerald-200",
   CREDIT: "bg-sky-50 text-sky-700 border-sky-200",
   BANK_TRANSFER: "bg-violet-50 text-violet-700 border-violet-200",
+  PARTIAL: "bg-amber-50 text-amber-700 border-amber-200",
 };
 
 const statusColor = {
@@ -41,6 +46,12 @@ const statusColor = {
   PARTIAL: "bg-amber-50 text-amber-700 border-amber-200",
   REFUNDED: "bg-rose-50 text-rose-700 border-rose-200",
   CANCELLED: "bg-slate-100 text-slate-600 border-slate-200",
+};
+
+const LEG_META = {
+  CASH: { icon: Banknote, chip: "bg-emerald-100 text-emerald-600", border: "border-emerald-200", bg: "bg-emerald-50/60" },
+  BANK_TRANSFER: { icon: Building2, chip: "bg-blue-100 text-blue-600", border: "border-blue-200", bg: "bg-blue-50/60" },
+  CREDIT: { icon: CreditCard, chip: "bg-violet-100 text-violet-600", border: "border-violet-200", bg: "bg-violet-50/60" },
 };
 
 // tint tokens per section — drives header icon chip, border, and background together
@@ -100,14 +111,17 @@ function StatBlock({ label, value, tone = "slate", icon: Icon }) {
 
 /* ======================= SECTION HEADER ======================= */
 
-function SectionHeader({ label, icon: Icon, tint }) {
+function SectionHeader({ label, icon: Icon, tint, extra }) {
   const t = TINT[tint] ?? TINT.slate;
   return (
-    <div className="flex items-center gap-1.5 mb-2">
-      <span className={cn("w-5 h-5 rounded-md flex items-center justify-center shrink-0", t.chip)}>
-        <Icon className="w-3 h-3" />
-      </span>
-      <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">{label}</p>
+    <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center gap-1.5">
+        <span className={cn("w-5 h-5 rounded-md flex items-center justify-center shrink-0", t.chip)}>
+          <Icon className="w-3 h-3" />
+        </span>
+        <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">{label}</p>
+      </div>
+      {extra}
     </div>
   );
 }
@@ -119,6 +133,9 @@ function SectionHeader({ label, icon: Icon, tint }) {
 function buildSections(invoice, sale) {
   if (!sale) return [];
   const sections = [];
+  const isRefundedRow = sale.status?.toUpperCase() === "REFUNDED";
+  const hasLegs = Array.isArray(sale.paymentLegs) && sale.paymentLegs.length > 0;
+  const dueAmount = Number(sale.dueAmount ?? Math.max((sale.sellPrice || 0) - (sale.paidAmount || 0), 0));
 
   // sections.push({
   //   key: "invoice",
@@ -183,30 +200,39 @@ function buildSections(invoice, sale) {
   //   ),
   // });
 
-  // if (sale.customerId) {
-  //   sections.push({
-  //     key: "customer",
-  //     label: "Customer",
-  //     icon: User,
-  //     tint: "violet",
-  //     content: (
-  //       <div className="grid grid-cols-2 gap-2.5">
-  //         <Field label="Name" value={sale.customerName} icon={User} />
-  //         <Field label="Phone" value={sale.customerPhone} icon={Phone} mono />
-  //       </div>
-  //     ),
-  //   });
-  // }
+  if (sale.customerId) {
+    sections.push({
+      key: "customer",
+      label: "Customer",
+      icon: User,
+      tint: "violet",
+      content: (
+        <div className="grid grid-cols-2 gap-2.5">
+          <Field label="Name" value={sale.customerName} icon={User} />
+          <Field label="Phone" value={sale.customerPhone} icon={Phone} mono />
+        </div>
+      ),
+    });
+  }
 
+  // ── Payment / Money summary — now includes Paid + Due, not just Net/Sell/Profit
   sections.push({
     key: "financial",
-    label: "Financial Summary",
-    icon: DollarSign,
+    label: "Payment Summary",
+    icon: Wallet,
     tint: "emerald",
+    full: true,
     content: (
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
         <StatBlock label="Net" value={money(sale.netPrice)} />
         <StatBlock label="Sell" value={money(sale.sellPrice)} />
+        <StatBlock label="Paid" value={money(sale.paidAmount)} tone="emerald" />
+        <StatBlock
+          label="Due"
+          value={money(dueAmount)}
+          tone={dueAmount > 0 ? "rose" : "emerald"}
+          icon={dueAmount > 0 ? AlertDueIcon : undefined}
+        />
         <StatBlock
           label="Profit"
           value={`${sale.profit < 0 ? "-" : ""}${money(sale.profit)}`}
@@ -216,6 +242,49 @@ function buildSections(invoice, sale) {
       </div>
     ),
   });
+
+  // ── Payment Legs — breakdown for PARTIAL sales
+  if (hasLegs) {
+    sections.push({
+      key: "paymentLegs",
+      label: "Payment Split",
+      icon: SplitSquareHorizontal,
+      tint: "amber",
+      full: true,
+      content: (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          {sale.paymentLegs.map((leg) => {
+            const meta = LEG_META[leg.method?.toUpperCase()] ?? LEG_META.CASH;
+            const LegIcon = meta.icon;
+            return (
+              <div
+                key={leg.id}
+                className={cn("rounded-md border p-2 flex items-start gap-2", meta.border, meta.bg)}
+              >
+                <span className={cn("w-6 h-6 rounded-md flex items-center justify-center shrink-0", meta.chip)}>
+                  <LegIcon className="w-3.5 h-3.5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold text-gray-700">
+                      {leg.method?.replace("_", " ")}
+                    </p>
+                    <p className="text-xs font-bold text-gray-800">{money(leg.amount)}</p>
+                  </div>
+                  <p className="text-[10px] text-gray-500 truncate">
+                    {leg.method === "BANK_TRANSFER" && leg.bankName}
+                    {leg.method === "CREDIT" && leg.customerName}
+                    {leg.method === "CASH" && "Cash in hand"}
+                    {leg.paymentDate && ` • ${format(new Date(leg.paymentDate), "MMM dd, yyyy")}`}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ),
+    });
+  }
 
   // if (invoice?.totalNet != null || invoice?.totalSell != null || invoice?.totalProfit != null) {
   //   sections.push({
@@ -237,16 +306,41 @@ function buildSections(invoice, sale) {
   //   });
   // }
 
-  if (sale.isRefund) {
+  // ── Refund — only rendered on the negative mirror sale (status === REFUNDED)
+  if (isRefundedRow && sale.refund) {
+    const r = sale.refund;
     sections.push({
       key: "refund",
-      label: "Refund",
+      label: "Refund Details",
       icon: XCircle,
       tint: "rose",
+      full: true,
       content: (
-        <div className="flex items-center gap-2 text-rose-700 text-xs font-semibold">
-          <XCircle className="w-3.5 h-3.5" />
-          This sale is a refund
+        <div className="space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 text-rose-700 text-xs font-semibold">
+              <XCircle className="w-3.5 h-3.5" />
+              This is a refund entry
+            </div>
+            {pill(r.status, statusColor)}
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <StatBlock label="Vendor Refund" value={money(r.vendorRefundAmount)} tone="rose" />
+            <StatBlock label="Refund Fee" value={money(r.refundFee)} />
+            <StatBlock label="Cancellation Charges" value={money(r.cancellationCharges)} />
+            <StatBlock label="Net to Customer" value={money(r.netRefundToCustomer)} tone="rose" />
+          </div>
+          <div className="grid grid-cols-2 gap-2.5 pt-1">
+            <Field
+              label="Refund Date"
+              icon={Calendar}
+              value={r.refundDate ? format(new Date(r.refundDate), "MMM dd, yyyy") : null}
+            />
+            <Field label="Reason" value={r.refundReason} icon={FileText} />
+          </div>
+          {r.remarks && (
+            <p className="text-xs text-gray-600 italic pt-1 border-t border-rose-100">{r.remarks}</p>
+          )}
         </div>
       ),
     });
@@ -264,6 +358,11 @@ function buildSections(invoice, sale) {
   }
 
   return sections;
+}
+
+// Small inline icon used conditionally above (kept local to avoid extra import clutter)
+function AlertDueIcon(props) {
+  return <TrendingDown {...props} />;
 }
 
 /* ======================= INLINE DETAIL CONTENT ======================= */

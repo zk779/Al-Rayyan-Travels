@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { format } from "date-fns";
 import {
   MoreVertical,
@@ -11,6 +11,7 @@ import {
   FileText,
   SaudiRiyal,
   Printer,
+  History as HistoryIcon,
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
@@ -44,6 +45,7 @@ import {
 // Import your reusable component
 import CustomAlertDialog from "../CustomAlertDialog";
 import { ExpandableSaleRow } from "../ViewSaleData";
+import { HistoryDialog } from "../SaleHistory";
 
 import { useNavigate } from "react-router-dom";
 import { appToast } from "../../../shadcn/components/ui/appToast";
@@ -66,10 +68,20 @@ export default function DetailedReportTab({
   onEdit,
   onDelete,
 }) {
+  // Local mirror of salesData so a delete can remove the row instantly,
+  // without waiting on the parent to refetch/re-filter its own state.
+  const [rows, setRows] = useState(salesData);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
+  const [historyTarget, setHistoryTarget] = useState(null);
   const token = localStorage.getItem("token");
+
+  // Keep local rows in sync whenever the parent's salesData actually changes
+  // (new search, new page, external refresh, etc.)
+  useEffect(() => {
+    setRows(salesData);
+  }, [salesData]);
 
   const highlightText = (text, query, field) => {
     if (!query || !text) return text;
@@ -115,8 +127,15 @@ export default function DetailedReportTab({
       const data = await response.json();
       if (data.success) {
         appToast.success("Sale deleted and balances reversed successfully");
+
+        // Remove immediately from local state — don't wait on parent refetch
+        setRows((prev) => prev.filter((s) => s.id !== deleteTarget.id));
+        if (expandedId === deleteTarget.id) setExpandedId(null);
+
         setDeleteTarget(null);
-        if (onDelete) onDelete();
+        if (onDelete) onDelete(deleteTarget.id);
+      } else {
+        appToast.error(data.error || "Failed to delete sale");
       }
     } catch (error) {
       console.error(error);
@@ -203,7 +222,7 @@ export default function DetailedReportTab({
             Complete list of all sales transactions
             {searchQuery && (
               <span className="ml-2 text-blue-600">
-                • Showing {salesData.length} results for "{searchQuery}"
+                • Showing {rows.length} results for "{searchQuery}"
                 {searchBy !== "all" &&
                   ` in ${searchBy.replace(/([A-Z])/g, " $1").toLowerCase()}`}
               </span>
@@ -211,7 +230,7 @@ export default function DetailedReportTab({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {salesData.length === 0 ? (
+          {rows.length === 0 ? (
             <div className="text-center py-12">
               <FileText className="h-16 w-16 text-gray-300 mx-auto mb-4" />
               <p className="text-gray-600 font-medium">
@@ -251,7 +270,7 @@ export default function DetailedReportTab({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {salesData.map((sale) => {
+                  {rows.map((sale) => {
                     const isRefunded =
                       sale.status?.toUpperCase() === "REFUNDED";
                     const { invoice, sale: fullSale } =
@@ -375,6 +394,12 @@ export default function DetailedReportTab({
                                     <Eye className="mr-2 h-4 w-4" />
                                     {expanded ? "Hide Details" : "View Details"}
                                   </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => setHistoryTarget(sale.id)}
+                                  >
+                                    <HistoryIcon className="mr-2 h-4 w-4" />
+                                    View History
+                                  </DropdownMenuItem>
                                   {!isRefunded && (
                                     <>
                                       <DropdownMenuItem
@@ -433,14 +458,30 @@ export default function DetailedReportTab({
         title="Delete Sale & Reverse Ledger?"
         description={`Are you sure you want to delete this specific sale? This will:
 
-• Permanently remove document ${deleteTarget?.documentNumber}.
-• Reverse ${deleteTarget?.sellPrice} SAR from the customer's balance.
-• Reverse ${deleteTarget?.netPrice} SAR from the vendor's ledger.
-• Automatically update the parent invoice totals.`}
+        - Permanently remove document ${deleteTarget?.documentNumber}.
+        - Reverse ${deleteTarget?.sellPrice} SAR from the customer's balance.
+        - Reverse ${deleteTarget?.netPrice} SAR from the vendor's ledger.
+        - Automatically update the parent invoice totals.`}
         onConfirm={handleConfirmDelete}
         loading={isDeleting}
         variant="danger"
         confirmText="Delete & Reverse"
+      />
+
+      {/* Sale History Dialog */}
+      <HistoryDialog
+        saleId={historyTarget}
+        open={!!historyTarget}
+        onOpenChange={(v) => {
+          if (!v) {
+            setHistoryTarget(null);
+            // Radix leaves body pointer-events locked when a Dialog closes
+            // right after a DropdownMenu — force it back so the page stays interactive.
+            setTimeout(() => {
+              document.body.style.pointerEvents = "";
+            }, 0);
+          }
+        }}
       />
     </div>
   );

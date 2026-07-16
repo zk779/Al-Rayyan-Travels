@@ -90,8 +90,6 @@ const METHOD_META = Object.fromEntries(METHODS.map((m) => [m.value, m]));
    VAT            = 15% of Deducted
    Total Deduction = Deducted + VAT
    Net Amount     = Order Amount - Total Deduction
-   e.g. Order 1000 -> Fee 69.9 -> Deducted 71.4 -> VAT 10.71
-        -> Total Deduction 82.11 -> Net Amount 917.89
 --------------------------------------------------------- */
 const TABBY_FEE_RATE = 0.0699;
 const TABBY_FIXED_FEE = 1.5;
@@ -115,9 +113,6 @@ function calculateTabbyNetAmount(orderAmount) {
   };
 }
 
-// Looks up the customerType of a selected customer from the options list.
-// IMPORTANT: customerOptions items must include a `customerType` field, e.g.
-// { value: customer.id, label: customer.customerName, customerType: customer.customerType }
 const getCustomerType = (id, customerOptions) =>
   customerOptions?.find((o) => o.value === id)?.customerType;
 
@@ -177,8 +172,6 @@ function SlotFields({
       CREDIT: "bg-violet-50 border-violet-200",
     }[methodValue] ?? "bg-slate-50 border-slate-200";
 
-  // Only the CREDIT slot has a customer selector, so this is the only
-  // place we need to detect a Tabby/Tamara customer.
   const selectedCustomerType =
     methodValue === "CREDIT"
       ? getCustomerType(customerId, customerOptions)
@@ -190,7 +183,6 @@ function SlotFields({
     return calculateTabbyNetAmount(orderAmount);
   }, [isTabbyOrTamara, orderAmount]);
 
-  // Auto-fill Amount whenever the Order Amount (or the fee calc) changes.
   useEffect(() => {
     if (isTabbyOrTamara && tabbyCalc) {
       setAmount(String(tabbyCalc.amount));
@@ -204,7 +196,6 @@ function SlotFields({
         {METHOD_META[methodValue]?.label}
       </p>
 
-      {/* Customer selector now sits at the TOP of the slot, above Amount */}
       {methodValue === "CREDIT" && (
         <div className="space-y-1">
           <Label className="text-xs font-medium text-slate-600">
@@ -221,10 +212,7 @@ function SlotFields({
             closeMenuOnScroll={false}
             styles={{
               ...compact,
-              menuPortal: (base) => ({
-                ...base,
-                zIndex: 999999,
-              }),
+              menuPortal: (base) => ({ ...base, zIndex: 999999 }),
               menu: (base) => ({
                 ...base,
                 zIndex: 999999,
@@ -235,7 +223,6 @@ function SlotFields({
         </div>
       )}
 
-      {/* Order Amount — appears as soon as a Tabby/Tamara customer is picked */}
       {methodValue === "CREDIT" && isTabbyOrTamara && (
         <div className="space-y-2 p-3 rounded-lg border bg-fuchsia-50 border-fuchsia-200">
           <p className="text-xs font-semibold text-fuchsia-700 uppercase tracking-wide">
@@ -318,10 +305,7 @@ function SlotFields({
             closeMenuOnScroll={false}
             styles={{
               ...compact,
-              menuPortal: (base) => ({
-                ...base,
-                zIndex: 999999,
-              }),
+              menuPortal: (base) => ({ ...base, zIndex: 999999 }),
               menu: (base) => ({
                 ...base,
                 zIndex: 999999,
@@ -353,7 +337,6 @@ export default function PaymentDialog({
 
   const sell = Number(sellPrice) || 0;
 
-  /* Restore state from sale when dialog re-opens */
   useEffect(() => {
     if (!open) return;
     const meta = sale.paymentMeta;
@@ -394,12 +377,16 @@ export default function PaymentDialog({
     (Number(partial.aAmount) || 0) + (Number(partial.bAmount) || 0);
   const partialRemaining = sell - partialTotal;
 
-  // Tabby/Tamara detection — non-partial CREDIT slot
+  // Actual cash-in-hand — excludes the CREDIT leg, since that portion is a
+  // receivable (due), not money received.
+  const partialPaidAmount =
+    (selectedCombo?.a !== "CREDIT" ? Number(partial.aAmount) || 0 : 0) +
+    (selectedCombo?.b !== "CREDIT" ? Number(partial.bAmount) || 0 : 0);
+
   const isTabbyOrTamara =
     mode === "CREDIT" &&
     getCustomerType(customerId, customerOptions) === "TABBY_OR_TAMARA";
 
-  // Tabby/Tamara detection — per leg, for Partial combos that include CREDIT
   const aIsTabbyOrTamara =
     selectedCombo?.a === "CREDIT" &&
     getCustomerType(partial.aCustomerId, customerOptions) === "TABBY_OR_TAMARA";
@@ -452,7 +439,6 @@ export default function PaymentDialog({
               }
             : {}),
         },
-        // top-level fields the sales payload mapper reads directly
         bankId: mode === "BANK_TRANSFER" ? bankId : null,
         customerId: mode === "CREDIT" ? customerId : "",
         paidAmount: amount || String(sell),
@@ -486,7 +472,6 @@ export default function PaymentDialog({
               }
             : {}),
         },
-        // paymentLegs — exactly what the backend iterates over
         paymentLegs: [
           {
             method: selectedCombo.a,
@@ -507,7 +492,11 @@ export default function PaymentDialog({
         ],
         bankId: partial.aBankId || partial.bBankId || null,
         customerId: partial.aCustomerId || partial.bCustomerId || "",
-        paidAmount: String(partialTotal),
+        // Only the CASH/BANK_TRANSFER leg counts as "paid" — the CREDIT leg
+        // is a receivable, not cash received.
+        paidAmount: String(partialPaidAmount),
+        // sellPrice = both legs combined (what the customer actually owes in total)
+        sellPrice: String(partialTotal),
         paxName: "",
       };
     }
@@ -603,7 +592,7 @@ export default function PaymentDialog({
               customerId={customerId}
               setCustomerId={(id) => {
                 setCustomerId(id);
-                setOrderAmount(""); // fresh order amount whenever the customer changes
+                setOrderAmount("");
               }}
               customerOptions={customerOptions}
               orderAmount={orderAmount}

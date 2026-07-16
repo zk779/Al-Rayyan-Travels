@@ -90,8 +90,6 @@ const METHOD_META = Object.fromEntries(METHODS.map((m) => [m.value, m]));
    VAT            = 15% of Deducted
    Total Deduction = Deducted + VAT
    Net Amount     = Order Amount - Total Deduction
-   e.g. Order 1000 -> Fee 69.9 -> Deducted 71.4 -> VAT 10.71
-        -> Total Deduction 82.11 -> Net Amount 917.89
 --------------------------------------------------------- */
 const TABBY_FEE_RATE = 0.0699;
 const TABBY_FIXED_FEE = 1.5;
@@ -115,13 +113,8 @@ function calculateTabbyNetAmount(orderAmount) {
   };
 }
 
-// Inverse of calculateTabbyNetAmount — reconstructs the Order Amount from an
-// already-known Net Amount. Used when re-opening a saved payment that has a
-// paidAmount but no stored orderAmount (e.g. older sales, or a customer that
-// only just became Tabby/Tamara). Derivation:
-//   netAmount = orderAmount * (1 - FEE_RATE * (1+VAT_RATE)) - FIXED_FEE * (1+VAT_RATE)
-//   netAmount = orderAmount * 0.919615 - 1.725
-//   => orderAmount = (netAmount + 1.725) / 0.919615
+// Inverse of calculateTabbyNetAmount — reconstructs Order Amount from a known
+// Net Amount, for re-opening a saved payment without a stored orderAmount.
 const TABBY_ORDER_MULTIPLIER = 1 - TABBY_FEE_RATE * (1 + TABBY_VAT_RATE);
 const TABBY_ORDER_CONSTANT = TABBY_FIXED_FEE * (1 + TABBY_VAT_RATE);
 
@@ -131,9 +124,6 @@ function reverseTabbyOrderAmount(netAmount) {
   return round2(orderAmount);
 }
 
-// Looks up the customerType of a selected customer from the options list.
-// IMPORTANT: customerOptions items must include a `customerType` field, e.g.
-// { value: customer.id, label: customer.customerName, customerType: customer.customerType }
 const getCustomerType = (id, customerOptions) =>
   customerOptions?.find((o) => o.value === id)?.customerType;
 
@@ -148,7 +138,8 @@ const compact = {
   valueContainer: (b) => ({ ...b, height: 32, padding: "0 6px" }),
   input: (b) => ({ ...b, margin: 0, padding: 0 }),
   indicatorsContainer: (b) => ({ ...b, height: 32 }),
-  menuPortal: (b) => ({ ...b, zIndex: 9999 }),
+  menuPortal: (b) => ({ ...b, zIndex: 999999 }),
+  menu: (b) => ({ ...b, zIndex: 999999, pointerEvents: "auto" }),
 };
 
 /* ─── Public helper ──────────────────────────────────────── */
@@ -185,7 +176,6 @@ function resolveState(sale, sell) {
   const pt = String(sale.paymentType || "").toUpperCase();
   const meta = sale.paymentMeta;
 
-  // Path A: paymentMeta was previously set via this dialog
   if (meta?.type) {
     if (meta.type !== "PARTIAL") {
       return {
@@ -217,7 +207,6 @@ function resolveState(sale, sell) {
     };
   }
 
-  // Path B: raw DB data — Prisma returns nested objects, not flat ids
   if (
     pt === "PARTIAL" &&
     Array.isArray(sale.payments) &&
@@ -238,7 +227,6 @@ function resolveState(sale, sell) {
         combo: found?.value ?? "",
         aAmount: String(legA?.amount ?? ""),
         bAmount: String(legB?.amount ?? ""),
-        // ✅ FIX: Prisma returns bank/customer as nested objects
         aCustomerId: legA?.customer?.id ?? legA?.customerId ?? "",
         bCustomerId: legB?.customer?.id ?? legB?.customerId ?? "",
         aBankId: legA?.bank?.id ?? legA?.bankId ?? "",
@@ -249,11 +237,9 @@ function resolveState(sale, sell) {
     };
   }
 
-  // Single payment type (CASH / BANK_TRANSFER / CREDIT)
   return {
     mode: pt,
     amount: String(sale.paidAmount ?? sell),
-    // ✅ FIX: Prisma returns customer/bank as nested objects on the sale
     customerId: sale.customer?.id ?? sale.customerId ?? "",
     bankId: sale.bank?.id ?? sale.bankId ?? "",
     orderAmount: "",
@@ -282,8 +268,6 @@ function SlotFields({
       CREDIT: "bg-violet-50 border-violet-200",
     }[methodValue] ?? "bg-slate-50 border-slate-200";
 
-  // Only the CREDIT slot has a customer selector, so this is the only
-  // place we need to detect a Tabby/Tamara customer.
   const selectedCustomerType =
     methodValue === "CREDIT"
       ? getCustomerType(customerId, customerOptions)
@@ -295,9 +279,6 @@ function SlotFields({
     return calculateTabbyNetAmount(orderAmount);
   }, [isTabbyOrTamara, orderAmount]);
 
-  // Seed Order Amount by reverse-calculating it from an already-known Amount.
-  // This only fires once per slot (guarded by the ref) so it doesn't fight
-  // with the forward auto-fill effect below once Order Amount has a value.
   const seededOrderAmount = useRef(false);
   useEffect(() => {
     if (
@@ -312,7 +293,6 @@ function SlotFields({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isTabbyOrTamara, orderAmount, amount]);
 
-  // Auto-fill Amount whenever the Order Amount (or the fee calc) changes.
   useEffect(() => {
     if (isTabbyOrTamara && tabbyCalc) {
       setAmount(String(tabbyCalc.amount));
@@ -326,7 +306,6 @@ function SlotFields({
         {METHOD_META[methodValue]?.label}
       </p>
 
-      {/* Customer selector sits at the TOP of the slot, above Amount */}
       {methodValue === "CREDIT" && (
         <div className="space-y-1">
           <Label className="text-xs font-medium text-slate-600">
@@ -338,12 +317,14 @@ function SlotFields({
             onChange={(o) => setCustomerId(o?.value || "")}
             placeholder="Select customer"
             menuPortalTarget={document.body}
+            menuPosition="fixed"
+            menuShouldBlockScroll={false}
+            closeMenuOnScroll={false}
             styles={compact}
           />
         </div>
       )}
 
-      {/* Order Amount — appears as soon as a Tabby/Tamara customer is picked */}
       {methodValue === "CREDIT" && isTabbyOrTamara && (
         <div className="space-y-2 p-3 rounded-lg border bg-fuchsia-50 border-fuchsia-200">
           <p className="text-xs font-semibold text-fuchsia-700 uppercase tracking-wide">
@@ -421,6 +402,9 @@ function SlotFields({
             onChange={(o) => setBankId(o?.value || "")}
             placeholder="Select bank"
             menuPortalTarget={document.body}
+            menuPosition="fixed"
+            menuShouldBlockScroll={false}
+            closeMenuOnScroll={false}
             styles={compact}
           />
         </div>
@@ -439,11 +423,9 @@ export default function EditPaymentDialog({
 }) {
   const sell = Number(sellPrice) || 0;
 
-  // Initialise eagerly so the trigger button has the right colour on first paint
   const [s, setS] = useState(() => resolveState(sale, sell));
   const [open, setOpen] = useState(false);
 
-  // Re-resolve on open to pick up any sale prop changes since last open
   useEffect(() => {
     if (open) setS(resolveState(sale, sell));
   }, [open]);
@@ -455,12 +437,16 @@ export default function EditPaymentDialog({
     (Number(s.partial.aAmount) || 0) + (Number(s.partial.bAmount) || 0);
   const partialRemaining = sell - partialTotal;
 
-  // Tabby/Tamara detection — non-partial CREDIT slot
+  // Actual cash-in-hand — excludes the CREDIT leg, since that portion is a
+  // receivable (due), not money received.
+  const partialPaidAmount =
+    (selectedCombo?.a !== "CREDIT" ? Number(s.partial.aAmount) || 0 : 0) +
+    (selectedCombo?.b !== "CREDIT" ? Number(s.partial.bAmount) || 0 : 0);
+
   const isTabbyOrTamara =
     s.mode === "CREDIT" &&
     getCustomerType(s.customerId, customerOptions) === "TABBY_OR_TAMARA";
 
-  // Tabby/Tamara detection — per leg, for Partial combos that include CREDIT
   const aIsTabbyOrTamara =
     selectedCombo?.a === "CREDIT" &&
     getCustomerType(s.partial.aCustomerId, customerOptions) ===
@@ -470,7 +456,6 @@ export default function EditPaymentDialog({
     getCustomerType(s.partial.bCustomerId, customerOptions) ===
       "TABBY_OR_TAMARA";
 
-  /* ── Validation ── */
   const isValid = () => {
     if (!s.mode) return false;
     if (s.mode === "CREDIT" && !s.customerId) return false;
@@ -501,7 +486,6 @@ export default function EditPaymentDialog({
     return true;
   };
 
-  /* ── Confirm ── */
   const handleConfirm = () => {
     const result =
       s.mode !== "PARTIAL"
@@ -554,7 +538,11 @@ export default function EditPaymentDialog({
             },
             customerId: s.partial.aCustomerId || s.partial.bCustomerId || "",
             bankId: null,
-            paidAmount: String(partialTotal),
+            // Only the CASH/BANK_TRANSFER leg counts as "paid" — the CREDIT
+            // leg is a receivable, not cash received.
+            paidAmount: String(partialPaidAmount),
+            // sellPrice = both legs combined (total the customer owes)
+            sellPrice: String(partialTotal),
             paxName: "",
           };
 
@@ -565,10 +553,8 @@ export default function EditPaymentDialog({
   const selectedMethod = METHOD_META[s.mode];
   const triggerColors = selectedMethod ? colorMap[selectedMethod.color] : null;
 
-  /* ─── Render ──────────────────────────────────────────── */
   return (
     <>
-      {/* Trigger */}
       <button
         onClick={() => setOpen(true)}
         className={`h-8 w-full text-xs font-medium rounded border px-2 flex items-center gap-1.5 transition-all
@@ -598,7 +584,6 @@ export default function EditPaymentDialog({
             </DialogTitle>
           </DialogHeader>
 
-          {/* Method selector */}
           <div className="grid grid-cols-2 gap-2">
             {METHODS.map((m) => {
               const c = colorMap[m.color];
@@ -656,9 +641,7 @@ export default function EditPaymentDialog({
               amount={s.amount}
               setAmount={(v) => patch({ amount: v })}
               customerId={s.customerId}
-              setCustomerId={(v) =>
-                patch({ customerId: v, orderAmount: "" }) // fresh order amount whenever the customer changes
-              }
+              setCustomerId={(v) => patch({ customerId: v, orderAmount: "" })}
               customerOptions={customerOptions}
               orderAmount={s.orderAmount}
               setOrderAmount={(v) => patch({ orderAmount: v })}

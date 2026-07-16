@@ -302,15 +302,16 @@ export default function SalesTabComponent() {
 
         if (field === "payment") {
           const merged = { ...item, ...value };
-          // Mirror the paid amount into sellPrice too — sellPrice stays
-          // fully editable afterward, this just sets its initial value.
-          if (value?.paidAmount !== undefined) {
+
+          // PARTIAL now sends its own combined sellPrice (both legs) — use it
+          // directly instead of mirroring paidAmount, which only reflects the
+          // cash/bank portion when a CREDIT leg is involved.
+          if (value?.sellPrice !== undefined) {
+            merged.sellPrice = value.sellPrice;
+          } else if (value?.paidAmount !== undefined) {
             merged.sellPrice = value.paidAmount;
           }
-          // Tabby/Tamara: the amount PaymentDialog returns is the merchant's
-          // net settlement after fees, not money actually collected from the
-          // customer up front — so don't carry it into Paid. Sell price still
-          // gets updated as usual above; Paid stays 0 for Tabby/Tamara sales.
+
           const meta = value?.paymentMeta;
           const isTabbyOrTamara =
             meta?.orderAmount != null ||
@@ -652,7 +653,7 @@ export default function SalesTabComponent() {
 
               <CardContent className="space-y-3">
                 {/* Row 1: Info */}
-                <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
                   {/* ── CHANGE 3: Airline — required ── */}
                   <div className="space-y-1">
                     <RequiredLabel>Airline</RequiredLabel>
@@ -716,6 +717,20 @@ export default function SalesTabComponent() {
                       }
                       placeholder="e.g. 123"
                       className={`h-8 text-sm ${!item.documentNo ? "border-red-300 focus-visible:ring-red-400" : ""}`}
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium text-slate-600">
+                      Passenger Name
+                    </Label>
+                    <Input
+                      value={item.paxName || ""}
+                      onChange={(e) =>
+                        updateSale(item.id, "paxName", e.target.value)
+                      }
+                      placeholder="John Doe"
+                      className="h-8 text-sm"
                     />
                   </div>
 

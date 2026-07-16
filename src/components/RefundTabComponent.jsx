@@ -14,6 +14,7 @@ import {
   PopoverTrigger,
 } from "../../shadcn/components/ui/popover";
 import { format } from "date-fns";
+import { appToast } from "../../shadcn/components/ui/appToast";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 const DEBOUNCE_DELAY = 400;
@@ -118,7 +119,9 @@ export default function RefundTabComponent() {
 
   /* ========================= SUBMIT REFUND ========================= */
   const handleSubmit = async () => {
+    // Validation
     if (!refundForm.saleId) {
+      appToast.warning("Please select a sale to refund.");
       setError("Please select a sale to refund.");
       return;
     }
@@ -127,11 +130,11 @@ export default function RefundTabComponent() {
     const service = Number(refundForm.serviceCharges) || 0;
 
     if (fee < 0 || service < 0) {
-      setError("Fees and charges cannot be negative.");
+      appToast.warning("Fees and service charges cannot be negative.");
+      setError("Fees and service charges cannot be negative.");
       return;
     }
 
-    // UPDATED PAYLOAD TO INCLUDE MISSING PRISMA FIELDS
     const payload = {
       saleId: refundForm.saleId,
       refundDate: refundDate.toISOString(),
@@ -147,14 +150,22 @@ export default function RefundTabComponent() {
 
     try {
       setLoading(true);
-      const res = await fetch(`${API_BASE}/api/refunds`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+
+      const res = await appToast.promise(
+        fetch(`${API_BASE}/api/refunds`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        }),
+        {
+          loading: "Processing refund...",
+          success: "Refund processed successfully!",
+          error: "Failed to process refund.",
         },
-        body: JSON.stringify(payload),
-      });
+      );
 
       const data = await res.json();
 
@@ -162,10 +173,16 @@ export default function RefundTabComponent() {
         throw new Error(data.error || "Failed to process refund");
       }
 
-      alert("Refund processed successfully!");
+
       resetForm();
     } catch (err) {
+      console.error(err);
+
       setError(err.message);
+
+      appToast.error(
+        err.message || "Something went wrong while processing the refund.",
+      );
     } finally {
       setLoading(false);
     }

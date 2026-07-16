@@ -111,6 +111,9 @@ export default function EditSalesTab({ saleId }) {
   const [customers, setCustomers] = useState([]);
   const [banks, setBanks] = useState([]);
 
+  const user = localStorage.getItem("user");
+
+  console.log("EditSalesTab user:", user);
   const token = localStorage.getItem("token");
   const headers = useMemo(
     () => ({
@@ -239,9 +242,12 @@ export default function EditSalesTab({ saleId }) {
         // Payment dialog result: { paymentType, paymentMeta, customerId, bankId, paidAmount, paxName }
         if (field === "payment") {
           const merged = { ...item, ...value };
-          // Mirror the paid amount into sellPrice too — sellPrice stays
-          // fully editable afterward, this just sets its initial value.
-          if (value?.paidAmount !== undefined) {
+          // PARTIAL now sends its own combined sellPrice (both legs) — use it
+          // directly instead of mirroring paidAmount, which only reflects the
+          // cash/bank portion when a CREDIT leg is involved.
+          if (value?.sellPrice !== undefined) {
+            merged.sellPrice = value.sellPrice;
+          } else if (value?.paidAmount !== undefined) {
             merged.sellPrice = value.paidAmount;
           }
           // Tabby/Tamara: the amount EditPaymentDialog returns is the merchant's
@@ -406,7 +412,16 @@ export default function EditSalesTab({ saleId }) {
                   customerId: s.paymentMeta.bCustomerId || null,
                 },
               ]
-            : null,
+            : String(s.paymentType).toUpperCase() === "PARTIAL" &&
+                Array.isArray(s.payments) &&
+                s.payments.length > 0
+              ? s.payments.map((leg) => ({
+                  method: leg.method,
+                  amount: Number(leg.amount),
+                  bankId: leg.bank?.id || leg.bankId || null,
+                  customerId: leg.customer?.id || leg.customerId || null,
+                }))
+              : null,
         remarks: s.remarks || null,
       })),
     };
