@@ -15,6 +15,7 @@ import {
   ChevronDown,
   ChevronUp,
   Undo2,
+  Wallet,
 } from "lucide-react";
 
 import {
@@ -42,11 +43,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../../../shadcn/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "../../../shadcn/components/ui/dialog";
 
 // Import your reusable component
 import CustomAlertDialog from "../CustomAlertDialog";
 import { ExpandableSaleRow } from "../ViewSaleData";
 import { HistoryDialog } from "../SaleHistory";
+import SalePayment from "../PaymentComponents/SalePayment";
 
 import { useNavigate } from "react-router-dom";
 import { appToast } from "../../../shadcn/components/ui/appToast";
@@ -86,6 +94,10 @@ export default function DetailedReportTab({
   const [isDeleting, setIsDeleting] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
   const [historyTarget, setHistoryTarget] = useState(null);
+  // Holds the saleId currently open in the payment dialog — null means closed.
+  // Kept as just the id (not the whole row) so SalePayment always fetches
+  // fresh data itself rather than trusting a possibly-stale row snapshot.
+  const [paymentSaleId, setPaymentSaleId] = useState(null);
   const token = localStorage.getItem("token");
 
   // Keep local rows in sync whenever the parent's salesData actually changes
@@ -161,6 +173,42 @@ export default function DetailedReportTab({
     } finally {
       setIsDeleting(false);
     }
+  };
+
+  // Resets Radix's body pointer-events lock, which can otherwise get stuck
+  // "none" when one overlay (dropdown) opens another (dialog) right after
+  // closing — without this the page silently stops responding to clicks.
+  const releasePointerEventsLock = () => {
+    setTimeout(() => {
+      document.body.style.pointerEvents = "";
+    }, 0);
+  };
+
+  // Called by SalePayment once a payment is recorded successfully.
+  // Updates just this one row's paidAmount/paymentStatus in place — no
+  // full refetch needed, so the table doesn't flicker/reset scroll position.
+  const handlePaymentSuccess = (data) => {
+    const updatedSale = data?.sale;
+    if (!updatedSale) return;
+
+    setRows((prev) =>
+      prev.map((r) =>
+        r.id === updatedSale.id
+          ? {
+              ...r,
+              paidAmount: updatedSale.paidAmount,
+              paymentStatus: updatedSale.paymentStatus,
+            }
+          : r,
+      ),
+    );
+
+    appToast.success("Payment recorded successfully");
+  };
+
+  const closePaymentDialog = () => {
+    setPaymentSaleId(null);
+    releasePointerEventsLock();
   };
 
   function truncateText(text, wordLimit) {
@@ -298,6 +346,13 @@ export default function DetailedReportTab({
                     // distinct from the mirror row which already flips to
                     // status REFUNDED.
                     const hasRefundOnOriginal = !isRefunded && !!sale.Refund;
+                    // Only sales that still owe something (and aren't the
+                    // refunded mirror row) can accept a new payment.
+                    const canRecordPayment =
+                      !isRefunded &&
+                      ["DUE", "PARTIAL"].includes(
+                        sale.paymentStatus?.toUpperCase(),
+                      );
                     const { invoice, sale: fullSale } =
                       resolveSaleDetails?.(sale) ?? {};
 
@@ -426,6 +481,16 @@ export default function DetailedReportTab({
                                     <HistoryIcon className="mr-2 h-4 w-4" />
                                     View History
                                   </DropdownMenuItem>
+                                  {canRecordPayment && (
+                                    <DropdownMenuItem
+                                      onClick={() =>
+                                        setPaymentSaleId(sale.id)
+                                      }
+                                    >
+                                      <Wallet className="mr-2 h-4 w-4" />
+                                      Record Payment
+                                    </DropdownMenuItem>
+                                  )}
                                   {!isRefunded && (
                                     <>
                                       <DropdownMenuItem
@@ -503,12 +568,35 @@ export default function DetailedReportTab({
             setHistoryTarget(null);
             // Radix leaves body pointer-events locked when a Dialog closes
             // right after a DropdownMenu — force it back so the page stays interactive.
-            setTimeout(() => {
-              document.body.style.pointerEvents = "";
-            }, 0);
+            releasePointerEventsLock();
           }
         }}
       />
+
+      {/* Record Payment Dialog — only mounts SalePayment while actually
+          open, and re-keys on saleId so switching between two rows'
+          payment dialogs (without a full unmount in between) never shows
+          stale data from the previous sale. */}
+      <Dialog
+        open={!!paymentSaleId}
+        onOpenChange={(v) => {
+          if (!v) closePaymentDialog();
+        }}
+      >
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Record Payment</DialogTitle>
+          </DialogHeader>
+          {paymentSaleId && (
+            <SalePayment
+              key={paymentSaleId}
+              saleId={paymentSaleId}
+              onClose={closePaymentDialog}
+              onSuccess={handlePaymentSuccess}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
