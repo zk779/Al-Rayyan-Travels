@@ -14,6 +14,7 @@ import {
   History as HistoryIcon,
   ChevronDown,
   ChevronUp,
+  Undo2,
 } from "lucide-react";
 
 import {
@@ -57,6 +58,16 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL;
 // Pay Status, Sell Price, Status, Remarks, Actions, Expand = 14
 const COLUMN_COUNT = 14;
 
+// Human-readable label for the "Search By" hint, used only in the results
+// summary text — the actual API search always spans invoice #, document #,
+// and remarks together regardless of this selection (see note below).
+const SEARCH_BY_LABELS = {
+  invoiceNumber: "invoice number",
+  documentNumber: "document number",
+  remarks: "remarks",
+  date: "date",
+};
+
 export default function DetailedReportTab({
   salesData,
   searchQuery,
@@ -83,12 +94,19 @@ export default function DetailedReportTab({
     setRows(salesData);
   }, [salesData]);
 
-  const highlightText = (text, query, field) => {
+  // NOTE: the backend's `search` param always matches across invoice #,
+  // document #, AND remarks together (an OR search) — it is not restricted
+  // to whichever field the "Search By" dropdown has selected. That dropdown
+  // only exists to give the user a clearer placeholder/hint. So highlighting
+  // must NOT be gated by `searchBy` either, or a row that matched via
+  // remarks (say) while "Document Number" is selected would show zero
+  // highlights anywhere, which reads as a bug. Highlight every field a
+  // match could show up in, always.
+  const highlightText = (text, query) => {
     if (!query || !text) return text;
-    if (searchBy !== "all" && searchBy !== field) return text;
-
-    const regex = new RegExp(`(${query})`, "gi");
-    const parts = text.split(regex);
+    const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(`(${escaped})`, "gi");
+    const parts = String(text).split(regex);
 
     return parts.map((part, index) =>
       regex.test(part) ? (
@@ -223,8 +241,9 @@ export default function DetailedReportTab({
             {searchQuery && (
               <span className="ml-2 text-blue-600">
                 • Showing {rows.length} results for "{searchQuery}"
-                {searchBy !== "all" &&
-                  ` in ${searchBy.replace(/([A-Z])/g, " $1").toLowerCase()}`}
+                {searchBy && searchBy !== "all" && SEARCH_BY_LABELS[searchBy]
+                  ? ` (highlighting matches in ${SEARCH_BY_LABELS[searchBy]})`
+                  : ""}
               </span>
             )}
           </CardDescription>
@@ -273,6 +292,12 @@ export default function DetailedReportTab({
                   {rows.map((sale) => {
                     const isRefunded =
                       sale.status?.toUpperCase() === "REFUNDED";
+                    // The ORIGINAL sale (not the negative mirror) keeps its
+                    // own status untouched even after being refunded — so
+                    // it needs its own signal to show a "Refunded" hint,
+                    // distinct from the mirror row which already flips to
+                    // status REFUNDED.
+                    const hasRefundOnOriginal = !isRefunded && !!sale.Refund;
                     const { invoice, sale: fullSale } =
                       resolveSaleDetails?.(sale) ?? {};
 
@@ -296,23 +321,14 @@ export default function DetailedReportTab({
                                 ? highlightText(
                                     format(new Date(sale.date), "MMM dd, yyyy"),
                                     searchQuery,
-                                    "date",
                                   )
                                 : "N/A"}
                             </TableCell>
                             <TableCell className="font-mono text-sm">
-                              {highlightText(
-                                sale.invoiceNumber,
-                                searchQuery,
-                                "invoiceNumber",
-                              )}
+                              {highlightText(sale.invoiceNumber, searchQuery)}
                             </TableCell>
                             <TableCell className="font-mono text-sm">
-                              {highlightText(
-                                sale.documentNumber,
-                                searchQuery,
-                                "documentNumber",
-                              )}
+                              {highlightText(sale.documentNumber, searchQuery)}
                             </TableCell>
                             <TableCell>
                               <Badge
@@ -361,6 +377,15 @@ export default function DetailedReportTab({
                             <TableCell>
                               <div className="flex flex-col gap-1">
                                 {getStatusBadge(sale.status)}
+                                {hasRefundOnOriginal && (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[10px] text-violet-600 bg-violet-50 border-violet-200 flex items-center gap-1 w-fit"
+                                  >
+                                    <Undo2 className="w-3 h-3" />
+                                    Partially refunded
+                                  </Badge>
+                                )}
                               </div>
                             </TableCell>
                             <TableCell className="max-w-[150px]">
@@ -368,7 +393,6 @@ export default function DetailedReportTab({
                                 {highlightText(
                                   truncateText(sale.remarks || "", 3),
                                   searchQuery,
-                                  "remarks",
                                 )}
                               </div>
                             </TableCell>
