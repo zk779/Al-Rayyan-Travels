@@ -29,6 +29,7 @@ import {
   Landmark,
   Receipt,
   PlaneTakeoff,
+  Undo2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "../../../shadcn/lib/utils";
@@ -44,6 +45,19 @@ import {
   normalizeSale,
   StepsBar,
 } from "./DepositShared";
+
+// ── Helper: remaining due for a sale, refund-aware ──────────────────────────
+// The backend's /api/sales/customerSales route already returns a `dueAmount`
+// that accounts for any refund issued against the sale (originalDue minus
+// whatever was refunded back to the customer). We must use that instead of
+// recomputing `sellPrice - paidAmount` locally, or a partially-refunded sale
+// would still show/allow payment against its pre-refund due amount.
+// Falls back to the raw calculation only if `dueAmount` is somehow missing
+// (e.g. an older cached response shape), so this never breaks outright.
+const getRemainingDue = (sale) =>
+  sale?.dueAmount != null
+    ? Number(sale.dueAmount)
+    : Math.max((sale?.sellPrice ?? 0) - (sale?.paidAmount ?? 0), 0);
 
 // ── Customer Deposit Tab ────────────────────────────────────────────────────
 // Unlike vendor payments, a customer payment must be allocated against one or
@@ -112,7 +126,7 @@ export default function CustomerDepositTab({ onClose, onSuccess }) {
   const hasInvalidSelection = selectedAllocations.some((a) => {
     const sale = salesById.get(a.saleId);
     if (!sale) return true;
-    const remaining = sale.sellPrice - sale.paidAmount;
+    const remaining = getRemainingDue(sale);
     return a.amount <= 0 || a.amount > remaining + 0.01;
   });
 
@@ -184,16 +198,26 @@ export default function CustomerDepositTab({ onClose, onSuccess }) {
       const json = await res.json();
       if (!json.success) throw new Error(json.error || "Failed to load invoices");
 
-      const list = (json.data || []).map(normalizeSale);
+      // IMPORTANT: normalizeSale may not forward dueAmount / isRefunded /
+      // refundedAmount (it maps to a fixed shape defined in DepositShared).
+      // Re-merge those specific fields straight from the raw API response
+      // so they reach the UI regardless of what normalizeSale does — this
+      // is what makes the refund-adjusted due amount actually show up.
+      const list = (json.data || []).map((raw) => ({
+        ...normalizeSale(raw),
+        dueAmount: raw.dueAmount,
+        isRefunded: raw.isRefunded,
+        refundedAmount: raw.refundedAmount,
+      }));
       setSales(list);
 
-      // default: pre-check nothing, but pre-fill amount = remaining due for
-      // when a row gets checked
+      // default: pre-check nothing, but pre-fill amount = remaining due
+      // (refund-adjusted, via getRemainingDue) for when a row gets checked
       const initial = {};
       list.forEach((s) => {
         initial[s.id] = {
           checked: false,
-          amount: (s.sellPrice - s.paidAmount).toFixed(2),
+          amount: getRemainingDue(s).toFixed(2),
         };
       });
       setSelections(initial);
@@ -223,7 +247,7 @@ export default function CustomerDepositTab({ onClose, onSuccess }) {
   const toggleSale = (sale) => {
     setSelections((prev) => {
       const cur = prev[sale.id] ?? { checked: false, amount: "0" };
-      const remaining = sale.sellPrice - sale.paidAmount;
+      const remaining = getRemainingDue(sale);
       return {
         ...prev,
         [sale.id]: {
@@ -245,7 +269,7 @@ export default function CustomerDepositTab({ onClose, onSuccess }) {
     setSelections((prev) => {
       const cur = prev[sale.id];
       if (!cur) return prev;
-      const remaining = sale.sellPrice - sale.paidAmount;
+      const remaining = getRemainingDue(sale);
       let amt = parseFloat(cur.amount) || 0;
       if (amt > remaining) amt = remaining;
       if (amt < 0) amt = 0;
@@ -254,7 +278,7 @@ export default function CustomerDepositTab({ onClose, onSuccess }) {
   };
 
   const payFullForSale = (sale) => {
-    const remaining = sale.sellPrice - sale.paidAmount;
+    const remaining = getRemainingDue(sale);
     setSelections((prev) => ({
       ...prev,
       [sale.id]: { checked: true, amount: remaining.toFixed(2) },
@@ -605,7 +629,7 @@ export default function CustomerDepositTab({ onClose, onSuccess }) {
                     checked: false,
                     amount: "0",
                   };
-                  const remaining = sale.sellPrice - sale.paidAmount;
+                  const remaining = getRemainingDue(sale);
                   const amt = parseFloat(sel.amount) || 0;
                   const rowInvalid =
                     sel.checked && (amt <= 0 || amt > remaining + 0.01);
@@ -632,17 +656,28 @@ export default function CustomerDepositTab({ onClose, onSuccess }) {
                             <p className="text-sm font-semibold text-slate-800">
                               Invoice {sale.invoiceNo}
                             </p>
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "text-[10px]",
-                                sale.paymentStatus === "PARTIAL"
-                                  ? "text-amber-600 bg-amber-50 border-amber-200"
-                                  : "text-red-600 bg-red-50 border-red-200",
+                            <div className="flex items-center gap-1.5">
+                              {sale.isRefunded && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] text-violet-600 bg-violet-50 border-violet-200 flex items-center gap-1"
+                                >
+                                  <Undo2 className="w-3 h-3" />
+                                  Partial refund applied
+                                </Badge>
                               )}
-                            >
-                              {sale.paymentStatus}
-                            </Badge>
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "text-[10px]",
+                                  sale.paymentStatus === "PARTIAL"
+                                    ? "text-amber-600 bg-amber-50 border-amber-200"
+                                    : "text-red-600 bg-red-50 border-red-200",
+                                )}
+                              >
+                                {sale.paymentStatus}
+                              </Badge>
+                            </div>
                           </div>
                           <div className="flex items-center gap-3 text-xs text-slate-400 mt-1 flex-wrap">
                             {sale.paxName && <span>{sale.paxName}</span>}
@@ -662,13 +697,32 @@ export default function CustomerDepositTab({ onClose, onSuccess }) {
                           </div>
 
                           <div className="flex items-center justify-between mt-2.5 gap-3">
-                            <div className="text-xs text-slate-500">
-                              Sell {fmt(sale.sellPrice)} · Paid{" "}
-                              {fmt(sale.paidAmount)} ·{" "}
-                              <span className="font-semibold text-slate-700">
-                                Due {fmt(remaining)}
-                              </span>
-                            </div>
+                            {sale.isRefunded ? (
+                              <div className="text-xs text-slate-500 leading-relaxed">
+                                Sell {fmt(sale.sellPrice)} · Paid{" "}
+                                {fmt(sale.paidAmount)} · Due was{" "}
+                                <span className="line-through text-slate-400">
+                                  {fmt(sale.sellPrice - sale.paidAmount)}
+                                </span>{" "}
+                                — after a refund of{" "}
+                                <span className="font-medium text-violet-600">
+                                  {fmt(sale.refundedAmount)}
+                                </span>{" "}
+                                to the customer,{" "}
+                                <span className="font-semibold text-slate-700">
+                                  {fmt(remaining)} remains payable
+                                </span>
+                                .
+                              </div>
+                            ) : (
+                              <div className="text-xs text-slate-500">
+                                Sell {fmt(sale.sellPrice)} · Paid{" "}
+                                {fmt(sale.paidAmount)} ·{" "}
+                                <span className="font-semibold text-slate-700">
+                                  Due {fmt(remaining)}
+                                </span>
+                              </div>
+                            )}
                           </div>
 
                           {sel.checked && (
