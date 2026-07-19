@@ -37,13 +37,36 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "../../shadcn/components/ui/popover";
-import { cn } from "../../shadcn/lib/utils";
 
 import DetailedReportTab from "../components/salesReport/detailedReport";
-import BranchReportTab from "../components/salesReport/branchReport";
 import RefundsTab from "../components/salesReport/refundReport";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
+
+const authHeaders = () => ({
+  Authorization: `Bearer ${localStorage.getItem("token")}`,
+});
+
+const DATE_PRESETS = [
+  ["today", "Today"],
+  ["yesterday", "Yesterday"],
+  ["last7days", "Last 7 days"],
+  ["last30days", "Last 30 days"],
+  ["thisMonth", "This month"],
+  ["thisYear", "This year"],
+];
+
+// Delays updating the returned value until `value` stops changing for
+// `delay`ms — keeps the search input snappy while avoiding a network
+// request on every keystroke.
+function useDebouncedValue(value, delay = 400) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return debounced;
+}
 
 export default function SalesReport() {
   const [activeTab, setActiveTab] = useState("detailed");
@@ -51,35 +74,31 @@ export default function SalesReport() {
     from: subDays(new Date(), 30),
     to: new Date(),
   });
-
-  const [selectedBranch, setSelectedBranch] = useState("all");
   const [selectedAgent, setSelectedAgent] = useState("all");
-  const [selectedAirline, setSelectedAirline] = useState("all");
+  const [sortOrder, setSortOrder] = useState("desc"); // desc = newest first
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchBy, setSearchBy] = useState("all");
+  const [searchBy, setSearchBy] = useState("all"); // drives placeholder text only —
+  // the API already searches invoiceNo/documentNo/remarks together
+  const debouncedSearch = useDebouncedValue(searchQuery);
 
-  // Sales state
+  // Users, for the Agent filter. NOTE: adjust the endpoint below if your
+  // actual users list route differs.
+  const [users, setUsers] = useState([]);
+
   const [invoices, setInvoices] = useState([]);
   const [salesData, setSalesData] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // Refund state
   const [refundData, setRefundData] = useState([]);
   const [refundLoading, setRefundLoading] = useState(false);
 
-  /* ===========================
-		FAST LOOKUPS
-	============================ */
   const invoiceById = useMemo(() => {
     const map = new Map();
     for (const inv of invoices) map.set(String(inv.id), inv);
     return map;
   }, [invoices]);
 
-  /* ===========================
-		DATE PRESETS
-	============================ */
   const handleDatePreset = (preset) => {
     const now = new Date();
     switch (preset) {
@@ -108,18 +127,49 @@ export default function SalesReport() {
     }
   };
 
-  /* ===========================
-		FETCH SALES
-	============================ */
-  const fetchSales = async () => {
+  /* ── Users list, once, for the Agent dropdown ── */
+  useEffect(() => {
+    fetch(`${API_BASE}/api/users`, { headers: authHeaders() })
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.success) setUsers(json.data || []);
+      })
+      .catch(() => {});
+  }, []);
+
+  /* ── Shared query-string builder for both endpoints ──────────────────
+     Each endpoint names its date/agent/order params slightly differently
+     (dateFrom/dateTo/createdById/order for sales vs.
+      startDate/endDate/processedById/sortOrder for refunds), so the
+     caller passes the right key names in. */
+  const buildParams = useCallback(
+    ({ fromKey, toKey, agentKey, orderKey }) => {
+      const params = new URLSearchParams();
+      if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
+      if (dateRange?.from) params.set(fromKey, format(dateRange.from, "yyyy-MM-dd"));
+      if (dateRange?.to) params.set(toKey, format(dateRange.to, "yyyy-MM-dd"));
+      if (selectedAgent !== "all") params.set(agentKey, selectedAgent);
+      params.set(orderKey, sortOrder);
+      return params.toString();
+    },
+    [debouncedSearch, dateRange, selectedAgent, sortOrder],
+  );
+
+  /* ── Fetch sales — filtered server-side ── */
+  const fetchSales = useCallback(async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`${API_BASE}/api/sales`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const qs = buildParams({
+        fromKey: "dateFrom",
+        toKey: "dateTo",
+        agentKey: "createdById",
+        orderKey: "order",
+      });
+      const res = await fetch(`${API_BASE}/api/sales?${qs}`, {
+        headers: authHeaders(),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Failed to fetch sales");
+      if (!res.ok || !json.success) throw new Error(json.error || "Failed to fetch sales");
 
       const apiInvoices = json.data || [];
       setInvoices(apiInvoices);
@@ -134,7 +184,7 @@ export default function SalesReport() {
           documentNumber: sale.documentNo || sale.id,
           airline: sale.airlineCode || "-",
           vendor: sale.vendorName || "-",
-          customer: sale.customerName ? `${sale.customerName}` : "",
+          customer: sale.customerName || "",
           customerId: sale.customerId || null,
           paymentMethod: sale.paymentType || "-",
           paymentStatus: sale.paymentStatus || "-",
@@ -143,7 +193,6 @@ export default function SalesReport() {
           sellPrice: Number(sale.sellPrice || 0),
           profit: Number(sale.profit || 0),
           agent: inv.createdByName,
-          branch: "-",
           remarks: sale.remarks || "",
           isRefund: !!sale.isRefund,
           Refund: sale.refund || null,
@@ -157,20 +206,23 @@ export default function SalesReport() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [buildParams]);
 
-  /* ===========================
-		FETCH REFUNDS
-	============================ */
-  const fetchRefunds = async () => {
+  /* ── Fetch refunds — filtered server-side ── */
+  const fetchRefunds = useCallback(async () => {
     setRefundLoading(true);
     try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`${API_BASE}/api/refunds`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const qs = buildParams({
+        fromKey: "startDate",
+        toKey: "endDate",
+        agentKey: "processedById",
+        orderKey: "sortOrder",
+      });
+      const res = await fetch(`${API_BASE}/api/refunds?${qs}`, {
+        headers: authHeaders(),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Failed to fetch refunds");
+      if (!res.ok || !json.success) throw new Error(json.error || "Failed to fetch refunds");
 
       const flattened = (json.data || []).map((refund) => ({
         id: refund.id,
@@ -192,7 +244,6 @@ export default function SalesReport() {
         netPrice: Number(refund.sale?.netPrice || 0),
         sellPrice: Number(refund.sale?.sellPrice || 0),
         agent: refund.processedBy?.fullName || "-",
-        branch: "-",
       }));
 
       setRefundData(flattened);
@@ -202,25 +253,33 @@ export default function SalesReport() {
     } finally {
       setRefundLoading(false);
     }
-  };
+  }, [buildParams]);
+
+  /* ── Lazy, tab-aware fetching ──────────────────────────────────────
+     Sales load by default (the initial active tab). Refunds only fetch
+     once the Refunds tab is actually opened, and both re-fetch whenever
+     a filter changes while their tab is the one currently in view. */
+  useEffect(() => {
+    if (activeTab === "detailed") fetchSales();
+  }, [activeTab, fetchSales]);
 
   useEffect(() => {
-    fetchSales();
-    fetchRefunds();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (activeTab === "refunds") fetchRefunds();
+  }, [activeTab, fetchRefunds]);
 
-  /* ===========================
-		RESOLVE SALE DETAILS (for inline row expansion)
-		Replaces the old handleViewSale-opens-dialog flow. Given a flattened
-		row, returns { invoice, sale } so a table row can expand in place —
-		no dialog, no separate "view" state needed.
-	============================ */
+  const totalSales = useMemo(
+    () => salesData.reduce((sum, s) => sum + (Number(s.sellPrice) || 0), 0),
+    [salesData],
+  );
+  const totalProfit = useMemo(
+    () => salesData.reduce((sum, s) => sum + (Number(s.profit) || 0), 0),
+    [salesData],
+  );
+
   const resolveSaleDetails = useCallback(
     (row) => {
       const invoice = invoiceById.get(String(row.invoiceId));
       if (!invoice) return { invoice: null, sale: null };
-
       const sale = (invoice.sales || []).find(
         (s) => String(s.id) === String(row.id),
       );
@@ -229,121 +288,17 @@ export default function SalesReport() {
     [invoiceById],
   );
 
-  /* ===========================
-		METRICS
-	============================ */
-  const totalSales = useMemo(
-    () => salesData.reduce((sum, s) => sum + (Number(s.sellPrice) || 0), 0),
-    [salesData],
-  );
-
-  const totalProfit = useMemo(
-    () => salesData.reduce((sum, s) => sum + (Number(s.profit) || 0), 0),
-    [salesData],
-  );
-
-  /* ===========================
-		FILTER LOGIC
-	============================ */
-  const isInDateRange = (d) => {
-    if (!d) return false;
-    if (!dateRange?.from && !dateRange?.to) return true;
-    const dt = new Date(d);
-    const from = dateRange?.from ? new Date(dateRange.from) : null;
-    const to = dateRange?.to ? new Date(dateRange.to) : null;
-    if (from) from.setHours(0, 0, 0, 0);
-    if (to) to.setHours(23, 59, 59, 999);
-    if (from && dt < from) return false;
-    if (to && dt > to) return false;
-    return true;
+  const clearFilters = () => {
+    setSearchQuery("");
+    setSearchBy("all");
+    setSelectedAgent("all");
+    setSortOrder("desc");
+    setDateRange({ from: subDays(new Date(), 30), to: new Date() });
   };
 
-  const filterData = (data) => {
-    let out = data.filter((item) => isInDateRange(item.date));
+  const hasActiveFilters =
+    searchQuery || selectedAgent !== "all" || sortOrder !== "desc";
 
-    if (selectedBranch !== "all")
-      out = out.filter(
-        (x) => (x.branch || "").toLowerCase() === selectedBranch.toLowerCase(),
-      );
-    if (selectedAgent !== "all")
-      out = out.filter(
-        (x) => (x.agent || "").toLowerCase() === selectedAgent.toLowerCase(),
-      );
-    if (selectedAirline !== "all")
-      out = out.filter(
-        (x) =>
-          (x.airline || "").toLowerCase() === selectedAirline.toLowerCase(),
-      );
-
-    if (!searchQuery.trim()) return out;
-    const query = searchQuery.toLowerCase();
-
-    return out.filter((item) => {
-      switch (searchBy) {
-        case "invoiceNumber":
-          return (item.invoiceNumber || "").toLowerCase().includes(query);
-        case "documentNumber":
-          return (item.documentNumber || "").toLowerCase().includes(query);
-        case "date":
-          if (!item.date) return false;
-          return (
-            format(new Date(item.date), "yyyy-MM-dd").includes(query) ||
-            format(new Date(item.date), "MMM dd, yyyy")
-              .toLowerCase()
-              .includes(query)
-          );
-        case "remarks":
-          return (item.remarks || item.refundReason || "")
-            .toLowerCase()
-            .includes(query);
-        default:
-          return (
-            (item.invoiceNumber || "").toLowerCase().includes(query) ||
-            (item.documentNumber || "").toLowerCase().includes(query) ||
-            (item.vendor || "").toLowerCase().includes(query) ||
-            (item.customer || "").toLowerCase().includes(query) ||
-            (item.paymentMethod || "").toLowerCase().includes(query) ||
-            (item.status || "").toLowerCase().includes(query) ||
-            (item.agent || "").toLowerCase().includes(query) ||
-            (item.branch || "").toLowerCase().includes(query) ||
-            (item.remarks || item.refundReason || "")
-              .toLowerCase()
-              .includes(query) ||
-            (item.airline || "").toLowerCase().includes(query)
-          );
-      }
-    });
-  };
-
-  const filteredSalesData = useMemo(
-    () => filterData(salesData),
-    [
-      salesData,
-      searchQuery,
-      searchBy,
-      dateRange,
-      selectedBranch,
-      selectedAgent,
-      selectedAirline,
-    ],
-  );
-
-  const filteredRefundData = useMemo(
-    () => filterData(refundData),
-    [
-      refundData,
-      searchQuery,
-      searchBy,
-      dateRange,
-      selectedBranch,
-      selectedAgent,
-      selectedAirline,
-    ],
-  );
-
-  /* ===========================
-		UI
-	============================ */
   return (
     <div className="w-full mx-auto p-6 space-y-6">
       {/* Header */}
@@ -354,12 +309,10 @@ export default function SalesReport() {
             Comprehensive sales analytics and performance metrics
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline">
-            <Download className="h-4 w-4 mr-2" />
-            Export Report
-          </Button>
-        </div>
+        <Button variant="outline">
+          <Download className="h-4 w-4 mr-2" />
+          Export Report
+        </Button>
       </div>
 
       {/* Filters */}
@@ -371,197 +324,129 @@ export default function SalesReport() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            <div className="flex flex-wrap gap-4">
-              <div className="space-y-2 w-full sm:w-1/3 lg:w-1/6">
-                <Label>Search By</Label>
-                <Select value={searchBy} onValueChange={setSearchBy}>
-                  <SelectTrigger className={"w-full"}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Fields</SelectItem>
-                    <SelectItem value="invoiceNumber">
-                      Invoice Number
-                    </SelectItem>
-                    <SelectItem value="documentNumber">
-                      Document Number
-                    </SelectItem>
-                    <SelectItem value="date">Date</SelectItem>
-                    <SelectItem value="remarks">Remarks</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+          <div className="flex flex-wrap gap-4">
+            <div className="space-y-2 w-full sm:w-1/3 lg:w-1/6">
+              <Label>Search By</Label>
+              <Select value={searchBy} onValueChange={setSearchBy}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Fields</SelectItem>
+                  <SelectItem value="invoiceNumber">Invoice Number</SelectItem>
+                  <SelectItem value="documentNumber">Document Number</SelectItem>
+                  <SelectItem value="remarks">Remarks</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-              <div className="space-y-2 w-full sm:w-1/3 lg:w-1/4">
-                <Label>Search Query</Label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                  <Input
-                    placeholder={
-                      searchBy === "invoiceNumber"
-                        ? "Search by invoice number..."
-                        : searchBy === "documentNumber"
-                          ? "Search by document number..."
-                          : searchBy === "date"
-                            ? "Search by date (YYYY-MM-DD or MMM DD, YYYY)..."
-                            : searchBy === "remarks"
-                              ? "Search by remarks..."
-                              : "Search across all fields..."
-                    }
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 w-full"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2 w-full sm:w-1/4 lg:w-1/6">
-                <Label>Date Range</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !dateRange && "text-muted-foreground",
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {dateRange?.from ? (
-                        dateRange.to ? (
-                          <>
-                            {format(dateRange.from, "LLL dd, y")} -{" "}
-                            {format(dateRange.to, "LLL dd, y")}
-                          </>
-                        ) : (
-                          format(dateRange.from, "LLL dd, y")
-                        )
-                      ) : (
-                        <span>Pick a date range</span>
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <div className="p-3 border-b">
-                      <div className="grid grid-cols-2 gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDatePreset("today")}
-                        >
-                          Today
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDatePreset("yesterday")}
-                        >
-                          Yesterday
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDatePreset("last7days")}
-                        >
-                          Last 7 days
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDatePreset("last30days")}
-                        >
-                          Last 30 days
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDatePreset("thisMonth")}
-                        >
-                          This month
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDatePreset("thisYear")}
-                        >
-                          This year
-                        </Button>
-                      </div>
-                    </div>
-                    <Calendar
-                      initialFocus
-                      mode="range"
-                      defaultMonth={dateRange?.from}
-                      selected={dateRange}
-                      onSelect={setDateRange}
-                      numberOfMonths={2}
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-
-              <div className="space-y-2 w-full sm:w-1/4 lg:w-1/6">
-                <Label>Branch</Label>
-                <Select
-                  value={selectedBranch}
-                  onValueChange={setSelectedBranch}
-                >
-                  <SelectTrigger className={"w-full"}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Branches</SelectItem>
-                    <SelectItem value="main">Main Branch</SelectItem>
-                    <SelectItem value="airport">Airport Branch</SelectItem>
-                    <SelectItem value="mall">Mall Branch</SelectItem>
-                    <SelectItem value="downtown">Downtown Branch</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2 w-full sm:w-1/4 lg:w-1/6">
-                <Label>Agent</Label>
-                <Select value={selectedAgent} onValueChange={setSelectedAgent}>
-                  <SelectTrigger className={"w-full"}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Agents</SelectItem>
-                    <SelectItem value="sarah">Sarah Johnson</SelectItem>
-                    <SelectItem value="mike">Mike Wilson</SelectItem>
-                    <SelectItem value="emily">Emily Davis</SelectItem>
-                    <SelectItem value="david">David Brown</SelectItem>
-                  </SelectContent>
-                </Select>
+            <div className="space-y-2 w-full sm:w-1/3 lg:w-1/4">
+              <Label>Search Query</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
+                <Input
+                  placeholder={
+                    searchBy === "invoiceNumber"
+                      ? "Search by invoice number..."
+                      : searchBy === "documentNumber"
+                        ? "Search by document number..."
+                        : searchBy === "remarks"
+                          ? "Search by remarks..."
+                          : "Search across all fields..."
+                  }
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 w-full"
+                />
               </div>
             </div>
 
-            {(searchQuery ||
-              selectedBranch !== "all" ||
-              selectedAgent !== "all" ||
-              selectedAirline !== "all") && (
-              <div className="flex justify-end mt-4">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setSearchQuery("");
-                    setSearchBy("all");
-                    setSelectedBranch("all");
-                    setSelectedAgent("all");
-                    setSelectedAirline("all");
-                    setDateRange({
-                      from: subDays(new Date(), 30),
-                      to: new Date(),
-                    });
-                  }}
-                >
-                  Clear All Filters
-                </Button>
-              </div>
-            )}
+            <div className="space-y-2 w-full sm:w-1/4 lg:w-1/6">
+              <Label>Date Range</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start text-left font-normal"
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {dateRange?.from ? (
+                      dateRange.to ? (
+                        <>
+                          {format(dateRange.from, "LLL dd, y")} -{" "}
+                          {format(dateRange.to, "LLL dd, y")}
+                        </>
+                      ) : (
+                        format(dateRange.from, "LLL dd, y")
+                      )
+                    ) : (
+                      <span>Pick a date range</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <div className="p-3 border-b grid grid-cols-2 gap-2">
+                    {DATE_PRESETS.map(([key, label]) => (
+                      <Button
+                        key={key}
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDatePreset(key)}
+                      >
+                        {label}
+                      </Button>
+                    ))}
+                  </div>
+                  <Calendar
+                    initialFocus
+                    mode="range"
+                    defaultMonth={dateRange?.from}
+                    selected={dateRange}
+                    onSelect={setDateRange}
+                    numberOfMonths={2}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div className="space-y-2 w-full sm:w-1/4 lg:w-1/6">
+              <Label>Agent</Label>
+              <Select value={selectedAgent} onValueChange={setSelectedAgent}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Agents</SelectItem>
+                  {users.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.fullName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2 w-full sm:w-1/4 lg:w-1/6">
+              <Label>Sort</Label>
+              <Select value={sortOrder} onValueChange={setSortOrder}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="desc">Newest first</SelectItem>
+                  <SelectItem value="asc">Oldest first</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
+
+          {hasActiveFilters && (
+            <div className="flex justify-end mt-4">
+              <Button variant="outline" size="sm" onClick={clearFilters}>
+                Clear All Filters
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -569,13 +454,12 @@ export default function SalesReport() {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="detailed">Detailed Report</TabsTrigger>
-          {/* <TabsTrigger value="branch">Branch Report</TabsTrigger> */}
           <TabsTrigger value="refunds">Refunds</TabsTrigger>
         </TabsList>
 
         <TabsContent value="detailed">
           <DetailedReportTab
-            salesData={filteredSalesData}
+            salesData={salesData}
             loading={loading}
             searchQuery={searchQuery}
             searchBy={searchBy}
@@ -585,13 +469,9 @@ export default function SalesReport() {
           />
         </TabsContent>
 
-        {/* <TabsContent value="branch">
-					<BranchReportTab salesData={filteredSalesData} totalSales={totalSales} />
-				</TabsContent> */}
-
         <TabsContent value="refunds">
           <RefundsTab
-            refundData={filteredRefundData}
+            refundData={refundData}
             loading={refundLoading}
             searchQuery={searchQuery}
             searchBy={searchBy}
