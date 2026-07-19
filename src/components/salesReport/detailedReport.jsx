@@ -389,12 +389,14 @@ export default function DetailedReportTab({
                               </div>
                             </TableCell>
                             <TableCell className="max-w-[150px]">
-                              <div className="truncate" title={sale.remarks}>
-                                {highlightText(
-                                  truncateText(sale.remarks || "", 3),
-                                  searchQuery,
-                                )}
-                              </div>
+                              {!isRefunded && (
+                                <div className="truncate" title={sale.remarks}>
+                                  {highlightText(
+                                    truncateText(sale.remarks || "", 3),
+                                    searchQuery,
+                                  )}
+                                </div>
+                              )}
                             </TableCell>
                             {/* stopPropagation so opening the dropdown doesn't also toggle the row */}
                             <TableCell
