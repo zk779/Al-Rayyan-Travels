@@ -76,6 +76,7 @@ import {
   AlertDialogTitle,
 } from "../../shadcn/components/ui/alert-dialog";
 import { Textarea } from "../../shadcn/components/ui/textarea";
+import { useAuth } from "../context/AuthContext"; // ✅ ADD THIS
 
 // ── Backend config — adjust these paths if your routes are mounted elsewhere ──
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
@@ -125,6 +126,13 @@ const emptyForm = {
 };
 
 export default function ExpensePage() {
+  // ✅ RBAC — permission flags
+  const { hasPermission } = useAuth();
+  const canCreate = hasPermission("EXPENSE_CREATE");
+  const canEdit = hasPermission("EXPENSE_EDIT");
+  const canDelete = hasPermission("EXPENSE_DELETE");
+  const hasAnyRowAction = canEdit || canDelete;
+
   const [expenses, setExpenses] = useState([]);
   const [branches, setBranches] = useState([]);
   const [banks, setBanks] = useState([]);
@@ -234,6 +242,7 @@ export default function ExpensePage() {
 
   // ── Form helpers ──────────────────────────────────────────────────────
   const openAdd = () => {
+    if (!canCreate) return; // ✅ RBAC guard
     setEditingId(null);
     setForm(emptyForm);
     setFormError("");
@@ -241,6 +250,7 @@ export default function ExpensePage() {
   };
 
   const openEdit = (expense) => {
+    if (!canEdit) return; // ✅ RBAC guard
     setEditingId(expense.id);
     setForm({
       expenseDate: new Date(expense.expenseDate),
@@ -278,6 +288,10 @@ export default function ExpensePage() {
   };
 
   const save = async () => {
+    // ✅ RBAC guard
+    if (editingId && !canEdit) return;
+    if (!editingId && !canCreate) return;
+
     setSaving(true);
     setFormError("");
     try {
@@ -317,6 +331,7 @@ export default function ExpensePage() {
   };
 
   const confirmDelete = async () => {
+    if (!canDelete) return; // ✅ RBAC guard
     try {
       const res = await fetch(`${EXPENSES_URL}/${deleteId}`, {
         method: "DELETE",
@@ -351,10 +366,13 @@ export default function ExpensePage() {
             Track and manage company expenses
           </p>
         </div>
-        <Button onClick={openAdd} className="bg-indigo-600 hover:bg-indigo-700">
-          <Plus className="h-4 w-4 mr-2" />
-          Add Expense
-        </Button>
+        {/* ✅ RBAC — hide "Add Expense" if no create permission */}
+        {canCreate && (
+          <Button onClick={openAdd} className="bg-indigo-600 hover:bg-indigo-700">
+            <Plus className="h-4 w-4 mr-2" />
+            Add Expense
+          </Button>
+        )}
       </div>
 
       {error && (
@@ -559,21 +577,28 @@ export default function ExpensePage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          {/* ✅ View is always visible — page access already implies EXPENSE_READ */}
                           <DropdownMenuItem onClick={() => setViewing(e)}>
                             <Eye className="h-4 w-4 mr-2" />
                             View
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => openEdit(e)}>
-                            <Edit className="h-4 w-4 mr-2" />
-                            Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => setDeleteId(e.id)}
-                            className="text-red-600"
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Delete
-                          </DropdownMenuItem>
+                          {/* ✅ RBAC — Edit only if canEdit */}
+                          {canEdit && (
+                            <DropdownMenuItem onClick={() => openEdit(e)}>
+                              <Edit className="h-4 w-4 mr-2" />
+                              Edit
+                            </DropdownMenuItem>
+                          )}
+                          {/* ✅ RBAC — Delete only if canDelete */}
+                          {canDelete && (
+                            <DropdownMenuItem
+                              onClick={() => setDeleteId(e.id)}
+                              className="text-red-600"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -942,7 +967,8 @@ export default function ExpensePage() {
             <Button variant="outline" onClick={() => setViewing(null)}>
               Close
             </Button>
-            {viewing && (
+            {/* ✅ RBAC — Edit from view dialog only if canEdit */}
+            {viewing && canEdit && (
               <Button
                 onClick={() => {
                   setViewing(null);
@@ -957,29 +983,32 @@ export default function ExpensePage() {
       </Dialog>
 
       {/* Delete confirm */}
-      <AlertDialog
-        open={!!deleteId}
-        onOpenChange={(o) => !o && setDeleteId(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This permanently deletes the expense and reverses its ledger
-              entries and account balances.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmDelete}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* ✅ RBAC — only mount delete dialog if user can delete */}
+      {canDelete && (
+        <AlertDialog
+          open={!!deleteId}
+          onOpenChange={(o) => !o && setDeleteId(null)}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This permanently deletes the expense and reverses its ledger
+                entries and account balances.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={confirmDelete}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </div>
   );
 }
