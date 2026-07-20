@@ -13,6 +13,7 @@ const Layout = () => {
 const hideSidebarAndHeader =
   location.pathname === "/" ||
   location.pathname === "/login" ||
+  location.pathname === "/forbidden" ||
   location.pathname.startsWith("/invoice-print/");
 
   // Determine margin-left class based on sidebar state and current route
