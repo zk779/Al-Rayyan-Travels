@@ -33,6 +33,7 @@ import {
   Globe,
   Award,
 } from "lucide-react";
+import { useAuth } from "../context/AuthContext"; // ✅ ADD THIS
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
@@ -86,6 +87,12 @@ const toPayload = (values) => ({
 
 // ======================== Main Component ========================
 const AirlineCodesPage = () => {
+  // ✅ RBAC — pull permission checker from AuthContext
+  const { hasPermission } = useAuth();
+  const canCreate = hasPermission("AIRLINE_CREATE");
+  const canEdit = hasPermission("AIRLINE_EDIT");
+  const canDelete = hasPermission("AIRLINE_DELETE");
+
   const [airlineCodes, setAirlineCodes] = useState([]);
   const [loadingList, setLoadingList] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -161,6 +168,10 @@ const AirlineCodesPage = () => {
 
   // ======================== Modal Handlers ========================
   const showModal = (row = null) => {
+    // ✅ RBAC guard — extra safety net even though buttons are already hidden
+    if (row && !canEdit) return;
+    if (!row && !canCreate) return;
+
     setIsModalOpen(true);
     setIsEditModal(!!row);
     setCurrentCode(row);
@@ -231,7 +242,8 @@ const AirlineCodesPage = () => {
   };
 
   // ======================== Delete Handlers ========================
-  const handleDelete = (id) =>
+  const handleDelete = (id) => {
+    if (!canDelete) return; // ✅ RBAC guard
     Modal.confirm({
       title: "Delete Airline",
       content: "Are you sure you want to delete this airline? This action cannot be undone.",
@@ -249,8 +261,10 @@ const AirlineCodesPage = () => {
         }
       },
     });
+  };
 
   const handleDeleteSelected = () => {
+    if (!canDelete) return; // ✅ RBAC guard
     if (selectedRowKeys.length === 0) {
       message.warning("Please select airlines to delete");
       return;
@@ -282,6 +296,8 @@ const AirlineCodesPage = () => {
 
   // ======================== Status Handlers ========================
   const handleStatusToggle = async (record, checked) => {
+    if (!canEdit) return; // ✅ RBAC guard — toggling status is an edit action
+
     // Optimistic UI update
     setAirlineCodes((prev) =>
       prev.map((x) => (x.id === record.id ? { ...x, status: checked } : x))
@@ -303,6 +319,7 @@ const AirlineCodesPage = () => {
   };
 
   const handleBulkStatusChange = (targetStatus) => {
+    if (!canEdit) return; // ✅ RBAC guard
     if (selectedRowKeys.length === 0) {
       message.warning("Please select airlines to update");
       return;
@@ -335,15 +352,18 @@ const AirlineCodesPage = () => {
   };
 
   // ======================== Table Actions Menu ========================
-  const getActionsMenu = (record) => ({
-    items: [
-      {
+  // ✅ RBAC — build menu items conditionally based on permission
+  const getActionsMenu = (record) => {
+    const items = [];
+
+    if (canEdit) {
+      items.push({
         key: "edit",
         label: "Edit",
         icon: <Edit className="w-4 h-4" />,
         onClick: () => showModal(record),
-      },
-      {
+      });
+      items.push({
         key: "toggle",
         label: record.status ? "Mark as Inactive" : "Mark as Active",
         icon: record.status ? (
@@ -352,19 +372,25 @@ const AirlineCodesPage = () => {
           <CheckCheck className="w-4 h-4" />
         ),
         onClick: () => handleStatusToggle(record, !record.status),
-      }
-      // {
-      //   type: "divider",
-      // },
-      // {
-      //   key: "delete",
-      //   label: "Delete",
-      //   danger: true,
-      //   icon: <Trash className="w-4 h-4" />,
-      //   onClick: () => handleDelete(record.id),
-      // },
-    ],
-  });
+      });
+    }
+
+    if (canDelete) {
+      if (items.length > 0) items.push({ type: "divider" });
+      items.push({
+        key: "delete",
+        label: "Delete",
+        danger: true,
+        icon: <Trash className="w-4 h-4" />,
+        onClick: () => handleDelete(record.id),
+      });
+    }
+
+    return { items };
+  };
+
+  // ✅ RBAC — whether to even show the actions dropdown at all
+  const hasAnyRowAction = canEdit || canDelete;
 
   // ======================== Table Columns ========================
   const columns = [
@@ -461,24 +487,30 @@ const AirlineCodesPage = () => {
           checkedChildren="Active"
           unCheckedChildren="Inactive"
           className={status ? "bg-green-500" : ""}
+          disabled={!canEdit} // ✅ RBAC — can't flip switch without edit permission
         />
       ),
     },
-    {
-      title: "Actions",
-      key: "actions",
-      fixed: "right",
-      width: 100,
-      render: (_, record) => (
-        <Dropdown menu={getActionsMenu(record)} trigger={["click"]}>
-          <Button
-            type="text"
-            icon={<MoreVertical className="w-4 h-4" />}
-            className="hover:bg-gray-100"
-          />
-        </Dropdown>
-      ),
-    },
+    // ✅ RBAC — only add the Actions column at all if the user can do something
+    ...(hasAnyRowAction
+      ? [
+          {
+            title: "Actions",
+            key: "actions",
+            fixed: "right",
+            width: 100,
+            render: (_, record) => (
+              <Dropdown menu={getActionsMenu(record)} trigger={["click"]}>
+                <Button
+                  type="text"
+                  icon={<MoreVertical className="w-4 h-4" />}
+                  className="hover:bg-gray-100"
+                />
+              </Dropdown>
+            ),
+          },
+        ]
+      : []),
   ];
 
   const rowSelection = {
@@ -492,8 +524,10 @@ const AirlineCodesPage = () => {
   };
 
   // ======================== Bulk Actions Menu ========================
-  const bulkActionsMenu = {
-    items: [
+  // ✅ RBAC — build bulk menu conditionally
+  const bulkActionsItems = [];
+  if (canEdit) {
+    bulkActionsItems.push(
       {
         key: "activate",
         label: "Activate Selected",
@@ -505,19 +539,20 @@ const AirlineCodesPage = () => {
         label: "Deactivate Selected",
         icon: <XCircle className="w-4 h-4" />,
         onClick: () => handleBulkStatusChange(false),
-      },
-      {
-        type: "divider",
-      },
-      {
-        key: "delete",
-        label: "Delete Selected",
-        danger: true,
-        icon: <Trash className="w-4 h-4" />,
-        onClick: handleDeleteSelected,
-      },
-    ],
-  };
+      }
+    );
+  }
+  if (canDelete) {
+    if (bulkActionsItems.length > 0) bulkActionsItems.push({ type: "divider" });
+    bulkActionsItems.push({
+      key: "delete",
+      label: "Delete Selected",
+      danger: true,
+      icon: <Trash className="w-4 h-4" />,
+      onClick: handleDeleteSelected,
+    });
+  }
+  const bulkActionsMenu = { items: bulkActionsItems };
 
   // ======================== Clear Filters ========================
   const clearFilters = () => {
@@ -559,15 +594,19 @@ const AirlineCodesPage = () => {
                   className="hover:border-blue-400"
                 />
               </Tooltip>
-              <Button
-                type="primary"
-                icon={<Plus className="w-4 h-4" />}
-                onClick={() => showModal()}
-                size="large"
-                className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-md"
-              >
-                Add Airline
-              </Button>
+
+              {/* ✅ RBAC — hide "Add Airline" entirely if no create permission */}
+              {canCreate && (
+                <Button
+                  type="primary"
+                  icon={<Plus className="w-4 h-4" />}
+                  onClick={() => showModal()}
+                  size="large"
+                  className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-md"
+                >
+                  Add Airline
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -676,7 +715,8 @@ const AirlineCodesPage = () => {
             )}
           </div>
 
-          {selectedRowKeys.length > 0 && (
+          {/* ✅ RBAC — only show bulk action bar if user has edit or delete permission */}
+          {selectedRowKeys.length > 0 && hasAnyRowAction && (
             <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Badge count={selectedRowKeys.length} showZero color="blue" />
@@ -710,6 +750,8 @@ const AirlineCodesPage = () => {
             dataSource={filteredData}
             rowKey="id"
             loading={loadingList}
+            // ✅ RBAC — no point offering row selection if there's no bulk action available
+            rowSelection={hasAnyRowAction ? rowSelection : undefined}
             pagination={{
               pageSize: 10,
               showTotal: (total) => `Total ${total} airline(s)`,
@@ -723,9 +765,11 @@ const AirlineCodesPage = () => {
                   image={Empty.PRESENTED_IMAGE_SIMPLE}
                   description="No airlines found"
                 >
-                  <Button type="primary" onClick={() => showModal()}>
-                    Add First Airline
-                  </Button>
+                  {canCreate && (
+                    <Button type="primary" onClick={() => showModal()}>
+                      Add First Airline
+                    </Button>
+                  )}
                 </Empty>
               ),
             }}

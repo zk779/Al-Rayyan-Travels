@@ -6,6 +6,7 @@ import dayjs from "dayjs";
 import { Edit, Trash, Plus, Search, Landmark, Wallet, CheckCircle, DollarSign } from "lucide-react";
 import CustomAlertDialog from "../components/CustomAlertDialog";
 import { appToast } from "../../shadcn/components/ui/appToast";
+import { useAuth } from "../context/AuthContext"; // ✅ ADD THIS
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
@@ -41,6 +42,13 @@ const normalizeBank = (b) => ({
 
 /* ======================= PAGE ======================= */
 const BankAccountsPage = () => {
+  // ✅ RBAC — permission flags (using BANK_* since no dedicated BANK_* permissions exist yet)
+  const { hasPermission } = useAuth();
+  const canCreate = hasPermission("BANK_CREATE");
+  const canEdit = hasPermission("BANK_EDIT");
+  const canDelete = hasPermission("BANK_DELETE");
+  const hasAnyRowAction = canEdit || canDelete;
+
   const [banks,       setBanks]       = useState([]);
   const [loadingList, setLoadingList] = useState(false);
   const [orderBy,     setOrderBy]     = useState("bankDate");
@@ -95,6 +103,10 @@ const BankAccountsPage = () => {
 
   /* ── Modal ── */
   const showModal = (bank = null) => {
+    // ✅ RBAC guard
+    if (bank && !canEdit) return;
+    if (!bank && !canCreate) return;
+
     setIsModalOpen(true);
     setIsEditModal(!!bank);
     setCurrentBank(bank);
@@ -122,6 +134,10 @@ const BankAccountsPage = () => {
 
   /* ── Save ── */
   const handleSubmit = async (values) => {
+    // ✅ RBAC guard
+    if (isEditModal && !canEdit) return;
+    if (!isEditModal && !canCreate) return;
+
     setSaving(true);
     try {
       const payload = {
@@ -152,6 +168,7 @@ const BankAccountsPage = () => {
 
   /* ── Delete ── */
   const handleConfirmDelete = async () => {
+    if (!canDelete) return; // ✅ RBAC guard
     if (!deleteTarget) return;
     setIsDeleting(true);
     try {
@@ -168,6 +185,8 @@ const BankAccountsPage = () => {
 
   /* ── Status toggle ── */
   const handleStatusToggle = async (id, checked) => {
+    if (!canEdit) return; // ✅ RBAC guard — status toggle is an edit action
+
     setBanks((prev) => prev.map((b) => (b.id === id ? { ...b, isActive: checked } : b)));
     try {
       await apiRequest(`/api/banks/${id}`, { method: "PUT", body: { isActive: checked } });
@@ -236,20 +255,30 @@ const BankAccountsPage = () => {
           onChange={(checked) => handleStatusToggle(r.id, checked)}
           checkedChildren="Active"
           unCheckedChildren="Inactive"
+          disabled={!canEdit} // ✅ RBAC
         />
       ),
     },
-    {
-      title: "Actions",
-      key: "actions",
-      fixed: "right",
-      render: (_, r) => (
-        <Space>
-          <Button variant="link" color="primary" icon={<Edit className="w-5 h-5" />} onClick={() => showModal(r)} />
-          <Button variant="link" color="danger"  icon={<Trash className="w-5 h-5" />} onClick={() => setDeleteTarget(r)} />
-        </Space>
-      ),
-    },
+    // ✅ RBAC — only add Actions column if user can do anything
+    ...(hasAnyRowAction
+      ? [
+          {
+            title: "Actions",
+            key: "actions",
+            fixed: "right",
+            render: (_, r) => (
+              <Space>
+                {canEdit && (
+                  <Button variant="link" color="primary" icon={<Edit className="w-5 h-5" />} onClick={() => showModal(r)} />
+                )}
+                {canDelete && (
+                  <Button variant="link" color="danger" icon={<Trash className="w-5 h-5" />} onClick={() => setDeleteTarget(r)} />
+                )}
+              </Space>
+            ),
+          },
+        ]
+      : []),
   ];
 
   /* ── Render ── */
@@ -275,9 +304,12 @@ const BankAccountsPage = () => {
             allowClear
             style={{ width: 220 }}
           />
-          <Button type="primary" icon={<Plus />} onClick={() => showModal()}>
-            Add Bank
-          </Button>
+          {/* ✅ RBAC — hide "Add Bank" if no create permission */}
+          {canCreate && (
+            <Button type="primary" icon={<Plus />} onClick={() => showModal()}>
+              Add Bank
+            </Button>
+          )}
         </Space>
       </div>
 
@@ -315,16 +347,18 @@ const BankAccountsPage = () => {
       </div>
 
       {/* Delete Confirm */}
-      <CustomAlertDialog
-        open={!!deleteTarget}
-        onOpenChange={() => setDeleteTarget(null)}
-        title="Remove Bank Account?"
-        description={`Are you sure you want to remove "${deleteTarget?.bankName}"? If it has existing transactions, it will be safely deactivated instead.`}
-        onConfirm={handleConfirmDelete}
-        loading={isDeleting}
-        variant="danger"
-        confirmText="Confirm Action"
-      />
+      {canDelete && (
+        <CustomAlertDialog
+          open={!!deleteTarget}
+          onOpenChange={() => setDeleteTarget(null)}
+          title="Remove Bank Account?"
+          description={`Are you sure you want to remove "${deleteTarget?.bankName}"? If it has existing transactions, it will be safely deactivated instead.`}
+          onConfirm={handleConfirmDelete}
+          loading={isDeleting}
+          variant="danger"
+          confirmText="Confirm Action"
+        />
+      )}
 
       {/* Add / Edit Modal */}
       <Modal

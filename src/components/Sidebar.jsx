@@ -30,6 +30,7 @@ import {
 
 import { useSidebar } from "../context/SidebarContext";
 import { ThemeContext } from "../context/ThemeContext";
+import { useAuth } from "../context/AuthContext";
 import { appToast } from "../../shadcn/components/ui/appToast";
 import LogoDark from "../assets/logo-dark.png";
 import LogoLight from "../assets/logo-light.png";
@@ -59,6 +60,7 @@ const Sidebar = () => {
 	const { isCollapsed, setIsCollapsed, sidebarHidden, setSidebarHidden } =
 		useSidebar();
 	const { isDarkMode, toggleTheme } = useContext(ThemeContext);
+	const { hasPermission, logout } = useAuth(); // ✅ RBAC + proper logout
 	const navigate = useNavigate();
 
 	const location = useLocation();
@@ -83,9 +85,10 @@ const Sidebar = () => {
 		setOpenSections((p) => ({ ...p, [key]: !p[key] }));
 	};
 
-	// Logout function
+	// ✅ Logout function — uses AuthContext.logout() so user/permissions/token
+	// are all cleared consistently (and cross-tab sync fires correctly)
 	const handleLogout = () => {
-		localStorage.removeItem("token");
+		logout();
 		appToast.success("Logged Out", "You have been successfully logged out");
 		setTimeout(() => {
 			navigate("/login");
@@ -95,7 +98,10 @@ const Sidebar = () => {
 	/* ======================================================
 		NAV LINK WITH MODERN ACTIVE INDICATOR
 	====================================================== */
-	const NavItem = ({ to, icon: Icon, label, onClick }) => {
+	const NavItem = ({ to, icon: Icon, label, onClick, permission }) => {
+		// ✅ RBAC check — hide item entirely if permission not granted
+		if (permission && !hasPermission(permission)) return null;
+
 		const active = activePath === to;
 
 		const handleClick = () => {
@@ -156,9 +162,18 @@ const Sidebar = () => {
 
 	/* ======================================================
 		COLLAPSIBLE GROUP
+		✅ RBAC: hides entire group if no children are visible
 	====================================================== */
 	const Collapsible = ({ id, icon: Icon, label, children }) => {
 		const open = openSections[id];
+
+		// Filter out null children (hidden by RBAC inside NavItem)
+		const visibleChildren = React.Children.toArray(children).filter(
+			(child) => child !== null
+		);
+
+		// ✅ If nobody can see any item in this group, hide the whole section
+		if (visibleChildren.length === 0) return null;
 
 		return (
 			<div className="space-y-0 mb-0!">
@@ -194,7 +209,7 @@ const Sidebar = () => {
 								: "max-h-0 opacity-0 mt-0 pointer-events-none"
 							}`}
 					>
-						{children}
+						{visibleChildren}
 					</div>
 				)}
 			</div>
@@ -203,29 +218,66 @@ const Sidebar = () => {
 
 	/* ======================================================
 		MENU CONTENT
+		✅ RBAC: each item/group gated by its matching permission
 	====================================================== */
 	const MenuContent = () => (
 		<>
 			<NavItem to="/dashboard" icon={Home} label="Dashboard" />
-			<NavItem to="/airline-codes" icon={Plane} label="Airline Codes" />
-			<NavItem to="/vendors" icon={Store} label="Vendors" />
-			<NavItem to="/customers" icon={Users2} label="Customers" />
-			<NavItem to="/bank-accounts" icon={LandmarkIcon} label="Bank Accounts" />
+
+			<NavItem
+				to="/airline-codes"
+				icon={Plane}
+				label="Airline Codes"
+				permission="AIRLINE_READ"
+			/>
+			<NavItem to="/vendors" icon={Store} label="Vendors" permission="VENDOR_READ" />
+			<NavItem
+				to="/customers"
+				icon={Users2}
+				label="Customers"
+				permission="CUSTOMER_READ"
+			/>
+			<NavItem
+				to="/bank-accounts"
+				icon={LandmarkIcon}
+				label="Bank Accounts"
+				permission="BRANCH_READ"
+			/>
 
 			<Collapsible id="sales" icon={HandCoins} label="Sales">
-				<NavItem to="/new-services" icon={Plus} label="New Services" />
-				<NavItem to="/sales-report" icon={ScrollText} label="Sales Report" />
-				<NavItem to="/report" icon={PieChart} label="Reports" />
+				<NavItem
+					to="/new-services"
+					icon={Plus}
+					label="New Services"
+					permission="SALE_CREATE"
+				/>
+				<NavItem
+					to="/sales-report"
+					icon={ScrollText}
+					label="Sales Report"
+					permission="REPORT_READ"
+				/>
+				<NavItem to="/report" icon={PieChart} label="Reports" permission="REPORT_READ" />
 			</Collapsible>
 
 			<Collapsible id="payments" icon={SaudiRiyal} label="Payments">
-				<NavItem to="/manage-payments" icon={BookCheck} label="Payment List" />
-				<NavItem to="/refund-list" icon={RotateCcwIcon} label="Refunds" />
+				<NavItem
+					to="/manage-payments"
+					icon={BookCheck}
+					label="Payment List"
+					permission="PAYMENT_READ"
+				/>
+				<NavItem
+					to="/refund-list"
+					icon={RotateCcwIcon}
+					label="Refunds"
+					permission="REFUND_READ"
+				/>
 			</Collapsible>
 
-			<NavItem to="/ledger" icon={LandmarkIcon} label="Ledger" />
-			<NavItem to="/expenses" icon={Wallet} label="Expenses" />
-			<NavItem to="/users" icon={UserCog} label="Users" />
+			<NavItem to="/ledger" icon={LandmarkIcon} label="Ledger" permission="LEDGER_READ" />
+			<NavItem to="/expenses" icon={Wallet} label="Expenses" permission="EXPENSE_READ" />
+			<NavItem to="/users" icon={UserCog} label="Users" permission="USER_READ" />
 
 			{/* Divider before logout */}
 			<div className={`my-2 border-t ${isDarkMode ? "border-white/10" : "border-slate-300"}`}></div>
