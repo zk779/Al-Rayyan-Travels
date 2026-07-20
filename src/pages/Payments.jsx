@@ -3,6 +3,9 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { Button } from "../../shadcn/components/ui/button";
 import { Card, CardContent } from "../../shadcn/components/ui/card";
+import { Input } from "../../shadcn/components/ui/input";
+import { Label } from "../../shadcn/components/ui/label";
+import { Textarea } from "../../shadcn/components/ui/textarea";
 import {
   Tabs,
   TabsContent,
@@ -26,6 +29,7 @@ import { cn } from "../../shadcn/lib/utils";
 import {
   Building2,
   User,
+  Receipt,
   TrendingUp,
   TrendingDown,
   DollarSign,
@@ -34,6 +38,8 @@ import {
   FileText,
   Paperclip,
   ExternalLink,
+  Banknote,
+  CreditCard,
 } from "lucide-react";
 import PaymentsTable, { MethodBadge, CategoryBadge } from "../components/PaymentsTable";
 
@@ -61,6 +67,27 @@ const authHeaders = () => ({
   "Content-Type": "application/json",
   Authorization: `Bearer ${getToken()}`,
 });
+
+// A CUSTOMER-type payment tied to exactly one sale (saleId set) — whether
+// it has a real customer attached or not. EditCustomerPayment is built for
+// the multi-invoice saleAllocations flow, which doesn't apply here — these
+// get routed to EditSalePayment instead.
+const isSingleSalePayment = (p) => p?.partyType === "CUSTOMER" && !!p?.saleId;
+const isWalkInPayment = (p) =>
+  typeof p?.isWalkIn === "boolean" ? p.isWalkIn : isSingleSalePayment(p) && !p?.customerId;
+
+function saleReference(sale) {
+  if (!sale) return null;
+  const parts = [];
+  if (sale.invoice?.invoiceNo) parts.push(`Invoice ${sale.invoice.invoiceNo}`);
+  if (sale.documentNo) parts.push(`Doc# ${sale.documentNo}`);
+  return parts.length ? parts.join(" · ") : null;
+}
+
+function partyDisplayName(p) {
+  if (isWalkInPayment(p)) return "Walk-in Customer";
+  return p?.vendor?.vendorName ?? p?.customer?.customerName ?? "—";
+}
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
 async function fetchAllPayments() {
@@ -121,8 +148,6 @@ function StatCard({ label, value, sub, icon: Icon, trend }) {
 }
 
 // ─── Attachment Preview ───────────────────────────────────────────────────────
-// Handles both image attachments (inline preview) and PDFs (embedded viewer),
-// with a fallback "open original" link either way.
 function AttachmentPreviewDialog({ url, onClose }) {
   const open = !!url;
   const isPdf = url?.toLowerCase().includes(".pdf");
@@ -183,8 +208,9 @@ function PaymentDetailDrawer({ paymentId, open, onClose, onPreview }) {
       .finally(() => setLoading(false));
   }, [paymentId, open]);
 
-  const partyName =
-    payment?.vendor?.vendorName ?? payment?.customer?.customerName ?? "—";
+  const partyName = payment ? partyDisplayName(payment) : "—";
+  const walkIn = payment ? isWalkInPayment(payment) : false;
+  const saleRef = payment ? saleReference(payment.sale) : null;
   const isPdf = payment?.attachmentUrl?.toLowerCase().includes(".pdf");
 
   return (
@@ -216,10 +242,19 @@ function PaymentDetailDrawer({ paymentId, open, onClose, onPreview }) {
             {/* Party */}
             <div className="flex items-center gap-3 p-4 rounded-xl bg-slate-50">
               <div
-                className={`p-2 rounded-lg ${payment.partyType === "VENDOR" ? "bg-violet-100" : "bg-sky-100"}`}
+                className={cn(
+                  "p-2 rounded-lg",
+                  payment.partyType === "VENDOR"
+                    ? "bg-violet-100"
+                    : walkIn
+                      ? "bg-slate-200"
+                      : "bg-sky-100",
+                )}
               >
                 {payment.partyType === "VENDOR" ? (
                   <Building2 className="h-5 w-5 text-violet-600" />
+                ) : walkIn ? (
+                  <Receipt className="h-5 w-5 text-slate-500" />
                 ) : (
                   <User className="h-5 w-5 text-sky-600" />
                 )}
@@ -227,12 +262,21 @@ function PaymentDetailDrawer({ paymentId, open, onClose, onPreview }) {
               <div>
                 <p className="text-xs text-slate-400 font-medium">
                   {payment.partyType}
+                  {walkIn && " · WALK-IN"}
                 </p>
-                <p className="text-sm font-semibold text-slate-800">
+                <p
+                  className={cn(
+                    "text-sm font-semibold",
+                    walkIn ? "text-slate-500 italic" : "text-slate-800",
+                  )}
+                >
                   {partyName}
                 </p>
                 {payment.vendor?.category && (
                   <CategoryBadge category={payment.vendor.category} />
+                )}
+                {saleRef && (
+                  <p className="text-xs text-slate-400 mt-0.5">{saleRef}</p>
                 )}
               </div>
             </div>
@@ -402,8 +446,6 @@ function DeleteConfirmDialog({
 }
 
 // ─── Add Payment Dialog ────────────────────────────────────────────────────────
-// Renders VendorDepositTab or CustomerDepositTab depending on which
-// partyType tab the "Add Payment" button was clicked from.
 function AddPaymentDialog({ partyType, open, onClose, onSuccess }) {
   const isVendor = partyType === "VENDOR";
   return (
@@ -425,16 +467,167 @@ function AddPaymentDialog({ partyType, open, onClose, onSuccess }) {
   );
 }
 
+// ─── Edit Sale Payment (single-sale: walk-in OR customer-linked) ──────────────
+// Compact edit form for a payment tied to exactly one sale (payment.saleId
+// set) — covers both walk-in and single-invoice customer payments. Does NOT
+// use saleAllocations at all; the PUT route accepts `amount` directly for
+// these. EditCustomerPayment is reserved for genuine multi-invoice payments.
+function EditSalePayment({ payment, onClose, onSuccess }) {
+  const [amount, setAmount] = useState(String(payment.amount));
+  const [method, setMethod] = useState(payment.method);
+  const [bankId, setBankId] = useState(payment.bankId ?? payment.bank?.id ?? "");
+  const [banks, setBanks] = useState([]);
+  const [date, setDate] = useState(
+    payment.transactionDate ? payment.transactionDate.slice(0, 10) : "",
+  );
+  const [remarks, setRemarks] = useState(payment.remarks ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/banks?status=true`, { headers: authHeaders() })
+      .then((r) => r.json())
+      .then((json) => json.success && setBanks(json.data || []))
+      .catch(() => {});
+  }, []);
+
+  const walkIn = isWalkInPayment(payment);
+
+  const submit = async () => {
+    setError("");
+    const amt = parseFloat(amount);
+    if (isNaN(amt) || amt <= 0) return setError("Amount must be greater than 0");
+    if (method === "BANK_TRANSFER" && !bankId) return setError("Bank is required");
+
+    setSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/payments/vendor-customer/${payment.id}`, {
+        method: "PUT",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          amount: amt,
+          method,
+          bankId: method === "BANK_TRANSFER" ? bankId : undefined,
+          remarks,
+          transactionDate: date ? new Date(date).toISOString() : undefined,
+        }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || "Failed to update payment");
+      onSuccess?.();
+    } catch (e) {
+      setError(e.message || "Failed to update payment");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl bg-slate-50 border border-slate-100 p-3.5">
+        <p className="text-xs text-slate-400 mb-0.5">
+          {walkIn ? "Walk-in Customer" : payment.customer?.customerName ?? "Customer"}
+        </p>
+        <p className="text-sm font-medium text-slate-700">{saleReference(payment.sale) || "—"}</p>
+      </div>
+
+      {error && (
+        <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+          {error}
+        </p>
+      )}
+
+      <div className="space-y-1.5">
+        <Label>Amount</Label>
+        <Input
+          type="number"
+          min="0"
+          step="0.01"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label>Payment Method</Label>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setMethod("CASH")}
+            className={cn(
+              "flex items-center justify-center gap-2 h-10 rounded-xl border text-sm font-medium transition-colors",
+              method === "CASH"
+                ? "border-transparent text-white bg-blue-600"
+                : "border-slate-200 text-slate-600 hover:bg-slate-50",
+            )}
+          >
+            <Banknote className="w-4 h-4" /> Cash
+          </button>
+          <button
+            type="button"
+            onClick={() => setMethod("BANK_TRANSFER")}
+            className={cn(
+              "flex items-center justify-center gap-2 h-10 rounded-xl border text-sm font-medium transition-colors",
+              method === "BANK_TRANSFER"
+                ? "border-transparent text-white bg-blue-600"
+                : "border-slate-200 text-slate-600 hover:bg-slate-50",
+            )}
+          >
+            <CreditCard className="w-4 h-4" /> Bank Transfer
+          </button>
+        </div>
+      </div>
+
+      {method === "BANK_TRANSFER" && (
+        <div className="space-y-1.5">
+          <Label>Bank</Label>
+          <select
+            value={bankId}
+            onChange={(e) => setBankId(e.target.value)}
+            className="w-full h-10 rounded-xl border border-slate-200 px-3 text-sm"
+          >
+            <option value="">Select bank...</option>
+            {banks.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.bankName} — {b.accountNumber}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      <div className="space-y-1.5">
+        <Label>Date</Label>
+        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label>Remarks</Label>
+        <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} rows={2} />
+      </div>
+
+      <div className="flex gap-2 justify-end pt-2">
+        <Button variant="outline" onClick={onClose} disabled={saving}>
+          Cancel
+        </Button>
+        <Button onClick={submit} disabled={saving} className="bg-blue-600 hover:bg-blue-700">
+          {saving ? "Saving…" : "Save Changes"}
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 // ─── Edit Payment Dialog ───────────────────────────────────────────────────────
-// Renders EditVendorPayment or EditCustomerPayment depending on the payment's partyType.
+// VENDOR -> EditVendorPayment. Single-sale CUSTOMER (walk-in or 1 invoice)
+// -> EditSalePayment. Genuine multi-invoice CUSTOMER -> EditCustomerPayment.
 function EditPaymentDialog({ payment, onClose, onSuccess }) {
   if (!payment) return null;
-  return payment.partyType === "VENDOR" ? (
-    <EditVendorPayment payment={payment} onClose={onClose} onSuccess={onSuccess} />
-  ) : (
-    <EditCustomerPayment payment={payment} onClose={onClose} onSuccess={onSuccess} />
-  );
+  if (payment.partyType === "VENDOR")
+    return <EditVendorPayment payment={payment} onClose={onClose} onSuccess={onSuccess} />;
+  if (isSingleSalePayment(payment))
+    return <EditSalePayment payment={payment} onClose={onClose} onSuccess={onSuccess} />;
+  return <EditCustomerPayment payment={payment} onClose={onClose} onSuccess={onSuccess} />;
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
@@ -474,11 +667,8 @@ export default function PaymentPage() {
   }, [load]);
 
   // ── Fix: Radix Dialog/Sheet overlays can leave `pointer-events: none`
-  // stuck on <body> when they close (a known upstream timing bug, worse when
-  // multiple overlay primitives — Sheet + Dialog — share the page). Without
-  // this, the whole page stops responding to clicks until a hard refresh.
-  // Re-running this after every overlay-open-state change, shortly after the
-  // close animation finishes, guarantees it always gets cleaned up.
+  // stuck on <body> when they close. Re-running this after every overlay-
+  // open-state change guarantees it always gets cleaned up.
   const anyOverlayOpen =
     drawerOpen || editTarget !== null || deleteTarget !== null || addDialogOpen;
   useEffect(() => {
@@ -534,6 +724,12 @@ export default function PaymentPage() {
     setAddPartyType(null);
     load();
   };
+
+  const editDialogTitle = editTarget?.partyType === "VENDOR"
+    ? "Edit Vendor Payment"
+    : isSingleSalePayment(editTarget)
+      ? "Edit Sale Payment"
+      : "Edit Customer Payment";
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -674,15 +870,16 @@ export default function PaymentPage() {
         onClose={() => setAddPartyType(null)}
         onSuccess={handleAddSuccess}
       />
+
+      {/* Edit payment dialog — routes to Vendor / Sale (single-invoice or
+          walk-in) / Customer (multi-invoice) form based on the payment */}
       <Dialog
          open={editTarget !== null}
          onOpenChange={(o) => !o && setEditTarget(null)}
        >
          <DialogContent className="max-w-4xl! max-h-[97vh] overflow-y-auto">
            <DialogHeader>
-            <DialogTitle>
-              {editTarget?.partyType === "VENDOR" ? "Edit Vendor Payment" : "Edit Customer Payment"}
-            </DialogTitle>
+            <DialogTitle>{editDialogTitle}</DialogTitle>
            </DialogHeader>
            {editTarget && (
              <EditPaymentDialog
@@ -711,11 +908,7 @@ export default function PaymentPage() {
       {/* Delete confirm */}
       <DeleteConfirmDialog
         open={deleteTarget !== null}
-        partyName={
-          deleteTarget?.vendor?.vendorName ??
-          deleteTarget?.customer?.customerName ??
-          "this payment"
-        }
+        partyName={deleteTarget ? partyDisplayName(deleteTarget) : "this payment"}
         onConfirm={handleDeleteConfirm}
         onCancel={() => setDeleteTarget(null)}
         loading={deleteLoading}
