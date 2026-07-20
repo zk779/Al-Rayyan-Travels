@@ -26,6 +26,7 @@ import {
 // Components & Utils
 import CustomAlertDialog from "../components/CustomAlertDialog"; 
 import { appToast } from "../../shadcn/components/ui/appToast"; 
+import { useAuth } from "../context/AuthContext"; // ✅ ADD THIS
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
@@ -71,6 +72,13 @@ function unpackAddress(address = "") {
 }
 
 const VendorsPage = () => {
+  // ✅ RBAC — permission flags
+  const { hasPermission } = useAuth();
+  const canCreate = hasPermission("VENDOR_CREATE");
+  const canEdit = hasPermission("VENDOR_EDIT");
+  const canDelete = hasPermission("VENDOR_DELETE");
+  const hasAnyRowAction = canEdit || canDelete;
+
   const [vendors, setVendors] = useState([]);
   const [loadingList, setLoadingList] = useState(false);
   const [orderBy, setOrderBy] = useState("vendorDate");
@@ -143,6 +151,10 @@ const VendorsPage = () => {
   }, [vendors]);
 
   const showModal = (vendor = null) => {
+    // ✅ RBAC guard
+    if (vendor && !canEdit) return;
+    if (!vendor && !canCreate) return;
+
     setIsModalOpen(true);
     setIsEditModal(!!vendor);
     setCurrentVendor(vendor);
@@ -177,6 +189,10 @@ const VendorsPage = () => {
   };
 
   const handleSubmit = async (values) => {
+    // ✅ RBAC guard
+    if (isEditModal && !canEdit) return;
+    if (!isEditModal && !canCreate) return;
+
     setSaving(true);
     try {
       const payload = {
@@ -212,6 +228,7 @@ const VendorsPage = () => {
 
   /* ======================= DELETE LOGIC ======================= */
   const handleConfirmDelete = async () => {
+    if (!canDelete) return; // ✅ RBAC guard
     if (!deleteTarget) return;
     setIsDeleting(true);
     try {
@@ -237,6 +254,8 @@ const VendorsPage = () => {
   };
 
   const handleStatusToggle = async (id, checked) => {
+    if (!canEdit) return; // ✅ RBAC guard — status toggle is an edit action
+
     setVendors((prev) => prev.map((v) => (v.id === id ? { ...v, status: checked } : v)));
     try {
       await apiRequest(`/api/vendors/${id}`, {
@@ -328,30 +347,40 @@ const VendorsPage = () => {
           onChange={(checked) => handleStatusToggle(record.id, checked)}
           checkedChildren="Active"
           unCheckedChildren="Inactive"
+          disabled={!canEdit} // ✅ RBAC
         />
       ),
     },
-    {
-      title: "Actions",
-      key: "actions",
-      fixed: "right",
-      render: (_, record) => (
-        <Space>
-          <Button
-            variant="link"
-            color="primary"
-            icon={<Edit className="w-5 h-5" />}
-            onClick={() => showModal(record)}
-          />
-          <Button
-            variant="link"
-            color="danger"
-            icon={<Trash className="w-5 h-5" />}
-            onClick={() => setDeleteTarget(record)}
-          />
-        </Space>
-      ),
-    },
+    // ✅ RBAC — only add Actions column if user can do anything
+    ...(hasAnyRowAction
+      ? [
+          {
+            title: "Actions",
+            key: "actions",
+            fixed: "right",
+            render: (_, record) => (
+              <Space>
+                {canEdit && (
+                  <Button
+                    variant="link"
+                    color="primary"
+                    icon={<Edit className="w-5 h-5" />}
+                    onClick={() => showModal(record)}
+                  />
+                )}
+                {canDelete && (
+                  <Button
+                    variant="link"
+                    color="danger"
+                    icon={<Trash className="w-5 h-5" />}
+                    onClick={() => setDeleteTarget(record)}
+                  />
+                )}
+              </Space>
+            ),
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -376,9 +405,12 @@ const VendorsPage = () => {
             size="middle"
             allowClear
           />
-          <Button type="primary" icon={<Plus />} onClick={() => showModal()}>
-            Add Vendor
-          </Button>
+          {/* ✅ RBAC — hide "Add Vendor" if no create permission */}
+          {canCreate && (
+            <Button type="primary" icon={<Plus />} onClick={() => showModal()}>
+              Add Vendor
+            </Button>
+          )}
         </Space>
       </div>
 
@@ -437,20 +469,23 @@ const VendorsPage = () => {
         />
       </div>
 
-      <CustomAlertDialog
-        open={!!deleteTarget}
-        onOpenChange={() => setDeleteTarget(null)}
-        title={Array.isArray(deleteTarget) ? "Delete Selected Vendors?" : "Remove Vendor?"}
-        description={
-          Array.isArray(deleteTarget) 
-          ? `You are about to delete ${deleteTarget.length} vendors. If they have transaction history, they will be deactivated instead of removed.`
-          : `Are you sure you want to remove "${deleteTarget?.name}"? If they have existing ledger entries, they will be safely deactivated.`
-        }
-        onConfirm={handleConfirmDelete}
-        loading={isDeleting}
-        variant="danger"
-        confirmText="Confirm Action"
-      />
+      {/* ✅ RBAC — only mount delete dialog if user can delete */}
+      {canDelete && (
+        <CustomAlertDialog
+          open={!!deleteTarget}
+          onOpenChange={() => setDeleteTarget(null)}
+          title={Array.isArray(deleteTarget) ? "Delete Selected Vendors?" : "Remove Vendor?"}
+          description={
+            Array.isArray(deleteTarget) 
+            ? `You are about to delete ${deleteTarget.length} vendors. If they have transaction history, they will be deactivated instead of removed.`
+            : `Are you sure you want to remove "${deleteTarget?.name}"? If they have existing ledger entries, they will be safely deactivated.`
+          }
+          onConfirm={handleConfirmDelete}
+          loading={isDeleting}
+          variant="danger"
+          confirmText="Confirm Action"
+        />
+      )}
 
       <Modal
         title={

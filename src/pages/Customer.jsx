@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import { appToast } from "../../shadcn/components/ui/appToast"; // adjust path as needed
 import CustomAlertDialog from "../components/CustomAlertDialog"; // adjust path as needed
+import { useAuth } from "../context/AuthContext"; // ✅ ADD THIS
 
 const { Option } = Select;
 
@@ -73,6 +74,13 @@ const getCustomerTypeMeta = (type) =>
   };
 
 const CustomersPage = () => {
+  // ✅ RBAC — permission flags
+  const { hasPermission } = useAuth();
+  const canCreate = hasPermission("CUSTOMER_CREATE");
+  const canEdit = hasPermission("CUSTOMER_EDIT");
+  const canDelete = hasPermission("CUSTOMER_DELETE");
+  const hasAnyRowAction = canEdit || canDelete;
+
   const [customers, setCustomers] = useState([]);
   const [loadingTable, setLoadingTable] = useState(false);
   const [loadingForm, setLoadingForm] = useState(false);
@@ -208,6 +216,10 @@ const CustomersPage = () => {
 
   /* ========================= MODAL ========================= */
   const showModal = (customer = null) => {
+    // ✅ RBAC guard
+    if (customer && !canEdit) return;
+    if (!customer && !canCreate) return;
+
     setIsModalOpen(true);
     setIsEditModal(!!customer);
     setCurrentCustomer(customer);
@@ -237,6 +249,10 @@ const CustomersPage = () => {
   };
 
   const handleSubmit = async (values) => {
+    // ✅ RBAC guard
+    if (isEditModal && !canEdit) return;
+    if (!isEditModal && !canCreate) return;
+
     setLoadingForm(true);
     try {
       const payload = {
@@ -272,6 +288,7 @@ const CustomersPage = () => {
 
   /* ========================= DELETE ========================= */
   const handleConfirmDelete = async () => {
+    if (!canDelete) return; // ✅ RBAC guard
     if (!deleteTarget) return;
     setIsDeleting(true);
     try {
@@ -301,6 +318,8 @@ const CustomersPage = () => {
 
   /* ========================= STATUS TOGGLE ========================= */
   const handleStatusToggle = async (id, checked) => {
+    if (!canEdit) return; // ✅ RBAC guard — status toggle is an edit action
+
     setCustomers((prev) =>
       prev.map((c) => (c.id === id ? { ...c, isActive: checked } : c)),
     );
@@ -428,6 +447,7 @@ const CustomersPage = () => {
             onChange={(checked) => handleStatusToggle(record.id, checked)}
             checkedChildren="Active"
             unCheckedChildren="Inactive"
+            disabled={!canEdit} // ✅ RBAC
           />
           <Badge
             status={record.isActive ? "success" : "default"}
@@ -436,30 +456,39 @@ const CustomersPage = () => {
         </div>
       ),
     },
-    {
-      title: "Actions",
-      align: "center",
-      width: "12%",
-      render: (_, record) => (
-        <Space>
-          <Tooltip title="Edit Customer">
-            <Button
-              icon={<Edit className="w-4 h-4" />}
-              onClick={() => showModal(record)}
-              className="hover:bg-blue-50 hover:border-blue-300"
-            />
-          </Tooltip>
-          <Tooltip title="Delete Customer">
-            <Button
-              danger
-              icon={<Trash className="w-4 h-4" />}
-              onClick={() => setDeleteTarget(record)}
-              className="hover:bg-red-50"
-            />
-          </Tooltip>
-        </Space>
-      ),
-    },
+    // ✅ RBAC — only add Actions column if user can do anything
+    ...(hasAnyRowAction
+      ? [
+          {
+            title: "Actions",
+            align: "center",
+            width: "12%",
+            render: (_, record) => (
+              <Space>
+                {canEdit && (
+                  <Tooltip title="Edit Customer">
+                    <Button
+                      icon={<Edit className="w-4 h-4" />}
+                      onClick={() => showModal(record)}
+                      className="hover:bg-blue-50 hover:border-blue-300"
+                    />
+                  </Tooltip>
+                )}
+                {canDelete && (
+                  <Tooltip title="Delete Customer">
+                    <Button
+                      danger
+                      icon={<Trash className="w-4 h-4" />}
+                      onClick={() => setDeleteTarget(record)}
+                      className="hover:bg-red-50"
+                    />
+                  </Tooltip>
+                )}
+              </Space>
+            ),
+          },
+        ]
+      : []),
   ];
 
   /* ========================= UI ========================= */
@@ -473,15 +502,18 @@ const CustomersPage = () => {
           </h1>
           <p className="text-gray-600">Manage and track all your customers</p>
         </div>
-        <Button
-          type="primary"
-          size="large"
-          icon={<Plus className="w-5 h-5" />}
-          onClick={() => showModal()}
-          className="bg-gradient-to-r from-blue-600 to-indigo-600 border-none hover:from-blue-700 hover:to-indigo-700 shadow-lg"
-        >
-          Add New Customer
-        </Button>
+        {/* ✅ RBAC — hide "Add New Customer" if no create permission */}
+        {canCreate && (
+          <Button
+            type="primary"
+            size="large"
+            icon={<Plus className="w-5 h-5" />}
+            onClick={() => showModal()}
+            className="bg-gradient-to-r from-blue-600 to-indigo-600 border-none hover:from-blue-700 hover:to-indigo-700 shadow-lg"
+          >
+            Add New Customer
+          </Button>
+        )}
       </div>
 
       {/* KPI Cards */}
@@ -791,16 +823,18 @@ const CustomersPage = () => {
       </Modal>
 
       {/* Delete Confirmation */}
-      <CustomAlertDialog
-        open={!!deleteTarget}
-        onOpenChange={() => setDeleteTarget(null)}
-        title="Remove Customer?"
-        description={`Are you sure you want to remove "${deleteTarget?.customerName}"? If they have existing ledger entries, they will be safely deactivated instead of deleted.`}
-        onConfirm={handleConfirmDelete}
-        loading={isDeleting}
-        variant="danger"
-        confirmText="Confirm Action"
-      />
+      {canDelete && (
+        <CustomAlertDialog
+          open={!!deleteTarget}
+          onOpenChange={() => setDeleteTarget(null)}
+          title="Remove Customer?"
+          description={`Are you sure you want to remove "${deleteTarget?.customerName}"? If they have existing ledger entries, they will be safely deactivated instead of deleted.`}
+          onConfirm={handleConfirmDelete}
+          loading={isDeleting}
+          variant="danger"
+          confirmText="Confirm Action"
+        />
+      )}
     </div>
   );
 };
