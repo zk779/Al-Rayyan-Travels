@@ -58,17 +58,10 @@ import SalePayment from "../PaymentComponents/SalePayment";
 
 import { useNavigate } from "react-router-dom";
 import { appToast } from "../../../shadcn/components/ui/appToast";
+import { useAuth } from "../../context/AuthContext"; // ✅ ADD THIS — adjust relative path if needed
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
-
-// Total column count for the expanded detail row's colSpan.
-// Date, Invoice#, Document#, Airline, Vendor, Customer, Agent, Payment Type,
-// Pay Status, Sell Price, Status, Remarks, Actions, Expand = 14
 const COLUMN_COUNT = 14;
-
-// Human-readable label for the "Search By" hint, used only in the results
-// summary text — the actual API search always spans invoice #, document #,
-// and remarks together regardless of this selection (see note below).
 const SEARCH_BY_LABELS = {
   invoiceNumber: "invoice number",
   documentNumber: "document number",
@@ -87,33 +80,24 @@ export default function DetailedReportTab({
   onEdit,
   onDelete,
 }) {
-  // Local mirror of salesData so a delete can remove the row instantly,
-  // without waiting on the parent to refetch/re-filter its own state.
+  // ✅ RBAC — permission flags
+  const { hasPermission } = useAuth();
+  const canEditSale = hasPermission("SALE_EDIT");
+  const canDeleteSale = hasPermission("SALE_DELETE");
+  const canRecordPaymentPerm = hasPermission("PAYMENT_CREATE");
+
   const [rows, setRows] = useState(salesData);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
   const [historyTarget, setHistoryTarget] = useState(null);
-  // Holds the saleId currently open in the payment dialog — null means closed.
-  // Kept as just the id (not the whole row) so SalePayment always fetches
-  // fresh data itself rather than trusting a possibly-stale row snapshot.
+
   const [paymentSaleId, setPaymentSaleId] = useState(null);
   const token = localStorage.getItem("token");
 
-  // Keep local rows in sync whenever the parent's salesData actually changes
-  // (new search, new page, external refresh, etc.)
   useEffect(() => {
     setRows(salesData);
   }, [salesData]);
-
-  // NOTE: the backend's `search` param always matches across invoice #,
-  // document #, AND remarks together (an OR search) — it is not restricted
-  // to whichever field the "Search By" dropdown has selected. That dropdown
-  // only exists to give the user a clearer placeholder/hint. So highlighting
-  // must NOT be gated by `searchBy` either, or a row that matched via
-  // remarks (say) while "Document Number" is selected would show zero
-  // highlights anywhere, which reads as a bug. Highlight every field a
-  // match could show up in, always.
   const highlightText = (text, query) => {
     if (!query || !text) return text;
     const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -134,6 +118,7 @@ export default function DetailedReportTab({
   const navigate = useNavigate();
 
   const handleEdit = (invoiceId) => {
+    if (!canEditSale) return; // ✅ RBAC guard
     if (!invoiceId) return;
     navigate(`/edit-services/${invoiceId}`);
   };
@@ -144,6 +129,7 @@ export default function DetailedReportTab({
   };
 
   const handleConfirmDelete = async () => {
+    if (!canDeleteSale) return; // ✅ RBAC guard
     if (!deleteTarget) return;
     setIsDeleting(true);
     try {
@@ -174,19 +160,11 @@ export default function DetailedReportTab({
       setIsDeleting(false);
     }
   };
-
-  // Resets Radix's body pointer-events lock, which can otherwise get stuck
-  // "none" when one overlay (dropdown) opens another (dialog) right after
-  // closing — without this the page silently stops responding to clicks.
   const releasePointerEventsLock = () => {
     setTimeout(() => {
       document.body.style.pointerEvents = "";
     }, 0);
   };
-
-  // Called by SalePayment once a payment is recorded successfully.
-  // Updates just this one row's paidAmount/paymentStatus in place — no
-  // full refetch needed, so the table doesn't flicker/reset scroll position.
   const handlePaymentSuccess = (data) => {
     const updatedSale = data?.sale;
     if (!updatedSale) return;
@@ -340,15 +318,9 @@ export default function DetailedReportTab({
                   {rows.map((sale) => {
                     const isRefunded =
                       sale.status?.toUpperCase() === "REFUNDED";
-                    // The ORIGINAL sale (not the negative mirror) keeps its
-                    // own status untouched even after being refunded — so
-                    // it needs its own signal to show a "Refunded" hint,
-                    // distinct from the mirror row which already flips to
-                    // status REFUNDED.
                     const hasRefundOnOriginal = !isRefunded && !!sale.Refund;
-                    // Only sales that still owe something (and aren't the
-                    // refunded mirror row) can accept a new payment.
                     const canRecordPayment =
+                      canRecordPaymentPerm && // ✅ RBAC
                       !isRefunded &&
                       ["DUE", "PARTIAL"].includes(
                         sale.paymentStatus?.toUpperCase(),
@@ -471,6 +443,7 @@ export default function DetailedReportTab({
                                 <DropdownMenuContent align="end">
                                   <DropdownMenuLabel>Actions</DropdownMenuLabel>
                                   <DropdownMenuSeparator />
+                                  {/* ✅ View Details/History always visible — page access already implies SALE_READ */}
                                   <DropdownMenuItem onClick={toggle}>
                                     <Eye className="mr-2 h-4 w-4" />
                                     {expanded ? "Hide Details" : "View Details"}
@@ -481,11 +454,10 @@ export default function DetailedReportTab({
                                     <HistoryIcon className="mr-2 h-4 w-4" />
                                     View History
                                   </DropdownMenuItem>
+                                  {/* ✅ RBAC — Record Payment needs PAYMENT_CREATE (already folded into canRecordPayment) */}
                                   {canRecordPayment && (
                                     <DropdownMenuItem
-                                      onClick={() =>
-                                        setPaymentSaleId(sale.id)
-                                      }
+                                      onClick={() => setPaymentSaleId(sale.id)}
                                     >
                                       <Wallet className="mr-2 h-4 w-4" />
                                       Record Payment
@@ -493,22 +465,30 @@ export default function DetailedReportTab({
                                   )}
                                   {!isRefunded && (
                                     <>
-                                      <DropdownMenuItem
-                                        onClick={() =>
-                                          handleEdit(sale.invoiceId)
-                                        }
-                                      >
-                                        <Edit className="mr-2 h-4 w-4" />
-                                        Edit Invoice
-                                      </DropdownMenuItem>
-                                      <DropdownMenuSeparator />
-                                      <DropdownMenuItem
-                                        onClick={() => setDeleteTarget(sale)}
-                                        className="text-red-600 focus:text-red-600 focus:bg-red-50"
-                                      >
-                                        <Trash2 className="mr-2 h-4 w-4" />
-                                        Delete Sale
-                                      </DropdownMenuItem>
+                                      {/* ✅ RBAC — Edit Invoice needs SALE_EDIT */}
+                                      {canEditSale && (
+                                        <DropdownMenuItem
+                                          onClick={() =>
+                                            handleEdit(sale.invoiceId)
+                                          }
+                                        >
+                                          <Edit className="mr-2 h-4 w-4" />
+                                          Edit Invoice
+                                        </DropdownMenuItem>
+                                      )}
+                                      {/* ✅ RBAC — Delete Sale needs SALE_DELETE */}
+                                      {canDeleteSale && (
+                                        <>
+                                          <DropdownMenuSeparator />
+                                          <DropdownMenuItem
+                                            onClick={() => setDeleteTarget(sale)}
+                                            className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                                          >
+                                            <Trash2 className="mr-2 h-4 w-4" />
+                                            Delete Sale
+                                          </DropdownMenuItem>
+                                        </>
+                                      )}
                                     </>
                                   )}
                                   <DropdownMenuSeparator />
@@ -542,61 +522,59 @@ export default function DetailedReportTab({
         </CardContent>
       </Card>
 
-      {/* Reusable Confirmation Dialog */}
-      <CustomAlertDialog
-        open={!!deleteTarget}
-        onOpenChange={() => setDeleteTarget(null)}
-        title="Delete Sale & Reverse Ledger?"
-        description={`Are you sure you want to delete this specific sale? This will:
+      {/* ✅ RBAC — only mount delete dialog if user can delete */}
+      {canDeleteSale && (
+        <CustomAlertDialog
+          open={!!deleteTarget}
+          onOpenChange={() => setDeleteTarget(null)}
+          title="Delete Sale & Reverse Ledger?"
+          description={`Are you sure you want to delete this specific sale? This will:
 
         - Permanently remove document ${deleteTarget?.documentNumber}.
         - Reverse ${deleteTarget?.sellPrice} SAR from the customer's balance.
         - Reverse ${deleteTarget?.netPrice} SAR from the vendor's ledger.
         - Automatically update the parent invoice totals.`}
-        onConfirm={handleConfirmDelete}
-        loading={isDeleting}
-        variant="danger"
-        confirmText="Delete & Reverse"
-      />
+          onConfirm={handleConfirmDelete}
+          loading={isDeleting}
+          variant="danger"
+          confirmText="Delete & Reverse"
+        />
+      )}
 
-      {/* Sale History Dialog */}
       <HistoryDialog
         saleId={historyTarget}
         open={!!historyTarget}
         onOpenChange={(v) => {
           if (!v) {
             setHistoryTarget(null);
-            // Radix leaves body pointer-events locked when a Dialog closes
-            // right after a DropdownMenu — force it back so the page stays interactive.
+
             releasePointerEventsLock();
           }
         }}
       />
-
-      {/* Record Payment Dialog — only mounts SalePayment while actually
-          open, and re-keys on saleId so switching between two rows'
-          payment dialogs (without a full unmount in between) never shows
-          stale data from the previous sale. */}
-      <Dialog
-        open={!!paymentSaleId}
-        onOpenChange={(v) => {
-          if (!v) closePaymentDialog();
-        }}
-      >
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Record Payment</DialogTitle>
-          </DialogHeader>
-          {paymentSaleId && (
-            <SalePayment
-              key={paymentSaleId}
-              saleId={paymentSaleId}
-              onClose={closePaymentDialog}
-              onSuccess={handlePaymentSuccess}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* ✅ RBAC — only mount payment dialog if user can create payments */}
+      {canRecordPaymentPerm && (
+        <Dialog
+          open={!!paymentSaleId}
+          onOpenChange={(v) => {
+            if (!v) closePaymentDialog();
+          }}
+        >
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Record Payment</DialogTitle>
+            </DialogHeader>
+            {paymentSaleId && (
+              <SalePayment
+                key={paymentSaleId}
+                saleId={paymentSaleId}
+                onClose={closePaymentDialog}
+                onSuccess={handlePaymentSuccess}
+              />
+            )}
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

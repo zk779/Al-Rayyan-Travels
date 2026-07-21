@@ -155,6 +155,14 @@ export default function PaymentsTable({
 }) {
   const isVendor = partyType === "VENDOR";
 
+  // ✅ RBAC — derive booleans from prop presence. PaymentPage passes
+  // `undefined` for onAdd/onEdit/onDelete when the user lacks the matching
+  // PAYMENT_CREATE/PAYMENT_EDIT/PAYMENT_DELETE permission.
+  const canAdd = typeof onAdd === "function";
+  const canEdit = typeof onEdit === "function";
+  const canDelete = typeof onDelete === "function";
+  const hasAnyRowAction = canEdit || canDelete;
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return payments.filter((p) => {
@@ -192,20 +200,21 @@ export default function PaymentsTable({
             onChange={(e) => onSearch(e.target.value)}
           />
         </div>
-        {/* Navigates to a dedicated "New Payment" page for this party type,
-           instead of opening an in-page dialog. */}
-        <Button
-          onClick={onAdd}
-          className={cn(
-            "gap-2",
-            isVendor
-              ? "bg-sky-600 hover:bg-sky-700"
-              : "bg-violet-600 hover:bg-violet-700",
-          )}
-        >
-          <Plus className="h-4 w-4" />
-          Add Payment
-        </Button>
+        {/* ✅ RBAC — hide "Add Payment" if no create permission */}
+        {canAdd && (
+          <Button
+            onClick={onAdd}
+            className={cn(
+              "gap-2",
+              isVendor
+                ? "bg-sky-600 hover:bg-sky-700"
+                : "bg-violet-600 hover:bg-violet-700",
+            )}
+          >
+            <Plus className="h-4 w-4" />
+            Add Payment
+          </Button>
+        )}
       </div>
 
       <div className="rounded-2xl border border-slate-100 overflow-hidden bg-white shadow-sm">
@@ -377,18 +386,25 @@ export default function PaymentsTable({
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          {/* ✅ View always visible — page access already implies PAYMENT_READ */}
                           <DropdownMenuItem onClick={() => onView(p)}>
                             <Eye className="h-4 w-4 mr-2" /> View Details
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => onEdit(p)}>
-                            <Edit2 className="h-4 w-4 mr-2" /> Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => onDelete(p)}
-                            className="text-red-600 focus:text-red-600"
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" /> Delete
-                          </DropdownMenuItem>
+                          {/* ✅ RBAC — Edit only if onEdit was provided */}
+                          {canEdit && (
+                            <DropdownMenuItem onClick={() => onEdit(p)}>
+                              <Edit2 className="h-4 w-4 mr-2" /> Edit
+                            </DropdownMenuItem>
+                          )}
+                          {/* ✅ RBAC — Delete only if onDelete was provided */}
+                          {canDelete && (
+                            <DropdownMenuItem
+                              onClick={() => onDelete(p)}
+                              className="text-red-600 focus:text-red-600"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" /> Delete
+                            </DropdownMenuItem>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -407,14 +423,17 @@ export default function PaymentsTable({
                         Try adjusting your search query.
                       </p>
                     ) : (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={onAdd}
-                        className="gap-2 mt-1"
-                      >
-                        <Plus className="h-3.5 w-3.5" /> Add your first payment
-                      </Button>
+                      // ✅ RBAC — only show "Add your first payment" if allowed
+                      canAdd && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={onAdd}
+                          className="gap-2 mt-1"
+                        >
+                          <Plus className="h-3.5 w-3.5" /> Add your first payment
+                        </Button>
+                      )
                     )}
                   </div>
                 </TableCell>

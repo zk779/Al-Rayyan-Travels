@@ -40,6 +40,7 @@ import {
 
 import DetailedReportTab from "../components/salesReport/detailedReport";
 import RefundsTab from "../components/salesReport/refundReport";
+import { useAuth } from "../context/AuthContext"; // ✅ ADD THIS
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
@@ -69,7 +70,15 @@ function useDebouncedValue(value, delay = 400) {
 }
 
 export default function SalesReport() {
-  const [activeTab, setActiveTab] = useState("detailed");
+  // ✅ RBAC — permission flags for the two tabs
+  const { hasPermission } = useAuth();
+  const canViewSales = hasPermission("SALE_READ");
+  const canViewRefunds = hasPermission("REFUND_READ");
+
+  // ✅ Default to whichever tab the user actually has access to
+  const [activeTab, setActiveTab] = useState(
+    canViewSales ? "detailed" : canViewRefunds ? "refunds" : null
+  );
   const [dateRange, setDateRange] = useState({
     from: subDays(new Date(), 30),
     to: new Date(),
@@ -260,12 +269,12 @@ export default function SalesReport() {
      once the Refunds tab is actually opened, and both re-fetch whenever
      a filter changes while their tab is the one currently in view. */
   useEffect(() => {
-    if (activeTab === "detailed") fetchSales();
-  }, [activeTab, fetchSales]);
+    if (activeTab === "detailed" && canViewSales) fetchSales(); // ✅ RBAC guard
+  }, [activeTab, fetchSales, canViewSales]);
 
   useEffect(() => {
-    if (activeTab === "refunds") fetchRefunds();
-  }, [activeTab, fetchRefunds]);
+    if (activeTab === "refunds" && canViewRefunds) fetchRefunds(); // ✅ RBAC guard
+  }, [activeTab, fetchRefunds, canViewRefunds]);
 
   const totalSales = useMemo(
     () => salesData.reduce((sum, s) => sum + (Number(s.sellPrice) || 0), 0),
@@ -298,6 +307,21 @@ export default function SalesReport() {
 
   const hasActiveFilters =
     searchQuery || selectedAgent !== "all" || sortOrder !== "desc";
+
+  // ✅ RBAC — if user has neither permission, show a simple empty state
+  // (this should rarely happen since PermissionRoute already gates the whole page,
+  // but it's a sane fallback in case route permissions and tab permissions ever diverge)
+  if (!canViewSales && !canViewRefunds) {
+    return (
+      <div className="w-full mx-auto p-6">
+        <Card>
+          <CardContent className="py-12 text-center text-gray-500">
+            You don't have permission to view any report data.
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full mx-auto p-6 space-y-6">
@@ -451,33 +475,54 @@ export default function SalesReport() {
       </Card>
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="detailed">Detailed Report</TabsTrigger>
-          <TabsTrigger value="refunds">Refunds</TabsTrigger>
-        </TabsList>
+      {/* ✅ RBAC — if only one permission is granted, skip the Tabs UI entirely
+          and just render that single tab's content directly (no tab switcher needed) */}
+      {canViewSales && canViewRefunds ? (
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="detailed">Detailed Report</TabsTrigger>
+            <TabsTrigger value="refunds">Refunds</TabsTrigger>
+          </TabsList>
 
-        <TabsContent value="detailed">
-          <DetailedReportTab
-            salesData={salesData}
-            loading={loading}
-            searchQuery={searchQuery}
-            searchBy={searchBy}
-            totalSales={totalSales}
-            totalProfit={totalProfit}
-            resolveSaleDetails={resolveSaleDetails}
-          />
-        </TabsContent>
+          <TabsContent value="detailed">
+            <DetailedReportTab
+              salesData={salesData}
+              loading={loading}
+              searchQuery={searchQuery}
+              searchBy={searchBy}
+              totalSales={totalSales}
+              totalProfit={totalProfit}
+              resolveSaleDetails={resolveSaleDetails}
+            />
+          </TabsContent>
 
-        <TabsContent value="refunds">
-          <RefundsTab
-            refundData={refundData}
-            loading={refundLoading}
-            searchQuery={searchQuery}
-            searchBy={searchBy}
-          />
-        </TabsContent>
-      </Tabs>
+          <TabsContent value="refunds">
+            <RefundsTab
+              refundData={refundData}
+              loading={refundLoading}
+              searchQuery={searchQuery}
+              searchBy={searchBy}
+            />
+          </TabsContent>
+        </Tabs>
+      ) : canViewSales ? (
+        <DetailedReportTab
+          salesData={salesData}
+          loading={loading}
+          searchQuery={searchQuery}
+          searchBy={searchBy}
+          totalSales={totalSales}
+          totalProfit={totalProfit}
+          resolveSaleDetails={resolveSaleDetails}
+        />
+      ) : (
+        <RefundsTab
+          refundData={refundData}
+          loading={refundLoading}
+          searchQuery={searchQuery}
+          searchBy={searchBy}
+        />
+      )}
     </div>
   );
 }

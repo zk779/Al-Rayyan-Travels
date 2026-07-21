@@ -51,6 +51,7 @@ import EditVendorPayment from "./EditVendorPayment";
 import EditCustomerPayment from "./EditCustomerPayment";
 import VendorDepositTab from "../components/PaymentComponents/VendorPayment";
 import CustomerDepositTab from "../components/PaymentComponents/CustomerPayment";
+import { useAuth } from "../context/AuthContext"; // ✅ ADD THIS
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
@@ -467,11 +468,6 @@ function AddPaymentDialog({ partyType, open, onClose, onSuccess }) {
   );
 }
 
-// ─── Edit Sale Payment (single-sale: walk-in OR customer-linked) ──────────────
-// Compact edit form for a payment tied to exactly one sale (payment.saleId
-// set) — covers both walk-in and single-invoice customer payments. Does NOT
-// use saleAllocations at all; the PUT route accepts `amount` directly for
-// these. EditCustomerPayment is reserved for genuine multi-invoice payments.
 function EditSalePayment({ payment, onClose, onSuccess }) {
   const [amount, setAmount] = useState(String(payment.amount));
   const [method, setMethod] = useState(payment.method);
@@ -632,6 +628,11 @@ function EditPaymentDialog({ payment, onClose, onSuccess }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function PaymentPage() {
+  // ✅ RBAC — permission flags
+  const { hasPermission } = useAuth();
+  const canCreate = hasPermission("PAYMENT_CREATE");
+  const canEdit = hasPermission("PAYMENT_EDIT");
+  const canDelete = hasPermission("PAYMENT_DELETE");
 
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -701,7 +702,25 @@ export default function PaymentPage() {
     setDrawerOpen(true);
   };
 
+  // ✅ RBAC guard — used when passing setEditTarget down (see below)
+  const handleEditRequest = (p) => {
+    if (!canEdit) return;
+    setEditTarget(p);
+  };
+
+  // ✅ RBAC guard — used when passing setDeleteTarget down (see below)
+  const handleDeleteRequest = (p) => {
+    if (!canDelete) return;
+    setDeleteTarget(p);
+  };
+
+  const handleAddRequest = (partyType) => {
+    if (!canCreate) return;
+    setAddPartyType(partyType);
+  };
+
   const handleDeleteConfirm = async () => {
+    if (!canDelete) return; // ✅ RBAC guard
     if (!deleteTarget) return;
     setDeleteLoading(true);
     try {
@@ -733,7 +752,7 @@ export default function PaymentPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+      <div className="w-full mx-auto px-6 py-8 space-y-8">
         {/* Header */}
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
@@ -838,10 +857,12 @@ export default function PaymentPage() {
               loading={loading}
               search={searchVendor}
               onSearch={setSearchVendor}
-              onAdd={() => setAddPartyType("VENDOR")}
+              // ✅ RBAC — only pass the handler if permitted, so PaymentsTable
+              // can hide the corresponding button when the prop is undefined
+              onAdd={canCreate ? () => handleAddRequest("VENDOR") : undefined}
               onView={handleView}
-              onEdit={setEditTarget}
-              onDelete={setDeleteTarget}
+              onEdit={canEdit ? handleEditRequest : undefined}
+              onDelete={canDelete ? handleDeleteRequest : undefined}
               onPreview={setPreviewUrl}
             />
           </TabsContent>
@@ -853,43 +874,41 @@ export default function PaymentPage() {
               loading={loading}
               search={searchCustomer}
               onSearch={setSearchCustomer}
-              onAdd={() => setAddPartyType("CUSTOMER")}
+              onAdd={canCreate ? () => handleAddRequest("CUSTOMER") : undefined}
               onView={handleView}
-              onEdit={setEditTarget}
-              onDelete={setDeleteTarget}
+              onEdit={canEdit ? handleEditRequest : undefined}
+              onDelete={canDelete ? handleDeleteRequest : undefined}
               onPreview={setPreviewUrl}
             />
           </TabsContent>
         </Tabs>
       </div>
-
-      {/* Add payment dialog — Vendor or Customer flow, based on which tab triggered it */}
       <AddPaymentDialog
         partyType={addPartyType}
         open={addDialogOpen}
         onClose={() => setAddPartyType(null)}
         onSuccess={handleAddSuccess}
       />
-
-      {/* Edit payment dialog — routes to Vendor / Sale (single-invoice or
-          walk-in) / Customer (multi-invoice) form based on the payment */}
-      <Dialog
-         open={editTarget !== null}
-         onOpenChange={(o) => !o && setEditTarget(null)}
-       >
-         <DialogContent className="max-w-4xl! max-h-[97vh] overflow-y-auto">
-           <DialogHeader>
-            <DialogTitle>{editDialogTitle}</DialogTitle>
-           </DialogHeader>
-           {editTarget && (
-             <EditPaymentDialog
-               payment={editTarget}
-               onClose={() => setEditTarget(null)}
-               onSuccess={handleEditSuccess}
-             />
-           )}
-         </DialogContent>
-       </Dialog>
+      {/* ✅ RBAC — only mount edit dialog machinery if user can edit */}
+      {canEdit && (
+        <Dialog
+           open={editTarget !== null}
+           onOpenChange={(o) => !o && setEditTarget(null)}
+         >
+           <DialogContent className="max-w-4xl! max-h-[97vh] overflow-y-auto">
+             <DialogHeader>
+              <DialogTitle>{editDialogTitle}</DialogTitle>
+             </DialogHeader>
+             {editTarget && (
+               <EditPaymentDialog
+                 payment={editTarget}
+                 onClose={() => setEditTarget(null)}
+                 onSuccess={handleEditSuccess}
+               />
+             )}
+           </DialogContent>
+         </Dialog>
+      )}
 
       {/* Detail drawer */}
       <PaymentDetailDrawer
@@ -905,14 +924,16 @@ export default function PaymentPage() {
         onClose={() => setPreviewUrl(null)}
       />
 
-      {/* Delete confirm */}
-      <DeleteConfirmDialog
-        open={deleteTarget !== null}
-        partyName={deleteTarget ? partyDisplayName(deleteTarget) : "this payment"}
-        onConfirm={handleDeleteConfirm}
-        onCancel={() => setDeleteTarget(null)}
-        loading={deleteLoading}
-      />
+      {/* ✅ RBAC — only mount delete dialog if user can delete */}
+      {canDelete && (
+        <DeleteConfirmDialog
+          open={deleteTarget !== null}
+          partyName={deleteTarget ? partyDisplayName(deleteTarget) : "this payment"}
+          onConfirm={handleDeleteConfirm}
+          onCancel={() => setDeleteTarget(null)}
+          loading={deleteLoading}
+        />
+      )}
     </div>
   );
 }

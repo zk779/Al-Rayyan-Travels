@@ -46,6 +46,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "../../../shadcn/components/ui/dropdown-menu";
+import { useAuth } from "../../context/AuthContext"; // ✅ ADD THIS — adjust relative path if needed
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
@@ -210,6 +211,12 @@ export default function RefundsTab({
   searchQuery,
   searchBy,
 }) {
+  // ✅ RBAC — permission flags
+  const { hasPermission } = useAuth();
+  const canEditRefund = hasPermission("REFUND_EDIT");
+  const canDeleteRefund = hasPermission("REFUND_DELETE");
+  const hasAnyRowAction = canEditRefund || canDeleteRefund;
+
   const navigate = useNavigate();
   const [viewRefund, setViewRefund] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -217,6 +224,7 @@ export default function RefundsTab({
 
   /* ========================= DELETE ========================= */
   const handleDelete = async () => {
+    if (!canDeleteRefund) return; // ✅ RBAC guard
     if (!deleteTarget) return;
     setDeleting(true);
     try {
@@ -236,6 +244,11 @@ export default function RefundsTab({
       setDeleting(false);
       setDeleteTarget(null);
     }
+  };
+
+  const handleEditClick = (refundId) => {
+    if (!canEditRefund) return; // ✅ RBAC guard
+    navigate(`/edit-refund/${refundId}`);
   };
 
   /* ========================= UI ========================= */
@@ -297,129 +310,129 @@ export default function RefundsTab({
                     </TableCell>
                   </TableRow>
                 ) : (
-                  refundData.map(
-                    (refund) =>
-                      console.log("Rendering refund:", refund) || (
-                        <TableRow key={refund.id}>
-                          <TableCell className="whitespace-nowrap">
-                            {refund.date
-                              ? highlightText(
-                                  format(new Date(refund.date), "MMM dd, yyyy"),
-                                  searchQuery,
-                                  "date",
-                                  searchBy,
-                                )
-                              : "-"}
-                          </TableCell>
-                          <TableCell>{refund.invoiceNumber}</TableCell>
-                          <TableCell>
-                            {highlightText(
-                              refund.customer,
+                  refundData.map((refund) => (
+                    <TableRow key={refund.id}>
+                      <TableCell className="whitespace-nowrap">
+                        {refund.date
+                          ? highlightText(
+                              format(new Date(refund.date), "MMM dd, yyyy"),
                               searchQuery,
-                              "customer",
+                              "date",
                               searchBy,
-                            )}
-                          </TableCell>
-                          <TableCell>{refund.vendor}</TableCell>
-                          <TableCell>{refund.agent}</TableCell>
-                          <TableCell>
-                            <Badge variant={statusVariant(refund.status)}>
-                              {refund.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <span className="flex items-center justify-end gap-0.5">
-                              <SaudiRiyal size={12} />
-                              {Number(refund.originalAmount).toFixed(2)}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <span className="flex items-center justify-end gap-0.5">
-                              <SaudiRiyal size={12} />
-                              {Number(refund.vendorRefundAmount).toFixed(2)}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <span className="flex items-center justify-end gap-0.5">
-                              <SaudiRiyal size={12} />
-                              {Number(refund.netRefundToCustomer).toFixed(2)}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right text-orange-600">
-                            <span className="flex items-center justify-end gap-0.5">
-                              <SaudiRiyal size={12} />
-                              {Number(refund.refundFee).toFixed(2)}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right text-red-500">
-                            <span className="flex items-center justify-end gap-0.5">
-                              <SaudiRiyal size={12} />
-                              {Number(refund.cancellationCharges).toFixed(2)}
-                            </span>
-                          </TableCell>
-                          <TableCell className="max-w-[140px]">
-                            <div
-                              className="truncate text-xs text-slate-600"
-                              title={refund.refundReason}
+                            )
+                          : "-"}
+                      </TableCell>
+                      <TableCell>{refund.invoiceNumber}</TableCell>
+                      <TableCell>
+                        {highlightText(
+                          refund.customer,
+                          searchQuery,
+                          "customer",
+                          searchBy,
+                        )}
+                      </TableCell>
+                      <TableCell>{refund.vendor}</TableCell>
+                      <TableCell>{refund.agent}</TableCell>
+                      <TableCell>
+                        <Badge variant={statusVariant(refund.status)}>
+                          {refund.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className="flex items-center justify-end gap-0.5">
+                          <SaudiRiyal size={12} />
+                          {Number(refund.originalAmount).toFixed(2)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className="flex items-center justify-end gap-0.5">
+                          <SaudiRiyal size={12} />
+                          {Number(refund.vendorRefundAmount).toFixed(2)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className="flex items-center justify-end gap-0.5">
+                          <SaudiRiyal size={12} />
+                          {Number(refund.netRefundToCustomer).toFixed(2)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right text-orange-600">
+                        <span className="flex items-center justify-end gap-0.5">
+                          <SaudiRiyal size={12} />
+                          {Number(refund.refundFee).toFixed(2)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right text-red-500">
+                        <span className="flex items-center justify-end gap-0.5">
+                          <SaudiRiyal size={12} />
+                          {Number(refund.cancellationCharges).toFixed(2)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="max-w-[140px]">
+                        <div
+                          className="truncate text-xs text-slate-600"
+                          title={refund.refundReason}
+                        >
+                          {highlightText(
+                            refund.refundReason,
+                            searchQuery,
+                            "remarks",
+                            searchBy,
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0"
                             >
-                              {highlightText(
-                                refund.refundReason,
-                                searchQuery,
-                                "remarks",
-                                searchBy,
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-8 w-8 p-0"
-                                >
-                                  <MoreVertical className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                <DropdownMenuItem
-                                  variant="ghost"
-                                  size="sm"
-                                  title="View Refund"
-                                  onClick={() => setViewRefund(refund)}
-                                >
-                                  <Eye className="h-4 w-4 text-blue-500" /> View
-                                  Details
-                                </DropdownMenuItem>
-                                {/* Edit */}
-                                <DropdownMenuItem
-                                  variant="ghost"
-                                  size="sm"
-                                  title="Edit Refund"
-                                  onClick={() =>
-                                    navigate(`/edit-refund/${refund.id}`)
-                                  }
-                                >
-                                  <Pencil className="h-4 w-4 text-indigo-500" />{" "}
-                                  Edit Refund
-                                </DropdownMenuItem>
-                                {/* Delete */}
-                                <DropdownMenuItem
-                                  variant="ghost"
-                                  size="sm"
-                                  title="Delete Refund"
-                                  onClick={() => setDeleteTarget(refund)}
-                                >
-                                  <Trash2 className="h-4 w-4 text-red-500" />{" "}
-                                  Delete Refund
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </TableCell>
-                        </TableRow>
-                      ),
-                  )
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                            {/* ✅ View always visible — page access already implies REFUND_READ */}
+                            <DropdownMenuItem
+                              variant="ghost"
+                              size="sm"
+                              title="View Refund"
+                              onClick={() => setViewRefund(refund)}
+                            >
+                              <Eye className="h-4 w-4 text-blue-500" /> View
+                              Details
+                            </DropdownMenuItem>
+                            {/* ✅ RBAC — Edit needs REFUND_EDIT */}
+                            {canEditRefund && (
+                              <DropdownMenuItem
+                                variant="ghost"
+                                size="sm"
+                                title="Edit Refund"
+                                onClick={() => handleEditClick(refund.id)}
+                              >
+                                <Pencil className="h-4 w-4 text-indigo-500" />{" "}
+                                Edit Refund
+                              </DropdownMenuItem>
+                            )}
+                            {/* ✅ RBAC — Delete needs REFUND_DELETE */}
+                            {canDeleteRefund && (
+                              <DropdownMenuItem
+                                variant="ghost"
+                                size="sm"
+                                title="Delete Refund"
+                                onClick={() => setDeleteTarget(refund)}
+                              >
+                                <Trash2 className="h-4 w-4 text-red-500" />{" "}
+                                Delete Refund
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))
                 )}
               </TableBody>
             </Table>
@@ -433,39 +446,41 @@ export default function RefundsTab({
         onClose={() => setViewRefund(null)}
       />
 
-      {/* Delete Confirmation */}
-      <AlertDialog
-        open={!!deleteTarget}
-        onOpenChange={() => setDeleteTarget(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete & Reverse Refund?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete this refund and reverse all account
-              balance changes. The sale will be restored to{" "}
-              <strong>COMPLETED</strong> status. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              disabled={deleting}
-              className="bg-red-600 hover:bg-red-700 text-white"
-            >
-              {deleting ? (
-                <span className="flex items-center gap-2">
-                  <div className="h-3 w-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Deleting...
-                </span>
-              ) : (
-                "Delete & Reverse"
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* ✅ RBAC — only mount delete dialog if user can delete */}
+      {canDeleteRefund && (
+        <AlertDialog
+          open={!!deleteTarget}
+          onOpenChange={() => setDeleteTarget(null)}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete & Reverse Refund?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently delete this refund and reverse all account
+                balance changes. The sale will be restored to{" "}
+                <strong>COMPLETED</strong> status. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDelete}
+                disabled={deleting}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                {deleting ? (
+                  <span className="flex items-center gap-2">
+                    <div className="h-3 w-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Deleting...
+                  </span>
+                ) : (
+                  "Delete & Reverse"
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </div>
   );
 }
