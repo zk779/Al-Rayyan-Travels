@@ -58,6 +58,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../../shadcn/components/ui/alert-dialog";
+import { useAuth } from "../context/AuthContext"; // ✅ ADD THIS
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL; // e.g. http://localhost:5000
 
@@ -106,6 +107,13 @@ function getUserBranchId(u) {
 }
 
 export default function UsersTab({ users, setUsers, roles, branches }) {
+  // ✅ RBAC — permission flags
+  const { hasPermission } = useAuth();
+  const canCreate = hasPermission("USER_CREATE");
+  const canEdit = hasPermission("USER_EDIT");
+  const canDelete = hasPermission("USER_DELETE");
+  const hasAnyRowAction = canEdit || canDelete;
+
   const [selectedUsers, setSelectedUsers] = useState([]);
 
   const [statusFilter, setStatusFilter] = useState("all");
@@ -178,6 +186,7 @@ export default function UsersTab({ users, setUsers, roles, branches }) {
   };
 
   const openAddDialog = () => {
+    if (!canCreate) return; // ✅ RBAC guard
     setDialogMode("add");
     setEditingUser(null);
     setFormError("");
@@ -195,6 +204,7 @@ export default function UsersTab({ users, setUsers, roles, branches }) {
   };
 
   const openEditDialog = (u) => {
+    if (!canEdit) return; // ✅ RBAC guard
     setDialogMode("edit");
     setEditingUser(u);
     setFormError("");
@@ -214,6 +224,10 @@ export default function UsersTab({ users, setUsers, roles, branches }) {
   };
 
   const submitDialog = async () => {
+    // ✅ RBAC guard
+    if (dialogMode === "add" && !canCreate) return;
+    if (dialogMode === "edit" && !canEdit) return;
+
     setFormError("");
 
     if (
@@ -286,11 +300,13 @@ export default function UsersTab({ users, setUsers, roles, branches }) {
   };
 
   const handleDelete = (id) => {
+    if (!canDelete) return; // ✅ RBAC guard
     setDeleteUserId(id);
     setIsDeleteDialogOpen(true);
   };
 
   const confirmDelete = async () => {
+    if (!canDelete) return; // ✅ RBAC guard
     if (!deleteUserId) return;
 
     try {
@@ -302,7 +318,6 @@ export default function UsersTab({ users, setUsers, roles, branches }) {
       setDeleteUserId(null);
       setIsDeleteDialogOpen(false);
     } catch (e) {
-      // keep dialog open and show alert in console (or you can show toast)
       console.error(e);
     } finally {
       setSubmitting(false);
@@ -310,12 +325,12 @@ export default function UsersTab({ users, setUsers, roles, branches }) {
   };
 
   const handleBulkDelete = async () => {
+    if (!canDelete) return; // ✅ RBAC guard
     if (selectedUsers.length === 0) return;
 
     try {
       setSubmitting(true);
 
-      // delete sequentially or in parallel
       await Promise.all(
         selectedUsers.map((id) =>
           requestJSON(`/api/users/${id}`, { method: "DELETE" })
@@ -389,7 +404,8 @@ export default function UsersTab({ users, setUsers, roles, branches }) {
         </div>
 
         <div className="flex gap-2">
-          {selectedUsers.length > 0 && (
+          {/* ✅ RBAC — bulk delete only if permitted */}
+          {canDelete && selectedUsers.length > 0 && (
             <Button
               variant="destructive"
               onClick={handleBulkDelete}
@@ -400,193 +416,201 @@ export default function UsersTab({ users, setUsers, roles, branches }) {
             </Button>
           )}
 
-          {/* ✅ SINGLE DIALOG */}
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="app" onClick={openAddDialog}>
-                <UserPlus className="h-4 w-4 mr-2" />
-                Add User
-              </Button>
-            </DialogTrigger>
-
-            <DialogContent className="sm:max-w-lg">
-              <DialogHeader>
-                <DialogTitle>
-                  {dialogMode === "add" ? "Add New User" : "Edit User"}
-                </DialogTitle>
-                <DialogDescription>
-                  {dialogMode === "add"
-                    ? "Create a new user account."
-                    : "Update user information."}
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="space-y-4 py-4">
-                {formError ? (
-                  <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                    {formError}
-                  </div>
-                ) : null}
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Full Name</Label>
-                    <Input
-                      placeholder="John Smith"
-                      value={userForm.fullName}
-                      onChange={(e) =>
-                        setUserForm({ ...userForm, fullName: e.target.value })
-                      }
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Email</Label>
-                    <Input
-                      type="email"
-                      placeholder="john@example.com"
-                      value={userForm.email}
-                      onChange={(e) =>
-                        setUserForm({ ...userForm, email: e.target.value })
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Role</Label>
-                    <Select
-                      value={userForm.roleId}
-                      onValueChange={(value) =>
-                        setUserForm({ ...userForm, roleId: value })
-                      }
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Select role" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(roles || []).map((role) => (
-                          <SelectItem key={role.id} value={role.id}>
-                            {role.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Branch</Label>
-                    <Select
-                      value={userForm.branchId}
-                      onValueChange={(value) =>
-                        setUserForm({ ...userForm, branchId: value })
-                      }
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Select branch" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(branches || []).map((b) => (
-                          <SelectItem key={b.id} value={b.id}>
-                            {b.name} {b.code ? `(${b.code})` : ""}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Phone</Label>
-                    <Input
-                      placeholder="+92 300 1234567"
-                      value={userForm.phone}
-                      onChange={(e) =>
-                        setUserForm({ ...userForm, phone: e.target.value })
-                      }
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Department</Label>
-                    <Input
-                      placeholder="IT"
-                      value={userForm.department}
-                      onChange={(e) =>
-                        setUserForm({ ...userForm, department: e.target.value })
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>
-                      Password{" "}
-                      {dialogMode === "edit" ? (
-                        <span className="text-xs text-muted-foreground">
-                          (optional)
-                        </span>
-                      ) : null}
-                    </Label>
-                    <Input
-                      type="password"
-                      placeholder={
-                        dialogMode === "edit"
-                          ? "Leave blank to keep current"
-                          : "Enter password"
-                      }
-                      value={userForm.password}
-                      onChange={(e) =>
-                        setUserForm({ ...userForm, password: e.target.value })
-                      }
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Status</Label>
-                    <Select
-                      value={userForm.isActive ? "Active" : "Inactive"}
-                      onValueChange={(v) =>
-                        setUserForm({ ...userForm, isActive: v === "Active" })
-                      }
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Active">Active</SelectItem>
-                        <SelectItem value="Inactive">Inactive</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setIsDialogOpen(false)}
-                  disabled={submitting}
-                >
-                  Cancel
+          {/* ✅ RBAC — hide Add User entirely if no create permission */}
+          {canCreate && (
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="app" onClick={openAddDialog}>
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Add User
                 </Button>
-                <Button
-                  variant="app"
-                  onClick={submitDialog}
-                  disabled={submitting}
-                >
-                  {submitting
-                    ? "Saving..."
-                    : dialogMode === "add"
-                    ? "Add User"
-                    : "Update User"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+              </DialogTrigger>
+
+              {/* ✅ BUG FIX: key forces a clean remount whenever we switch between
+                  add/edit or between two different users — prevents Radix Select
+                  components from showing a previous user's stale selected value */}
+              <DialogContent
+                key={`${dialogMode}-${editingUser?.id ?? "new"}`}
+                className="sm:max-w-lg"
+              >
+                <DialogHeader>
+                  <DialogTitle>
+                    {dialogMode === "add" ? "Add New User" : "Edit User"}
+                  </DialogTitle>
+                  <DialogDescription>
+                    {dialogMode === "add"
+                      ? "Create a new user account."
+                      : "Update user information."}
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-4 py-4">
+                  {formError ? (
+                    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                      {formError}
+                    </div>
+                  ) : null}
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Full Name</Label>
+                      <Input
+                        placeholder="John Smith"
+                        value={userForm.fullName}
+                        onChange={(e) =>
+                          setUserForm({ ...userForm, fullName: e.target.value })
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Email</Label>
+                      <Input
+                        type="email"
+                        placeholder="john@example.com"
+                        value={userForm.email}
+                        onChange={(e) =>
+                          setUserForm({ ...userForm, email: e.target.value })
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Role</Label>
+                      <Select
+                        value={userForm.roleId}
+                        onValueChange={(value) =>
+                          setUserForm({ ...userForm, roleId: value })
+                        }
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select role" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(roles || []).map((role) => (
+                            <SelectItem key={role.id} value={role.id}>
+                              {role.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Branch</Label>
+                      <Select
+                        value={userForm.branchId}
+                        onValueChange={(value) =>
+                          setUserForm({ ...userForm, branchId: value })
+                        }
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select branch" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(branches || []).map((b) => (
+                            <SelectItem key={b.id} value={b.id}>
+                              {b.name} {b.code ? `(${b.code})` : ""}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Phone</Label>
+                      <Input
+                        placeholder="+92 300 1234567"
+                        value={userForm.phone}
+                        onChange={(e) =>
+                          setUserForm({ ...userForm, phone: e.target.value })
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Department</Label>
+                      <Input
+                        placeholder="IT"
+                        value={userForm.department}
+                        onChange={(e) =>
+                          setUserForm({ ...userForm, department: e.target.value })
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>
+                        Password{" "}
+                        {dialogMode === "edit" ? (
+                          <span className="text-xs text-muted-foreground">
+                            (optional)
+                          </span>
+                        ) : null}
+                      </Label>
+                      <Input
+                        type="password"
+                        placeholder={
+                          dialogMode === "edit"
+                            ? "Leave blank to keep current"
+                            : "Enter password"
+                        }
+                        value={userForm.password}
+                        onChange={(e) =>
+                          setUserForm({ ...userForm, password: e.target.value })
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Status</Label>
+                      <Select
+                        value={userForm.isActive ? "Active" : "Inactive"}
+                        onValueChange={(v) =>
+                          setUserForm({ ...userForm, isActive: v === "Active" })
+                        }
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Active">Active</SelectItem>
+                          <SelectItem value="Inactive">Inactive</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsDialogOpen(false)}
+                    disabled={submitting}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="app"
+                    onClick={submitDialog}
+                    disabled={submitting}
+                  >
+                    {submitting
+                      ? "Saving..."
+                      : dialogMode === "add"
+                      ? "Add User"
+                      : "Update User"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
         </div>
       </div>
 
@@ -608,7 +632,8 @@ export default function UsersTab({ users, setUsers, roles, branches }) {
               <TableHead>Role</TableHead>
               <TableHead>Branch</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="w-20">Actions</TableHead>
+              {/* ✅ RBAC — only show Actions header if user can act on rows */}
+              {hasAnyRowAction && <TableHead className="w-20">Actions</TableHead>}
             </TableRow>
           </TableHeader>
 
@@ -616,7 +641,7 @@ export default function UsersTab({ users, setUsers, roles, branches }) {
             {filteredUsers.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={hasAnyRowAction ? 6 : 5}
                   className="text-center py-8 text-gray-500"
                 >
                   No users found
@@ -671,30 +696,37 @@ export default function UsersTab({ users, setUsers, roles, branches }) {
                       </Badge>
                     </TableCell>
 
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
+                    {/* ✅ RBAC — only render Actions cell if user can act on rows */}
+                    {hasAnyRowAction && (
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
 
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => openEditDialog(u)}>
-                            <Edit className="h-4 w-4 mr-2" />
-                            Edit
-                          </DropdownMenuItem>
+                          <DropdownMenuContent align="end">
+                            {canEdit && (
+                              <DropdownMenuItem onClick={() => openEditDialog(u)}>
+                                <Edit className="h-4 w-4 mr-2" />
+                                Edit
+                              </DropdownMenuItem>
+                            )}
 
-                          <DropdownMenuItem
-                            onClick={() => handleDelete(u.id)}
-                            className="text-red-600"
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
+                            {canDelete && (
+                              <DropdownMenuItem
+                                onClick={() => handleDelete(u.id)}
+                                className="text-red-600"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    )}
                   </TableRow>
                 );
               })
@@ -712,31 +744,33 @@ export default function UsersTab({ users, setUsers, roles, branches }) {
         )}
       </div>
 
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog
-        open={isDeleteDialogOpen}
-        onOpenChange={setIsDeleteDialogOpen}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the
-              user account.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmDelete}
-              className="bg-red-600 hover:bg-red-700"
-              disabled={submitting}
-            >
-              {submitting ? "Deleting..." : "Delete"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* ✅ RBAC — only mount delete confirmation if user can delete */}
+      {canDelete && (
+        <AlertDialog
+          open={isDeleteDialogOpen}
+          onOpenChange={setIsDeleteDialogOpen}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. This will permanently delete the
+                user account.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={confirmDelete}
+                className="bg-red-600 hover:bg-red-700"
+                disabled={submitting}
+              >
+                {submitting ? "Deleting..." : "Delete"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </div>
   );
 }
