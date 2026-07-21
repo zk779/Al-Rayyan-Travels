@@ -93,7 +93,7 @@ const InvoicePrint = () => {
             return '';
         };
 
-        const integerPart = Math.floor(num);
+        let integerPart = Math.floor(num);
         const decimalPart = Math.round((num - integerPart) * 100);
 
         let result = '';
