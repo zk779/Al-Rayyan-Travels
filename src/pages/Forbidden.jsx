@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import LogoDark from "../assets/logo-dark.png";
-import LogoLight from "../assets/logo-light.png";
+import LogoDark from "../assets/logo-dark-am.png";
+import LogoLight from "../assets/logo-light-am.png";
 
 /* ======================================================================
    FORBIDDEN 403 — "Departure Board" concept

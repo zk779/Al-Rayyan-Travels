@@ -1,6 +1,6 @@
 import React from "react";
 import { Facebook, Instagram, Twitter, Linkedin } from "lucide-react"; // Importing icons from lucide-react
-import logo from "../../assets/home/logo.png"; // Adjust the path as necessary
+import logo from "../../assets/logo-dark-am.png"; // Adjust the path as necessary
 
 const Footer = () => {
   const links = {
@@ -43,11 +43,11 @@ const Footer = () => {
           <div className="md:col-span-2">
             <div className="flex-shrink-0 flex items-center gap-2">
               <div className="border border-white rounded-md shadow-lg p-1 bg-gray-800/50 backdrop-blur-sm">
-                <img src={logo} width={50} alt="Al Rayyan Travels" />
+                <img src={logo} width={50} alt="Al Madaar Travels" />
               </div>
               <div>
                 <div className="text-2xl font-bold text-white bg-clip-text">
-                  Al Rayyan
+                  Al Madaar
                 </div>
                 <span className="text-gray-400 text-sm">Travel & Tourism</span>
               </div>

@@ -26,14 +26,16 @@ import {
   Sun,
   Moon,
   Plus,
+  Languages,
 } from "lucide-react";
 
 import { useSidebar } from "../context/SidebarContext";
 import { ThemeContext } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
+import { useLanguage } from "../context/LanguageContext";
 import { appToast } from "../../shadcn/components/ui/appToast";
-import LogoDark from "../assets/logo-dark.png";
-import LogoLight from "../assets/logo-light.png";
+import LogoDark from "../assets/logo-dark-am.png";
+import LogoLight from "../assets/logo-light-am.png";
 
 /* ======================================================
 	STYLE TOKENS – CLEAN & SOPHISTICATED
@@ -61,6 +63,7 @@ const Sidebar = () => {
     useSidebar();
   const { isDarkMode, toggleTheme } = useContext(ThemeContext);
   const { hasPermission, logout } = useAuth(); // ✅ RBAC + proper logout
+  const { language, toggleLanguage, t, isRTL } = useLanguage(); // ✅ EN/AR toggle
   const navigate = useNavigate();
 
   const location = useLocation();
@@ -131,8 +134,8 @@ const Sidebar = () => {
         {/* Modern line indicator for active item */}
         {active && (
           <span
-            className={`absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 rounded-r-full ${
-              isDarkMode ? "bg-blue-400" : "bg-white"
+            className={`absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 rounded-full ${
+              isDarkMode ? "bg-blue-400" : "bg-slate-500"
             }`}
           ></span>
         )}
@@ -235,68 +238,69 @@ const Sidebar = () => {
   /* ======================================================
 		MENU CONTENT
 		✅ RBAC: each item/group gated by its matching permission
+		✅ i18n: labels driven by t() from LanguageContext
 	====================================================== */
   const MenuContent = () => (
     <>
-      <NavItem to="/dashboard" icon={Home} label="Dashboard" />
+      <NavItem to="/dashboard" icon={Home} label={t("dashboard")} />
 
       <NavItem
         to="/airline-codes"
         icon={Plane}
-        label="Airline Codes"
+        label={t("airlineCodes")}
         permission="AIRLINE_READ"
       />
       <NavItem
         to="/vendors"
         icon={Store}
-        label="Vendors"
+        label={t("vendors")}
         permission="VENDOR_READ"
       />
       <NavItem
         to="/customers"
         icon={Users2}
-        label="Customers"
+        label={t("customers")}
         permission="CUSTOMER_READ"
       />
       <NavItem
         to="/bank-accounts"
         icon={LandmarkIcon}
-        label="Bank Accounts"
+        label={t("bankAccounts")}
         permission="BRANCH_READ"
       />
 
-      <Collapsible id="sales" icon={HandCoins} label="Sales">
+      <Collapsible id="sales" icon={HandCoins} label={t("sales")}>
         <NavItem
           to="/new-services"
           icon={Plus}
-          label="New Services"
+          label={t("newServices")}
           permission="SALE_CREATE"
         />
         <NavItem
           to="/sales-report"
           icon={ScrollText}
-          label="Sales Report"
+          label={t("salesReport")}
           any={["SALE_READ", "REFUND_READ"]}
         />
         <NavItem
           to="/report"
           icon={PieChart}
-          label="Reports"
+          label={t("reports")}
           permission="REPORT_READ"
         />
       </Collapsible>
 
-      <Collapsible id="payments" icon={SaudiRiyal} label="Payments">
+      <Collapsible id="payments" icon={SaudiRiyal} label={t("payments")}>
         <NavItem
           to="/manage-payments"
           icon={BookCheck}
-          label="Payment List"
+          label={t("paymentList")}
           permission="PAYMENT_READ"
         />
         <NavItem
           to="/refund-list"
           icon={RotateCcwIcon}
-          label="Refunds"
+          label={t("refunds")}
           permission="REFUND_READ"
         />
       </Collapsible>
@@ -304,19 +308,19 @@ const Sidebar = () => {
       <NavItem
         to="/ledger"
         icon={LandmarkIcon}
-        label="Ledger"
+        label={t("ledger")}
         permission="LEDGER_READ"
       />
       <NavItem
         to="/expenses"
         icon={Wallet}
-        label="Expenses"
+        label={t("expenses")}
         permission="EXPENSE_READ"
       />
       <NavItem
         to="/users"
         icon={UserCog}
-        label="Users"
+        label={t("users")}
         permission="USER_READ"
       />
 
@@ -328,7 +332,7 @@ const Sidebar = () => {
       <NavItem
         to="/login"
         icon={LogOut}
-        label="Logout"
+        label={t("logout")}
         onClick={handleLogout}
       />
     </>
@@ -344,6 +348,7 @@ const Sidebar = () => {
         onClick={() => setMobileOpen(false)}
       />
       <aside
+        dir={isRTL ? "rtl" : "ltr"}
         className={`fixed top-0 left-0 z-50 h-screen w-64 transform transition-transform duration-300 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         } ${isDarkMode ? darkBg : lightBg} ${isDarkMode ? darkText : lightText} ${isDarkMode ? darkBorder : lightBorder} rounded-r-2xl`}
@@ -365,7 +370,7 @@ const Sidebar = () => {
               <p
                 className={`font-bold text-sm ${isDarkMode ? "text-white" : "text-slate-800"}`}
               >
-                Al-Rayyan
+                {t("brand")}
               </p>
             </div>
           </div>
@@ -421,6 +426,7 @@ const Sidebar = () => {
 
       {/* Desktop Sidebar */}
       <aside
+        dir={isRTL ? "rtl" : "ltr"}
         className={`hidden md:block fixed h-screenshot transition-all duration-300 ${
           isCollapsed ? "w-18" : "w-62"
         } ${isDarkMode ? darkBg : lightBg} ${
@@ -448,12 +454,12 @@ const Sidebar = () => {
                     isDarkMode ? "text-white" : "text-slate-800"
                   }`}
                 >
-                  Al-Rayyan
+                  {t("brand")}
                 </p>
                 <p
                   className={`text-xs ${isDarkMode ? "text-gray-400" : "text-slate-500"}`}
                 >
-                  Travel & Tourism
+                  {t("tagline")}
                 </p>
               </div>
             )}

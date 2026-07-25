@@ -15,12 +15,12 @@ const InvoicePrint = () => {
 
     // Static company data
     const companyData = {
-        name: "Al Rayyan TRAVEL AND TOURISM",
+        name: "Al Madaar TRAVEL AND TOURISM",
         nameArabic: "شركة الريان للسفر والسياحة",
         address: "KHAMIS MUSHAIT MAIN STREET BENGALI MARKET AL BALAD STREET BUILDING NO 3819, Saudi Arabia",
         phone: "+966 12 2631966",
-        email: "alrayyantravels247@gmail.com",
-        website: "www.al-rayyantravel.com",
+        email: "almadaartravels247@gmail.com",
+        website: "www.al-madaartravel.com",
         trn: "310916231300003",
         trnArabic: "٣١٠٩١٦٢٣١٣٠٠٠٠٣",
         crNumber: "2050144259",

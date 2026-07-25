@@ -6,6 +6,8 @@ import {
   LogOut,
   User,
   ChevronDown,
+  Languages,
+  Globe,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -33,12 +35,14 @@ import {
 } from "../../shadcn/components/ui/tooltip";
 
 import { useAuth } from "../context/AuthContext";
+import { useLanguage } from "../context/LanguageContext";
 
 const Header = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [notificationCount] = useState(7);
 
   const { user, logout } = useAuth();
+  const { language, toggleLanguage, t } = useLanguage();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -63,7 +67,7 @@ const Header = () => {
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 type="search"
-                placeholder="Search customers, invoices, vendors..."
+                placeholder={t("searchPlaceholder")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10 border pr-4 w-full bg-muted/50"
@@ -73,6 +77,24 @@ const Header = () => {
 
           {/* Right - Actions */}
           <div className="flex items-center gap-2">
+            {/* Language Toggle */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={toggleLanguage}
+                  className="relative flex items-center gap-1 hover:bg-gray-200 w-fit border p-2"
+                >
+                  <Globe className="h-6 w-6" />
+                  {language === "en" ? "English" : "عربي"}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {t("language")}: {language === "en" ? "EN → عربي" : "عربي → EN"}
+              </TooltipContent>
+            </Tooltip>
+
             {/* Notifications */}
             <Tooltip>
               <TooltipTrigger asChild>
@@ -88,7 +110,7 @@ const Header = () => {
                   )}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Notifications</TooltipContent>
+              <TooltipContent>{t("notifications")}</TooltipContent>
             </Tooltip>
 
             {/* Settings */}
@@ -98,7 +120,7 @@ const Header = () => {
                   <Settings className="h-6 w-6" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Settings</TooltipContent>
+              <TooltipContent>{t("settings")}</TooltipContent>
             </Tooltip>
 
             {/* User Dropdown */}
@@ -145,7 +167,7 @@ const Header = () => {
                 <DropdownMenuItem asChild>
                   <Link to="/profile" className="flex items-center gap-2">
                     <User className="h-4 w-4" />
-                    Profile Settings
+                    {t("profileSettings")}
                   </Link>
                 </DropdownMenuItem>
 
@@ -156,7 +178,7 @@ const Header = () => {
                   className="text-red-600 focus:text-red-600"
                 >
                   <LogOut className="h-4 w-4 mr-2" />
-                  Log out
+                  {t("logOut")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

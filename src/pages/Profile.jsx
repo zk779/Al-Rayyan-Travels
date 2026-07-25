@@ -44,7 +44,7 @@ import { Separator } from "../../shadcn/components/ui/separator";
 const mockUserData = {
   id: "1",
   name: "Sarah Johnson",
-  email: "sarah.johnson@alrayyan.com",
+  email: "sarah.johnson@almadaar.com",
   phone: "+1 234 567 8902",
   role: "Manager",
   department: "Sales",

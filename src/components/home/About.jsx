@@ -1,5 +1,5 @@
 import React from "react";
-import logo from "../../assets/home/logo.png"; // Adjust the path as necessary
+import logo from "../../assets/logo-dark-am.png"; // Adjust the path as necessary
 import { ArrowBigDownDash } from "lucide-react";
 
 const About = () => {
@@ -33,7 +33,7 @@ const About = () => {
               <img
                 src={logo}
                 alt="Aether Travel Team"
-                className="w-full object-cover"
+                className="w-full object-cover p-5"
                 style={{ height: "auto", maxHeight: "560px" }}
               />
             </div>
@@ -51,7 +51,7 @@ const About = () => {
           <div className="lg:w-1/2 space-y-8">
             {/* Badge */}
             <span className="text-cyan-400 text-sm font-semibold bg-cyan-400/10 px-4 py-2 rounded-full border border-cyan-400/20 inline-block hover:bg-cyan-400/20 hover:scale-110 hover:shadow-2xl transition-transform duration-500  hover:cursor-pointer">
-              About Al-Rayyan Travels
+              About Al Madaar Travels
             </span>
 
             {/* Headline */}

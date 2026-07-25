@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Key, LockKeyhole, Menu, X } from "lucide-react"; // Import icons from lucide-react
-import logo from "../../assets/home/logo.png"; // Adjust the path as necessary
+import logo from "../../assets/logo-light-am.png"; // Adjust the path as necessary
 import { Link } from "react-router-dom";
 
 const Header = () => {
@@ -19,12 +19,12 @@ const Header = () => {
             {/* Logo */}
             <Link to="/" className="flex items-center">
               <div className="flex-shrink-0 flex items-center gap-2">
-                <div className="border border-white rounded-md shadow-lg p-1 bg-gray-800/50 backdrop-blur-sm">
-                  <img src={logo} width={50} alt="Al Rayyan Travels" />
+                <div className="border border-white rounded-md shadow-lg p-1  backdrop-blur-sm">
+                  <img src={logo} width={70} alt="Al Madaar Travels" />
                 </div>
                 <div>
                   <div className="text-2xl font-bold text-white bg-clip-text">
-                    Al Rayyan
+                    Al Madaar
                   </div>
                   <span className="text-gray-400 text-sm">
                     Travel & Tourism

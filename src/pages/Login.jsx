@@ -12,8 +12,8 @@ import {
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
-import logo from "../assets/logo-dark.png";
-import logoLight from "../assets/logo-light.png";
+import logo from "../assets/logo-dark-am.png";
+import logoLight from "../assets/logo-light-am.png";
 import Hero from "../assets/home/Cover-Art.png";
 import { Sparkles } from "../../shadcn/components/ui/sparkles";
 
@@ -126,13 +126,13 @@ export default function LoginPage() {
                   <img
                     src={logo}
                     alt="Logo"
-                    className="w-9 h-9 object-contain"
+                    className="w-12 h-12 object-contain"
                   />
                 </div>
               </div>
               <div className="flex flex-col">
                 <span className="text-xl font-black tracking-tight leading-none uppercase">
-                  Al Rayyan
+                  Al Madaar
                 </span>
                 <span className="text-xs text-sky-400 font-bold tracking-[0.3em] mt-1">
                   TRAVELS
@@ -190,7 +190,7 @@ export default function LoginPage() {
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-[#0b1220] via-transparent to-transparent opacity-60" />
                 <div className="absolute bottom-0 right-5 flex items-center gap-2 opacity-90">
-                  <img src={logoLight} alt="" width={100} className="z-10" />
+                  <img src={logoLight} alt="" width={80} className="z-10 opacity-30" />
                 </div>
               </div>
             </div>
@@ -262,7 +262,7 @@ export default function LoginPage() {
                           required
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
-                          placeholder="agent@alrayyan.com"
+                          placeholder="agent@almadaar.com"
                           className="w-full h-16 bg-white/5 border border-white/10 rounded-2xl pl-14 pr-4 text-sm outline-none focus:border-sky-500/50 transition-all"
                         />
                       </div>
