@@ -443,7 +443,6 @@ export default function PaymentDialog({
         customerId: mode === "CREDIT" ? customerId : "",
         paidAmount: amount || String(sell),
         paymentLegs: null,
-        paxName: "",
       };
     } else {
       result = {
@@ -497,7 +496,6 @@ export default function PaymentDialog({
         paidAmount: String(partialPaidAmount),
         // sellPrice = both legs combined (what the customer actually owes in total)
         sellPrice: String(partialTotal),
-        paxName: "",
       };
     }
 
