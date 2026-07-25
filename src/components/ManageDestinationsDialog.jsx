@@ -110,7 +110,11 @@ export default function ManageDestinationsDialog({
   const addDestination = (selected) => {
     if (!selected) return;
     const existing = currentSaleForDialog.destinations || [];
-    if (existing.some((d) => d.value === selected.value)) {
+
+    // ✅ Round trips are allowed to revisit a destination (e.g. adding the
+    // origin back as the return leg). Only block true duplicates for
+    // one-way trips.
+    if (tripType !== 'ROUND_TRIP' && existing.some((d) => d.value === selected.value)) {
       alert('Destination already added!');
       return;
     }
@@ -265,12 +269,15 @@ export default function ManageDestinationsDialog({
                     ))}
                   </Reorder.Group>
 
-                  {/* Route Summary */}
+                  {/* Route Summary
+                      ✅ No longer auto-appends the first destination as an
+                      implied "return leg" for ROUND_TRIP. The route shown
+                      here is exactly what the user has added — if they want
+                      a return-to-origin leg, they add it manually below. */}
                   <div className="p-2.5 bg-blue-50 rounded-md border border-blue-200">
                     <div className="flex items-center gap-2 text-sm font-medium text-blue-700">
                       <Plane className="h-4 w-4" />
                       {destinations.map((d) => d.value).join(' → ')}
-                      {tripType === 'ROUND_TRIP' && destinations[0] && ` → ${destinations[0].value}`}
                     </div>
                   </div>
                 </>
