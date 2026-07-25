@@ -6,7 +6,7 @@ import { Input } from "../../shadcn/components/ui/input";
 import { Label } from "../../shadcn/components/ui/label";
 import { Separator } from "../../shadcn/components/ui/separator";
 import { Textarea } from "../../shadcn/components/ui/textarea";
-import { Loader2, Send, X, Calendar as CalendarIcon } from "lucide-react";
+import { Loader2, Send, X, Calendar as CalendarIcon, SaudiRiyal } from "lucide-react";
 import { Calendar } from "../../shadcn/components/ui/calendar";
 import {
   Popover,
@@ -172,7 +172,6 @@ export default function RefundTabComponent() {
       if (!res.ok) {
         throw new Error(data.error || "Failed to process refund");
       }
-
 
       resetForm();
     } catch (err) {
@@ -385,15 +384,17 @@ export default function RefundTabComponent() {
 
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Net Price</span>
-              <span className="font-medium">
-                ${refundForm.netPrice || "0.00"}
+              <span className="font-medium flex items-center gap-0.5">
+                <SaudiRiyal size={13} />
+                {refundForm.netPrice || "0.00"}
               </span>
             </div>
 
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">- Refund Fee</span>
-              <span className="font-medium text-red-600">
-                -${refundForm.refundFee || "0.00"}
+              <span className="font-medium text-red-600 flex items-center gap-0.5">
+                -<SaudiRiyal size={13} />
+                {refundForm.refundFee || "0.00"}
               </span>
             </div>
 
@@ -401,15 +402,19 @@ export default function RefundTabComponent() {
 
             <div className="flex justify-between text-sm font-semibold">
               <span className="text-rose-700">Refund to Vendor</span>
-              <span className="text-rose-700">${refundVendor}</span>
+              <span className="text-rose-700 flex items-center gap-0.5">
+                <SaudiRiyal size={13} />
+                {refundVendor}
+              </span>
             </div>
 
             <Separator className="my-2" />
 
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">- Service Charges</span>
-              <span className="font-medium text-red-600">
-                -${refundForm.serviceCharges || "0.00"}
+              <span className="font-medium text-red-600 flex items-center gap-0.5">
+                -<SaudiRiyal size={13} />
+                {refundForm.serviceCharges || "0.00"}
               </span>
             </div>
 
@@ -417,7 +422,10 @@ export default function RefundTabComponent() {
 
             <div className="flex justify-between text-sm font-semibold">
               <span className="text-blue-700">Refund to Customer</span>
-              <span className="text-blue-700">${refundPax}</span>
+              <span className="text-blue-700 flex items-center gap-0.5">
+                <SaudiRiyal size={13} />
+                {refundPax}
+              </span>
             </div>
           </div>
         </div>

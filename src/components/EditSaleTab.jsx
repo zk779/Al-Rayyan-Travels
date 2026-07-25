@@ -619,6 +619,53 @@ export default function EditSalesTab({ saleId }) {
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs font-medium text-slate-600">
+                      Document No *
+                    </Label>
+                    <Input
+                      value={item.documentNo || ""}
+                      onChange={(e) =>
+                        updateSale(
+                          item.id,
+                          "documentNo",
+                          e.target.value.toUpperCase(),
+                        )
+                      }
+                      placeholder="e.g. 123"
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium text-slate-600">
+                      PNR
+                    </Label>
+                    <Input
+                      value={item.pnr || ""}
+                      onChange={(e) =>
+                        updateSale(item.id, "pnr", e.target.value.toUpperCase())
+                      }
+                      placeholder="PNR Code"
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium text-slate-600">
+                      Passenger Name
+                    </Label>
+                    <Input
+                      value={item.paxName || ""}
+                      onChange={(e) =>
+                        updateSale(
+                          item.id,
+                          "paxName",
+                          e.target.value.toUpperCase(),
+                        )
+                      }
+                      placeholder="John Doe"
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium text-slate-600">
                       Vendor *
                     </Label>
                     <Select
@@ -633,45 +680,6 @@ export default function EditSalesTab({ saleId }) {
                       placeholder="Select"
                       menuPortalTarget={document.body}
                       styles={compactSelectStyles}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs font-medium text-slate-600">
-                      Document No *
-                    </Label>
-                    <Input
-                      value={item.documentNo || ""}
-                      onChange={(e) =>
-                        updateSale(item.id, "documentNo", e.target.value)
-                      }
-                      placeholder="e.g. 123"
-                      className="h-8 text-sm"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs font-medium text-slate-600">
-                      Passenger Name
-                    </Label>
-                    <Input
-                      value={item.paxName || ""}
-                      onChange={(e) =>
-                        updateSale(item.id, "paxName", e.target.value)
-                      }
-                      placeholder="John Doe"
-                      className="h-8 text-sm"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs font-medium text-slate-600">
-                      PNR
-                    </Label>
-                    <Input
-                      value={item.pnr || ""}
-                      onChange={(e) =>
-                        updateSale(item.id, "pnr", e.target.value)
-                      }
-                      placeholder="PNR Code"
-                      className="h-8 text-sm"
                     />
                   </div>
 

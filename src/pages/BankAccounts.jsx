@@ -1,9 +1,27 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Table, Modal, Button, Input, Form, Switch, Space, Select, DatePicker,
+  Table,
+  Modal,
+  Button,
+  Input,
+  Form,
+  Switch,
+  Space,
+  Select,
+  DatePicker,
 } from "antd";
 import dayjs from "dayjs";
-import { Edit, Trash, Plus, Search, Landmark, Wallet, CheckCircle, DollarSign } from "lucide-react";
+import {
+  Edit,
+  Trash,
+  Plus,
+  Search,
+  Landmark,
+  Wallet,
+  CheckCircle,
+  DollarSign,
+  SaudiRiyal,
+} from "lucide-react";
 import CustomAlertDialog from "../components/CustomAlertDialog";
 import { appToast } from "../../shadcn/components/ui/appToast";
 import { useAuth } from "../context/AuthContext"; // ✅ ADD THIS
@@ -29,15 +47,15 @@ async function apiRequest(path, { method = "GET", body } = {}) {
 
 /* ======================= NORMALIZE ======================= */
 const normalizeBank = (b) => ({
-  id:             b.id,
-  bankName:       b.bankName,
-  accountNumber:  b.accountNumber,
-  branchName:     b.branchName  || "",
-  swiftCode:      b.swiftCode   || "",
-  openingBalance: Number(b.openingBalance  || 0),
+  id: b.id,
+  bankName: b.bankName,
+  accountNumber: b.accountNumber,
+  branchName: b.branchName || "",
+  swiftCode: b.swiftCode || "",
+  openingBalance: Number(b.openingBalance || 0),
   currentBalance: Number(b.account?.balance || 0),
-  isActive:       b.isActive,
-  bankDate:       b.bankDate,
+  isActive: b.isActive,
+  bankDate: b.bankDate,
 });
 
 /* ======================= PAGE ======================= */
@@ -49,19 +67,19 @@ const BankAccountsPage = () => {
   const canDelete = hasPermission("BANK_DELETE");
   const hasAnyRowAction = canEdit || canDelete;
 
-  const [banks,       setBanks]       = useState([]);
+  const [banks, setBanks] = useState([]);
   const [loadingList, setLoadingList] = useState(false);
-  const [orderBy,     setOrderBy]     = useState("bankDate");
-  const [orderDir,    setOrderDir]    = useState("desc");
-  const [searchText,  setSearchText]  = useState("");
+  const [orderBy, setOrderBy] = useState("bankDate");
+  const [orderDir, setOrderDir] = useState("desc");
+  const [searchText, setSearchText] = useState("");
 
-  const [isModalOpen,  setIsModalOpen]  = useState(false);
-  const [isEditModal,  setIsEditModal]  = useState(false);
-  const [currentBank,  setCurrentBank]  = useState(null);
-  const [saving,       setSaving]       = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditModal, setIsEditModal] = useState(false);
+  const [currentBank, setCurrentBank] = useState(null);
+  const [saving, setSaving] = useState(false);
 
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [isDeleting,   setIsDeleting]   = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const [form] = Form.useForm();
 
@@ -73,13 +91,18 @@ const BankAccountsPage = () => {
       const res = await apiRequest(`/api/banks?${params.toString()}`);
       setBanks((res.data || []).map(normalizeBank));
     } catch (e) {
-      appToast.error("Fetch Error", e.message || "Failed to fetch bank accounts");
+      appToast.error(
+        "Fetch Error",
+        e.message || "Failed to fetch bank accounts",
+      );
     } finally {
       setLoadingList(false);
     }
   };
 
-  useEffect(() => { refreshBanks(); }, [orderBy, orderDir]);
+  useEffect(() => {
+    refreshBanks();
+  }, [orderBy, orderDir]);
 
   /* ── Filter ── */
   const filteredData = useMemo(() => {
@@ -89,17 +112,20 @@ const BankAccountsPage = () => {
       (b) =>
         b.bankName.toLowerCase().includes(q) ||
         b.accountNumber.toLowerCase().includes(q) ||
-        b.branchName.toLowerCase().includes(q)
+        b.branchName.toLowerCase().includes(q),
     );
   }, [banks, searchText]);
 
   /* ── Stats ── */
-  const totals = useMemo(() => ({
-    total:   banks.length,
-    active:  banks.filter((b) => b.isActive).length,
-    totalBalance: banks.reduce((s, b) => s + b.currentBalance, 0),
-    totalOpening: banks.reduce((s, b) => s + b.openingBalance, 0),
-  }), [banks]);
+  const totals = useMemo(
+    () => ({
+      total: banks.length,
+      active: banks.filter((b) => b.isActive).length,
+      totalBalance: banks.reduce((s, b) => s + b.currentBalance, 0),
+      totalOpening: banks.reduce((s, b) => s + b.openingBalance, 0),
+    }),
+    [banks],
+  );
 
   /* ── Modal ── */
   const showModal = (bank = null) => {
@@ -113,15 +139,15 @@ const BankAccountsPage = () => {
     form.setFieldsValue(
       bank
         ? {
-            bankName:      bank.bankName,
+            bankName: bank.bankName,
             accountNumber: bank.accountNumber,
-            branchName:    bank.branchName,
-            swiftCode:     bank.swiftCode,
+            branchName: bank.branchName,
+            swiftCode: bank.swiftCode,
             openingBalance: bank.openingBalance,
-            bankDate:      bank.bankDate ? dayjs(bank.bankDate) : dayjs(),
-            isActive:      bank.isActive,
+            bankDate: bank.bankDate ? dayjs(bank.bankDate) : dayjs(),
+            isActive: bank.isActive,
           }
-        : { openingBalance: 0, bankDate: dayjs(), isActive: true }
+        : { openingBalance: 0, bankDate: dayjs(), isActive: true },
     );
   };
 
@@ -141,17 +167,20 @@ const BankAccountsPage = () => {
     setSaving(true);
     try {
       const payload = {
-        bankName:      values.bankName,
+        bankName: values.bankName,
         accountNumber: values.accountNumber,
-        branchName:    values.branchName   || null,
-        swiftCode:     values.swiftCode    || null,
+        branchName: values.branchName || null,
+        swiftCode: values.swiftCode || null,
         openingBalance: Number(values.openingBalance || 0),
-        bankDate:      values.bankDate.toISOString(),
-        isActive:      values.isActive,
+        bankDate: values.bankDate.toISOString(),
+        isActive: values.isActive,
       };
 
       if (isEditModal) {
-        await apiRequest(`/api/banks/${currentBank.id}`, { method: "PUT", body: payload });
+        await apiRequest(`/api/banks/${currentBank.id}`, {
+          method: "PUT",
+          body: payload,
+        });
         appToast.success("Bank Updated", "Bank account updated successfully!");
       } else {
         await apiRequest("/api/banks", { method: "POST", body: payload });
@@ -172,12 +201,17 @@ const BankAccountsPage = () => {
     if (!deleteTarget) return;
     setIsDeleting(true);
     try {
-      const res = await apiRequest(`/api/banks/${deleteTarget.id}`, { method: "DELETE" });
+      const res = await apiRequest(`/api/banks/${deleteTarget.id}`, {
+        method: "DELETE",
+      });
       appToast.success("Done", res.message || "Bank processed successfully");
       setDeleteTarget(null);
       refreshBanks();
     } catch (e) {
-      appToast.error("Delete Error", e.message || "Failed to delete bank account");
+      appToast.error(
+        "Delete Error",
+        e.message || "Failed to delete bank account",
+      );
     } finally {
       setIsDeleting(false);
     }
@@ -187,12 +221,22 @@ const BankAccountsPage = () => {
   const handleStatusToggle = async (id, checked) => {
     if (!canEdit) return; // ✅ RBAC guard — status toggle is an edit action
 
-    setBanks((prev) => prev.map((b) => (b.id === id ? { ...b, isActive: checked } : b)));
+    setBanks((prev) =>
+      prev.map((b) => (b.id === id ? { ...b, isActive: checked } : b)),
+    );
     try {
-      await apiRequest(`/api/banks/${id}`, { method: "PUT", body: { isActive: checked } });
-      appToast.success("Status Updated", `Bank ${checked ? "activated" : "deactivated"}`);
+      await apiRequest(`/api/banks/${id}`, {
+        method: "PUT",
+        body: { isActive: checked },
+      });
+      appToast.success(
+        "Status Updated",
+        `Bank ${checked ? "activated" : "deactivated"}`,
+      );
     } catch (e) {
-      setBanks((prev) => prev.map((b) => (b.id === id ? { ...b, isActive: !checked } : b)));
+      setBanks((prev) =>
+        prev.map((b) => (b.id === id ? { ...b, isActive: !checked } : b)),
+      );
       appToast.error("Error", e.message || "Failed to update status");
     }
   };
@@ -209,7 +253,9 @@ const BankAccountsPage = () => {
           </div>
           <div className="min-w-0">
             <div className="font-medium truncate">{r.bankName}</div>
-            <div className="text-gray-400 text-xs truncate font-mono">{r.accountNumber}</div>
+            <div className="text-gray-400 text-xs truncate font-mono">
+              {r.accountNumber}
+            </div>
           </div>
         </div>
       ),
@@ -219,8 +265,12 @@ const BankAccountsPage = () => {
       key: "branchSwift",
       render: (_, r) => (
         <div className="text-sm">
-          <div className="truncate">{r.branchName || <span className="text-gray-300">—</span>}</div>
-          <div className="text-gray-400 font-mono text-xs">{r.swiftCode || <span className="text-gray-300">—</span>}</div>
+          <div className="truncate">
+            {r.branchName || <span className="text-gray-300">—</span>}
+          </div>
+          <div className="text-gray-400 font-mono text-xs">
+            {r.swiftCode || <span className="text-gray-300">—</span>}
+          </div>
         </div>
       ),
     },
@@ -228,15 +278,29 @@ const BankAccountsPage = () => {
       title: "Opening Balance",
       dataIndex: "openingBalance",
       key: "openingBalance",
-      render: (v) => <span className="font-mono">{Number(v || 0).toLocaleString()} SAR</span>,
+      render: (v) => (
+        <span className="font-mono inline-flex items-center gap-1">
+          <SaudiRiyal size={13} />
+          {Number(v || 0).toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}
+        </span>
+      ),
     },
     {
       title: "Current Balance",
       dataIndex: "currentBalance",
       key: "currentBalance",
       render: (v) => (
-        <span className={`font-mono font-semibold ${Number(v) >= 0 ? "text-green-600" : "text-red-600"}`}>
-          {Number(v || 0).toLocaleString()} SAR
+        <span
+          className={`font-mono font-semibold inline-flex items-center gap-1 ${Number(v) >= 0 ? "text-green-600" : "text-red-600"}`}
+        >
+          <SaudiRiyal size={13} />
+          {Number(v || 0).toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}
         </span>
       ),
     },
@@ -245,7 +309,7 @@ const BankAccountsPage = () => {
       dataIndex: "isActive",
       key: "isActive",
       filters: [
-        { text: "Active",   value: true  },
+        { text: "Active", value: true },
         { text: "Inactive", value: false },
       ],
       onFilter: (value, record) => record.isActive === value,
@@ -269,10 +333,20 @@ const BankAccountsPage = () => {
             render: (_, r) => (
               <Space>
                 {canEdit && (
-                  <Button variant="link" color="primary" icon={<Edit className="w-5 h-5" />} onClick={() => showModal(r)} />
+                  <Button
+                    variant="link"
+                    color="primary"
+                    icon={<Edit className="w-5 h-5" />}
+                    onClick={() => showModal(r)}
+                  />
                 )}
                 {canDelete && (
-                  <Button variant="link" color="danger" icon={<Trash className="w-5 h-5" />} onClick={() => setDeleteTarget(r)} />
+                  <Button
+                    variant="link"
+                    color="danger"
+                    icon={<Trash className="w-5 h-5" />}
+                    onClick={() => setDeleteTarget(r)}
+                  />
                 )}
               </Space>
             ),
@@ -315,26 +389,41 @@ const BankAccountsPage = () => {
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {[
-          { title: "Total Banks",     value: totals.total,        icon: <Landmark  className="w-8 h-8 text-blue-600"   /> },
-          { title: "Active Banks",    value: totals.active,       icon: <CheckCircle className="w-8 h-8 text-green-600" /> },
-          { title: "Total Opening",   value: `${totals.totalOpening.toLocaleString()} SAR`, icon: <Wallet     className="w-8 h-8 text-purple-600" /> },
-          { title: "Total Balance",   value: `${totals.totalBalance.toLocaleString()} SAR`, icon: <DollarSign className="w-8 h-8 text-emerald-600" /> },
-        ].map(({ title, value, icon }) => (
-          <div key={title} className="bg-white p-5 rounded-lg shadow flex items-center justify-between">
-            <div>
-              <div className="text-gray-500 text-sm font-medium">{title}</div>
-              <div className="text-3xl font-bold text-gray-800">{value}</div>
-            </div>
-            {icon}
-          </div>
-        ))}
+  {[
+    { title: "Total Banks",   value: totals.total,  icon: <Landmark className="w-8 h-8 text-blue-600" /> },
+    { title: "Active Banks",  value: totals.active, icon: <CheckCircle className="w-8 h-8 text-green-600" /> },
+    {
+      title: "Total Opening",
+      value: totals.totalOpening.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      isCurrency: true,
+      icon: <Wallet className="w-8 h-8 text-purple-600" />,
+    },
+    {
+      title: "Total Balance",
+      value: totals.totalBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      isCurrency: true,
+      icon: <SaudiRiyal className="w-8 h-8 text-emerald-600" />,
+    },
+  ].map(({ title, value, icon, isCurrency }) => (
+    <div key={title} className="bg-white p-5 rounded-lg shadow flex items-center justify-between">
+      <div>
+        <div className="text-gray-500 text-sm font-medium">{title}</div>
+        <div className="text-3xl font-bold text-gray-800 flex items-center gap-1">
+          {isCurrency && <SaudiRiyal size={22} />}
+          {value}
+        </div>
       </div>
+      {icon}
+    </div>
+  ))}
+</div>
 
       {/* Table */}
       <div className="bg-white p-1 rounded-lg shadow">
         <div className="flex justify-between items-center p-3 mb-2">
-          <div className="text-lg font-semibold">Bank Accounts ({banks.length})</div>
+          <div className="text-lg font-semibold">
+            Bank Accounts ({banks.length})
+          </div>
         </div>
         <Table
           loading={loadingList}
@@ -377,7 +466,12 @@ const BankAccountsPage = () => {
         style={{ top: 16 }}
         bodyStyle={{ maxHeight: "75vh", overflow: "auto" }}
       >
-        <Form form={form} layout="vertical" onFinish={handleSubmit} className="mt-2">
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={handleSubmit}
+          className="mt-2"
+        >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Form.Item
               label="Bank Name *"
@@ -415,7 +509,11 @@ const BankAccountsPage = () => {
               <Input type="number" placeholder="0.00" min={0} />
             </Form.Item>
 
-            <Form.Item label="Bank Date *" name="bankDate" rules={[{ required: true, message: "Select date!" }]}>
+            <Form.Item
+              label="Bank Date *"
+              name="bankDate"
+              rules={[{ required: true, message: "Select date!" }]}
+            >
               <DatePicker className="w-full" />
             </Form.Item>
           </div>

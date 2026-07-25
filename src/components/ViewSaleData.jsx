@@ -19,6 +19,7 @@ import {
   Building2,
   Banknote,
   SplitSquareHorizontal,
+  SaudiRiyal,
 } from "lucide-react";
 import { Badge } from "../../shadcn/components/ui/badge";
 import { TableCell, TableRow } from "../../shadcn/components/ui/table";
@@ -104,7 +105,10 @@ function StatBlock({ label, value, tone = "slate", icon: Icon }) {
         {Icon && <Icon className="w-3 h-3" />}
         {label}
       </p>
-      <p className={cn("text-sm font-bold truncate", toneClass)}>{value}</p>
+      <p className={cn("text-sm font-bold truncate flex items-center gap-0.5", toneClass)}>
+        <SaudiRiyal className="w-3.5 h-3.5" />
+        {value}
+      </p>
     </div>
   );
 }

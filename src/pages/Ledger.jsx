@@ -27,7 +27,7 @@ import {
 	CalendarIcon,
 	TrendingUp,
 	TrendingDown,
-	DollarSign,
+	SaudiRiyal,
 	Filter,
 	Download,
 	RefreshCw,
@@ -81,12 +81,26 @@ async function apiRequest(path) {
 	return data;
 }
 
-const money = (n) =>
+// Plain-text amount formatter — no currency symbol baked in, since the
+// Riyal symbol is an icon (SVG), not a text character. Use this only where
+// a raw number string is needed (e.g. inside a template literal/CSV export).
+const moneyText = (n) =>
 	new Intl.NumberFormat("en-US", {
-		style: "currency",
-		currency: "USD",
+		style: "decimal",
 		minimumFractionDigits: 2,
+		maximumFractionDigits: 2,
 	}).format(Number(n || 0));
+
+// JSX component — renders the Riyal icon + formatted amount together.
+// Use this everywhere an amount is rendered directly in JSX.
+function Money({ value, size = 12, className = "" }) {
+	return (
+		<span className={cn("inline-flex items-center gap-0.5 tabular-nums", className)}>
+			<SaudiRiyal className="shrink-0" size={size} />
+			{moneyText(value)}
+		</span>
+	);
+}
 
 const ENTRY_CONFIG = {
 	OPENING_BALANCE: { color: "bg-sky-50 text-sky-700 border-sky-200", icon: <BookOpen className="w-3 h-3" /> },
@@ -213,11 +227,11 @@ function SaleDetail({ sale }) {
 				</div>
 			)}
 			<div className="flex items-start gap-2">
-				<DollarSign className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />
+				<SaudiRiyal className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />
 				<div>
 					<p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Net / Sell</p>
-					<p className="text-xs font-semibold text-gray-800">
-						{money(sale.netPrice)} / {money(sale.sellPrice)}
+					<p className="text-xs font-semibold text-gray-800 flex items-center gap-1">
+						<Money value={sale.netPrice} /> / <Money value={sale.sellPrice} />
 					</p>
 				</div>
 			</div>
@@ -225,7 +239,7 @@ function SaleDetail({ sale }) {
 				<TrendingUp className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />
 				<div>
 					<p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Profit</p>
-					<p className="text-xs font-semibold text-emerald-700">{money(sale.profit)}</p>
+					<p className="text-xs font-semibold text-emerald-700"><Money value={sale.profit} /></p>
 				</div>
 			</div>
 			{sale.paymentStatus && (
@@ -247,7 +261,7 @@ function SaleDetail({ sale }) {
 					<Banknote className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />
 					<div>
 						<p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Paid</p>
-						<p className="text-xs font-semibold text-gray-800">{money(sale.paidAmount)}</p>
+						<p className="text-xs font-semibold text-gray-800"><Money value={sale.paidAmount} /></p>
 					</div>
 				</div>
 			)}
@@ -279,10 +293,10 @@ function PaymentDetail({ payment }) {
 			)}
 			{payment.amount != null && (
 				<div className="flex items-start gap-2">
-					<DollarSign className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />
+					<SaudiRiyal className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />
 					<div>
 						<p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Amount</p>
-						<p className="text-xs font-semibold text-violet-700">{money(payment.amount)}</p>
+						<p className="text-xs font-semibold text-violet-700"><Money value={payment.amount} /></p>
 					</div>
 				</div>
 			)}
@@ -388,10 +402,10 @@ function RefundDetail({ refund }) {
 			)}
 			{refund.originalSaleAmount != null && (
 				<div className="flex items-start gap-2">
-					<DollarSign className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />
+					<SaudiRiyal className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />
 					<div>
 						<p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Original Amount</p>
-						<p className="text-xs font-semibold text-gray-800">{money(refund.originalSaleAmount)}</p>
+						<p className="text-xs font-semibold text-gray-800"><Money value={refund.originalSaleAmount} /></p>
 					</div>
 				</div>
 			)}
@@ -400,7 +414,7 @@ function RefundDetail({ refund }) {
 					<TrendingDown className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />
 					<div>
 						<p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Customer Refund</p>
-						<p className="text-xs font-semibold text-amber-700">{money(refund.customerRefundAmount)}</p>
+						<p className="text-xs font-semibold text-amber-700"><Money value={refund.customerRefundAmount} /></p>
 					</div>
 				</div>
 			)}
@@ -409,7 +423,7 @@ function RefundDetail({ refund }) {
 					<Receipt className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />
 					<div>
 						<p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Refund Fee</p>
-						<p className="text-xs font-semibold text-rose-700">{money(refund.refundFee)}</p>
+						<p className="text-xs font-semibold text-rose-700"><Money value={refund.refundFee} /></p>
 					</div>
 				</div>
 			)}
@@ -418,7 +432,7 @@ function RefundDetail({ refund }) {
 					<BarChart3 className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />
 					<div>
 						<p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Net Cost to Us</p>
-						<p className="text-xs font-semibold text-rose-700">{money(refund.netCostToUs)}</p>
+						<p className="text-xs font-semibold text-rose-700"><Money value={refund.netCostToUs} /></p>
 					</div>
 				</div>
 			)}
@@ -465,17 +479,19 @@ function InvoiceDetail({ invoice }) {
 				</div>
 			)}
 			<div className="flex items-start gap-2">
-				<DollarSign className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />
+				<SaudiRiyal className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />
 				<div>
 					<p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Total Net / Sell</p>
-					<p className="text-xs font-semibold text-gray-800">{money(invoice.totalNet)} / {money(invoice.totalSell)}</p>
+					<p className="text-xs font-semibold text-gray-800 flex items-center gap-1">
+						<Money value={invoice.totalNet} /> / <Money value={invoice.totalSell} />
+					</p>
 				</div>
 			</div>
 			<div className="flex items-start gap-2">
 				<TrendingUp className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />
 				<div>
 					<p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Total Profit</p>
-					<p className="text-xs font-semibold text-emerald-700">{money(invoice.totalProfit)}</p>
+					<p className="text-xs font-semibold text-emerald-700"><Money value={invoice.totalProfit} /></p>
 				</div>
 			</div>
 			{invoice.user?.fullName && (
@@ -593,7 +609,9 @@ function LedgerRow({ entry }) {
 				{/* Debit */}
 				<TableCell className="py-3 text-right">
 					{entry.debit ? (
-						<span className="font-bold text-rose-600 text-sm tabular-nums">{money(entry.debit)}</span>
+						<span className="font-bold text-rose-600 text-sm">
+							<Money value={entry.debit} size={13} />
+						</span>
 					) : (
 						<span className="text-gray-300 text-sm">—</span>
 					)}
@@ -602,7 +620,9 @@ function LedgerRow({ entry }) {
 				{/* Credit */}
 				<TableCell className="py-3 text-right">
 					{entry.credit ? (
-						<span className="font-bold text-emerald-600 text-sm tabular-nums">{money(entry.credit)}</span>
+						<span className="font-bold text-emerald-600 text-sm">
+							<Money value={entry.credit} size={13} />
+						</span>
 					) : (
 						<span className="text-gray-300 text-sm">—</span>
 					)}
@@ -610,8 +630,8 @@ function LedgerRow({ entry }) {
 
 				{/* Balance (running, if available) */}
 				<TableCell className="py-3 text-right">
-					<span className="text-sm font-semibold text-slate-700 tabular-nums">
-						{entry.balanceAfter != null ? money(entry.balanceAfter) : "—"}
+					<span className="text-sm font-semibold text-slate-700">
+						{entry.balanceAfter != null ? <Money value={entry.balanceAfter} size={13} /> : "—"}
 					</span>
 				</TableCell>
 
@@ -655,7 +675,6 @@ function LedgerRow({ entry }) {
 function Pagination({ page, totalPages, onPage }) {
 	if (totalPages <= 1) return null;
 
-	// Build visible page numbers
 	const pages = [];
 	const delta = 2;
 	const left = Math.max(2, page - delta);
@@ -862,20 +881,20 @@ export default function LedgerComponent() {
 			<div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
 				{[
 					{
-						label: "Total Credit", value: money(totals.credit),
+						label: "Total Credit", value: totals.credit,
 						icon: <TrendingUp className="w-5 h-5 text-emerald-600" />,
 						bg: "bg-emerald-50", border: "border-l-emerald-500",
 						sub: "Money In", subColor: "text-emerald-600",
 					},
 					{
-						label: "Total Debit", value: money(totals.debit),
+						label: "Total Debit", value: totals.debit,
 						icon: <TrendingDown className="w-5 h-5 text-rose-600" />,
 						bg: "bg-rose-50", border: "border-l-rose-500",
 						sub: "Money Out", subColor: "text-rose-600",
 					},
 					{
-						label: "Net Balance", value: money(netBalance),
-						icon: <DollarSign className={cn("w-5 h-5", isPositive ? "text-blue-600" : "text-orange-500")} />,
+						label: "Net Balance", value: netBalance,
+						icon: <SaudiRiyal className={cn("w-5 h-5", isPositive ? "text-blue-600" : "text-orange-500")} />,
 						bg: isPositive ? "bg-blue-50" : "bg-orange-50",
 						border: isPositive ? "border-l-blue-500" : "border-l-orange-500",
 						sub: isPositive ? "Surplus" : "Deficit",
@@ -888,7 +907,9 @@ export default function LedgerComponent() {
 								<span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{c.label}</span>
 								<div className={cn("p-1.5 rounded-lg", c.bg)}>{c.icon}</div>
 							</div>
-							<div className="text-2xl font-bold text-gray-900 tabular-nums">{c.value}</div>
+							<div className="text-2xl font-bold text-gray-900">
+								<Money value={c.value} size={18} />
+							</div>
 							<div className={cn("text-xs font-medium mt-1", c.subColor)}>{c.sub}</div>
 						</CardContent>
 					</Card>
@@ -915,7 +936,7 @@ export default function LedgerComponent() {
 						<div className="space-y-1">
 							<label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Account Type</label>
 							<Select value={accountType} onValueChange={(v) => { setAccountType(v); setSelectedVendorId("all"); setSelectedCustomerId("all"); setPage(1); }}>
-								<SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+								<SelectTrigger className="h-9 text-sm w-full"><SelectValue /></SelectTrigger>
 								<SelectContent>
 									{[["VENDOR","Vendor",Building2],["CUSTOMER","Customer",Users],["EXPENSE","Expense",CreditCard],["CASH","Cash",Wallet],["BANK","Bank",Building2]].map(([val, label, Icon]) => (
 										<SelectItem key={val} value={val}>
@@ -930,7 +951,7 @@ export default function LedgerComponent() {
 						<div className="space-y-1">
 							<label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Entry Type</label>
 							<Select value={entryType} onValueChange={(v) => { setEntryType(v); setPage(1); }}>
-								<SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+								<SelectTrigger className="h-9 text-sm w-full"><SelectValue /></SelectTrigger>
 								<SelectContent>
 									<SelectItem value="ALL">All Entries</SelectItem>
 									<SelectItem value="OPENING_BALANCE">Opening Balance</SelectItem>
@@ -947,7 +968,7 @@ export default function LedgerComponent() {
 							<div className="space-y-1">
 								<label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Vendor</label>
 								<Select value={selectedVendorId} onValueChange={(v) => { setSelectedVendorId(v); setPage(1); }}>
-									<SelectTrigger className="h-9 text-sm"><SelectValue placeholder="All Vendors" /></SelectTrigger>
+									<SelectTrigger className="h-9 text-sm w-full"><SelectValue placeholder="All Vendors" /></SelectTrigger>
 									<SelectContent>
 										<SelectItem value="all">All Vendors</SelectItem>
 										{vendors.map((v) => <SelectItem key={v.id} value={v.id}>{v.vendorName}</SelectItem>)}
@@ -961,7 +982,7 @@ export default function LedgerComponent() {
 							<div className="space-y-1">
 								<label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Customer</label>
 								<Select value={selectedCustomerId} onValueChange={(v) => { setSelectedCustomerId(v); setPage(1); }}>
-									<SelectTrigger className="h-9 text-sm"><SelectValue placeholder="All Customers" /></SelectTrigger>
+									<SelectTrigger className="h-9 text-sm w-full"><SelectValue placeholder="All Customers" /></SelectTrigger>
 									<SelectContent>
 										<SelectItem value="all">All Customers</SelectItem>
 										{customers.map((c) => <SelectItem key={c.id} value={c.id}>{c.customerName}</SelectItem>)}

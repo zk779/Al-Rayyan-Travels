@@ -40,8 +40,12 @@ import {
   ExternalLink,
   Banknote,
   CreditCard,
+  SaudiRiyal,
 } from "lucide-react";
-import PaymentsTable, { MethodBadge, CategoryBadge } from "../components/PaymentsTable";
+import PaymentsTable, {
+  MethodBadge,
+  CategoryBadge,
+} from "../components/PaymentsTable";
 
 // TODO: point this at your existing edit-payment component. It's assumed to
 // accept { payment, onClose, onSuccess } — adjust the import path and props
@@ -75,7 +79,9 @@ const authHeaders = () => ({
 // get routed to EditSalePayment instead.
 const isSingleSalePayment = (p) => p?.partyType === "CUSTOMER" && !!p?.saleId;
 const isWalkInPayment = (p) =>
-  typeof p?.isWalkIn === "boolean" ? p.isWalkIn : isSingleSalePayment(p) && !p?.customerId;
+  typeof p?.isWalkIn === "boolean"
+    ? p.isWalkIn
+    : isSingleSalePayment(p) && !p?.customerId;
 
 function saleReference(sale) {
   if (!sale) return null;
@@ -471,7 +477,9 @@ function AddPaymentDialog({ partyType, open, onClose, onSuccess }) {
 function EditSalePayment({ payment, onClose, onSuccess }) {
   const [amount, setAmount] = useState(String(payment.amount));
   const [method, setMethod] = useState(payment.method);
-  const [bankId, setBankId] = useState(payment.bankId ?? payment.bank?.id ?? "");
+  const [bankId, setBankId] = useState(
+    payment.bankId ?? payment.bank?.id ?? "",
+  );
   const [banks, setBanks] = useState([]);
   const [date, setDate] = useState(
     payment.transactionDate ? payment.transactionDate.slice(0, 10) : "",
@@ -492,24 +500,30 @@ function EditSalePayment({ payment, onClose, onSuccess }) {
   const submit = async () => {
     setError("");
     const amt = parseFloat(amount);
-    if (isNaN(amt) || amt <= 0) return setError("Amount must be greater than 0");
-    if (method === "BANK_TRANSFER" && !bankId) return setError("Bank is required");
+    if (isNaN(amt) || amt <= 0)
+      return setError("Amount must be greater than 0");
+    if (method === "BANK_TRANSFER" && !bankId)
+      return setError("Bank is required");
 
     setSaving(true);
     try {
-      const res = await fetch(`${API_BASE}/api/payments/vendor-customer/${payment.id}`, {
-        method: "PUT",
-        headers: authHeaders(),
-        body: JSON.stringify({
-          amount: amt,
-          method,
-          bankId: method === "BANK_TRANSFER" ? bankId : undefined,
-          remarks,
-          transactionDate: date ? new Date(date).toISOString() : undefined,
-        }),
-      });
+      const res = await fetch(
+        `${API_BASE}/api/payments/vendor-customer/${payment.id}`,
+        {
+          method: "PUT",
+          headers: authHeaders(),
+          body: JSON.stringify({
+            amount: amt,
+            method,
+            bankId: method === "BANK_TRANSFER" ? bankId : undefined,
+            remarks,
+            transactionDate: date ? new Date(date).toISOString() : undefined,
+          }),
+        },
+      );
       const json = await res.json();
-      if (!json.success) throw new Error(json.error || "Failed to update payment");
+      if (!json.success)
+        throw new Error(json.error || "Failed to update payment");
       onSuccess?.();
     } catch (e) {
       setError(e.message || "Failed to update payment");
@@ -522,9 +536,13 @@ function EditSalePayment({ payment, onClose, onSuccess }) {
     <div className="space-y-4">
       <div className="rounded-xl bg-slate-50 border border-slate-100 p-3.5">
         <p className="text-xs text-slate-400 mb-0.5">
-          {walkIn ? "Walk-in Customer" : payment.customer?.customerName ?? "Customer"}
+          {walkIn
+            ? "Walk-in Customer"
+            : (payment.customer?.customerName ?? "Customer")}
         </p>
-        <p className="text-sm font-medium text-slate-700">{saleReference(payment.sale) || "—"}</p>
+        <p className="text-sm font-medium text-slate-700">
+          {saleReference(payment.sale) || "—"}
+        </p>
       </div>
 
       {error && (
@@ -594,19 +612,31 @@ function EditSalePayment({ payment, onClose, onSuccess }) {
 
       <div className="space-y-1.5">
         <Label>Date</Label>
-        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        <Input
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+        />
       </div>
 
       <div className="space-y-1.5">
         <Label>Remarks</Label>
-        <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} rows={2} />
+        <Textarea
+          value={remarks}
+          onChange={(e) => setRemarks(e.target.value)}
+          rows={2}
+        />
       </div>
 
       <div className="flex gap-2 justify-end pt-2">
         <Button variant="outline" onClick={onClose} disabled={saving}>
           Cancel
         </Button>
-        <Button onClick={submit} disabled={saving} className="bg-blue-600 hover:bg-blue-700">
+        <Button
+          onClick={submit}
+          disabled={saving}
+          className="bg-blue-600 hover:bg-blue-700"
+        >
           {saving ? "Saving…" : "Save Changes"}
         </Button>
       </div>
@@ -620,10 +650,28 @@ function EditSalePayment({ payment, onClose, onSuccess }) {
 function EditPaymentDialog({ payment, onClose, onSuccess }) {
   if (!payment) return null;
   if (payment.partyType === "VENDOR")
-    return <EditVendorPayment payment={payment} onClose={onClose} onSuccess={onSuccess} />;
+    return (
+      <EditVendorPayment
+        payment={payment}
+        onClose={onClose}
+        onSuccess={onSuccess}
+      />
+    );
   if (isSingleSalePayment(payment))
-    return <EditSalePayment payment={payment} onClose={onClose} onSuccess={onSuccess} />;
-  return <EditCustomerPayment payment={payment} onClose={onClose} onSuccess={onSuccess} />;
+    return (
+      <EditSalePayment
+        payment={payment}
+        onClose={onClose}
+        onSuccess={onSuccess}
+      />
+    );
+  return (
+    <EditCustomerPayment
+      payment={payment}
+      onClose={onClose}
+      onSuccess={onSuccess}
+    />
+  );
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
@@ -744,11 +792,12 @@ export default function PaymentPage() {
     load();
   };
 
-  const editDialogTitle = editTarget?.partyType === "VENDOR"
-    ? "Edit Vendor Payment"
-    : isSingleSalePayment(editTarget)
-      ? "Edit Sale Payment"
-      : "Edit Customer Payment";
+  const editDialogTitle =
+    editTarget?.partyType === "VENDOR"
+      ? "Edit Vendor Payment"
+      : isSingleSalePayment(editTarget)
+        ? "Edit Sale Payment"
+        : "Edit Customer Payment";
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -757,7 +806,7 @@ export default function PaymentPage() {
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 shadow-sm">
-              <DollarSign className="h-5 w-5 text-white" />
+              <SaudiRiyal className="h-5 w-5 text-white" />
             </div>
             <div>
               <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
@@ -800,21 +849,45 @@ export default function PaymentPage() {
         <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
           <StatCard
             label="Vendor Payments"
-            value={`SAR ${totalVendor.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+            value={
+              <span className="inline-flex items-center gap-1">
+                <SaudiRiyal size={20} />
+                {totalVendor.toLocaleString("en-US", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </span>
+            }
             sub={`${vendorPayments.length} transaction${vendorPayments.length !== 1 ? "s" : ""}`}
             icon={TrendingDown}
             trend="down"
           />
           <StatCard
             label="Customer Payments"
-            value={`SAR ${totalCustomer.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+            value={
+              <span className="inline-flex items-center gap-1">
+                <SaudiRiyal size={20} />
+                {totalCustomer.toLocaleString("en-US", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </span>
+            }
             sub={`${customerPayments.length} transaction${customerPayments.length !== 1 ? "s" : ""}`}
             icon={TrendingUp}
             trend="up"
           />
           <StatCard
             label="Net Total"
-            value={`SAR ${(totalVendor + totalCustomer).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+            value={
+              <span className="inline-flex items-center gap-1">
+                <SaudiRiyal size={20} />
+                {(totalVendor + totalCustomer).toLocaleString("en-US", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </span>
+            }
             sub="All transactions combined"
             icon={DollarSign}
           />
@@ -892,22 +965,22 @@ export default function PaymentPage() {
       {/* ✅ RBAC — only mount edit dialog machinery if user can edit */}
       {canEdit && (
         <Dialog
-           open={editTarget !== null}
-           onOpenChange={(o) => !o && setEditTarget(null)}
-         >
-           <DialogContent className="max-w-4xl! max-h-[97vh] overflow-y-auto">
-             <DialogHeader>
+          open={editTarget !== null}
+          onOpenChange={(o) => !o && setEditTarget(null)}
+        >
+          <DialogContent className="max-w-4xl! max-h-[97vh] overflow-y-auto">
+            <DialogHeader>
               <DialogTitle>{editDialogTitle}</DialogTitle>
-             </DialogHeader>
-             {editTarget && (
-               <EditPaymentDialog
-                 payment={editTarget}
-                 onClose={() => setEditTarget(null)}
-                 onSuccess={handleEditSuccess}
-               />
-             )}
-           </DialogContent>
-         </Dialog>
+            </DialogHeader>
+            {editTarget && (
+              <EditPaymentDialog
+                payment={editTarget}
+                onClose={() => setEditTarget(null)}
+                onSuccess={handleEditSuccess}
+              />
+            )}
+          </DialogContent>
+        </Dialog>
       )}
 
       {/* Detail drawer */}
@@ -928,7 +1001,9 @@ export default function PaymentPage() {
       {canDelete && (
         <DeleteConfirmDialog
           open={deleteTarget !== null}
-          partyName={deleteTarget ? partyDisplayName(deleteTarget) : "this payment"}
+          partyName={
+            deleteTarget ? partyDisplayName(deleteTarget) : "this payment"
+          }
           onConfirm={handleDeleteConfirm}
           onCancel={() => setDeleteTarget(null)}
           loading={deleteLoading}

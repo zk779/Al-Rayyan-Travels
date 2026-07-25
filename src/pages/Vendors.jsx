@@ -21,12 +21,14 @@ import {
   TrendingUp,
   CheckCircle,
   TrendingDown,
+  SaudiRiyal,
 } from "lucide-react";
 
 // Components & Utils
-import CustomAlertDialog from "../components/CustomAlertDialog"; 
-import { appToast } from "../../shadcn/components/ui/appToast"; 
+import CustomAlertDialog from "../components/CustomAlertDialog";
+import { appToast } from "../../shadcn/components/ui/appToast";
 import { useAuth } from "../context/AuthContext"; // ✅ ADD THIS
+import { cn } from "../../shadcn/lib/utils";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
@@ -62,7 +64,7 @@ function unpackAddress(address = "") {
     .map((x) => x.trim())
     .filter(Boolean);
   const cpLineIdx = lines.findIndex((l) =>
-    l.toLowerCase().startsWith("contact person:")
+    l.toLowerCase().startsWith("contact person:"),
   );
   const contactPerson =
     cpLineIdx >= 0 ? lines[cpLineIdx].split(":").slice(1).join(":").trim() : "";
@@ -168,7 +170,8 @@ const VendorsPage = () => {
             email: vendor.email,
             location: vendor.location,
             openingBalance: vendor.openingBalance,
-            balanceType: vendor._category === "DEBIT" ? "Debit (DR)" : "Credit (CR)",
+            balanceType:
+              vendor._category === "DEBIT" ? "Debit (DR)" : "Credit (CR)",
             vendorDate: vendor.vendorDate ? dayjs(vendor.vendorDate) : dayjs(),
             status: vendor.status,
           }
@@ -177,7 +180,7 @@ const VendorsPage = () => {
             balanceType: "Credit (CR)",
             vendorDate: dayjs(),
             status: true,
-          }
+          },
     );
   };
 
@@ -235,12 +238,16 @@ const VendorsPage = () => {
       // Bulk delete or single delete?
       if (Array.isArray(deleteTarget)) {
         await Promise.all(
-          deleteTarget.map((id) => apiRequest(`/api/vendors/${id}`, { method: "DELETE" }))
+          deleteTarget.map((id) =>
+            apiRequest(`/api/vendors/${id}`, { method: "DELETE" }),
+          ),
         );
         appToast.success("Selected vendors processed successfully");
         setSelectedRowKeys([]);
       } else {
-        const res = await apiRequest(`/api/vendors/${deleteTarget.id}`, { method: "DELETE" });
+        const res = await apiRequest(`/api/vendors/${deleteTarget.id}`, {
+          method: "DELETE",
+        });
         appToast.success(res.message || "Vendor processed successfully");
         setSelectedRowKeys((prev) => prev.filter((x) => x !== deleteTarget.id));
       }
@@ -256,7 +263,9 @@ const VendorsPage = () => {
   const handleStatusToggle = async (id, checked) => {
     if (!canEdit) return; // ✅ RBAC guard — status toggle is an edit action
 
-    setVendors((prev) => prev.map((v) => (v.id === id ? { ...v, status: checked } : v)));
+    setVendors((prev) =>
+      prev.map((v) => (v.id === id ? { ...v, status: checked } : v)),
+    );
     try {
       await apiRequest(`/api/vendors/${id}`, {
         method: "PUT",
@@ -264,7 +273,9 @@ const VendorsPage = () => {
       });
       appToast.success(`Vendor ${checked ? "Activated" : "Deactivated"}`);
     } catch (e) {
-      setVendors((prev) => prev.map((v) => (v.id === id ? { ...v, status: !checked } : v)));
+      setVendors((prev) =>
+        prev.map((v) => (v.id === id ? { ...v, status: !checked } : v)),
+      );
       appToast.error(e.message || "Failed to update status");
     }
   };
@@ -276,11 +287,15 @@ const VendorsPage = () => {
       render: (_, record) => (
         <div className="flex items-center space-x-3">
           <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center shrink-0">
-            <span className="text-blue-600 font-semibold">{(record.name || "?").charAt(0)}</span>
+            <span className="text-blue-600 font-semibold">
+              {(record.name || "?").charAt(0)}
+            </span>
           </div>
           <div className="min-w-0">
             <div className="font-medium truncate">{record.name}</div>
-            <div className="text-gray-500 text-sm truncate">{record.contactPerson}</div>
+            <div className="text-gray-500 text-sm truncate">
+              {record.contactPerson}
+            </div>
           </div>
         </div>
       ),
@@ -300,7 +315,15 @@ const VendorsPage = () => {
       title: "Opening Balance",
       dataIndex: "openingBalance",
       key: "openingBalance",
-      render: (value) => `${Number(value || 0).toLocaleString()} SAR`,
+      render: (value) => (
+        <span className="inline-flex items-center gap-1">
+          <SaudiRiyal size={13} />
+          {Number(value || 0).toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}
+        </span>
+      ),
     },
     {
       title: "Type",
@@ -311,8 +334,8 @@ const VendorsPage = () => {
           value === "DEBIT"
             ? "Debit (DR)"
             : value === "CREDIT"
-            ? "Credit (CR)"
-            : value || "-";
+              ? "Credit (CR)"
+              : value || "-";
         const colorClass =
           value === "DEBIT" ? "text-red-600" : "text-green-600";
         return <span className={colorClass}>{label}</span>;
@@ -326,8 +349,18 @@ const VendorsPage = () => {
         const n = Number(value || 0);
         const tag = record._category === "DEBIT" ? "DR" : "CR";
         return (
-          <span className={n >= 0 ? "text-green-600" : "text-red-600"}>
-            ${n} {tag}
+          <span
+            className={cn(
+              "inline-flex items-center gap-1",
+              n >= 0 ? "text-green-600" : "text-red-600",
+            )}
+          >
+            <SaudiRiyal size={13} />
+            {n.toLocaleString(undefined, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}{" "}
+            {tag}
           </span>
         );
       },
@@ -474,11 +507,15 @@ const VendorsPage = () => {
         <CustomAlertDialog
           open={!!deleteTarget}
           onOpenChange={() => setDeleteTarget(null)}
-          title={Array.isArray(deleteTarget) ? "Delete Selected Vendors?" : "Remove Vendor?"}
+          title={
+            Array.isArray(deleteTarget)
+              ? "Delete Selected Vendors?"
+              : "Remove Vendor?"
+          }
           description={
-            Array.isArray(deleteTarget) 
-            ? `You are about to delete ${deleteTarget.length} vendors. If they have transaction history, they will be deactivated instead of removed.`
-            : `Are you sure you want to remove "${deleteTarget?.name}"? If they have existing ledger entries, they will be safely deactivated.`
+            Array.isArray(deleteTarget)
+              ? `You are about to delete ${deleteTarget.length} vendors. If they have transaction history, they will be deactivated instead of removed.`
+              : `Are you sure you want to remove "${deleteTarget?.name}"? If they have existing ledger entries, they will be safely deactivated.`
           }
           onConfirm={handleConfirmDelete}
           loading={isDeleting}

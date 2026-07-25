@@ -18,6 +18,7 @@ import {
   FileText,
   CheckCircle2,
   XCircle,
+  SaudiRiyal,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -391,8 +392,8 @@ export default function ExpensePage() {
             <DollarSign className="h-4 w-4 text-slate-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-slate-900">
-              ${totals.total.toFixed(2)}
+            <div className="text-2xl font-bold text-slate-900 inline-flex items-center gap-1">
+              <SaudiRiyal /> {totals.total.toFixed(2)}
             </div>
             <p className="text-xs text-slate-400">
               {expenses.length} total records
@@ -406,8 +407,8 @@ export default function ExpensePage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-emerald-700">
-              ${totals.approved.toFixed(2)}
+            <div className="text-2xl font-bold text-emerald-700 inline-flex items-center gap-1">
+              <SaudiRiyal /> {totals.approved.toFixed(2)}
             </div>
             <p className="text-xs text-emerald-600/70">
               {expenses.filter((e) => e.status === "APPROVED").length} approved
@@ -421,8 +422,8 @@ export default function ExpensePage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-700">
-              ${totals.rejected.toFixed(2)}
+            <div className="text-2xl font-bold text-red-700 inline-flex items-center gap-1">
+              <SaudiRiyal /> {totals.rejected.toFixed(2)}
             </div>
             <p className="text-xs text-red-600/70">
               {expenses.filter((e) => e.status === "REJECTED").length} rejected
@@ -449,7 +450,7 @@ export default function ExpensePage() {
           <div className="space-y-2">
             <Label>Status</Label>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger>
+              <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -465,7 +466,7 @@ export default function ExpensePage() {
           <div className="space-y-2">
             <Label>Category</Label>
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger>
+              <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

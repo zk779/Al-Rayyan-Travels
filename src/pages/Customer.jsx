@@ -408,8 +408,9 @@ const CustomersPage = () => {
       width: "15%",
       render: (_, record) => (
         <div className="text-right">
-          <div className="text-lg font-bold text-indigo-600">
-            ${Number(record.openingBalance || 0).toFixed(2)}
+          <div className="text-lg font-bold text-indigo-600 inline-flex items-center">
+            <SaudiRiyal size={16} />{" "}
+            {Number(record.openingBalance || 0).toFixed(2)}
           </div>
           {record.customerDate && (
             <div className="text-xs text-gray-500 mt-1 flex items-center justify-end gap-1">
@@ -426,8 +427,9 @@ const CustomersPage = () => {
       width: "15%",
       render: (_, record) => (
         <div className="text-right">
-          <div className="text-lg font-bold text-rose-600">
-            ${Number(record.account?.balance || 0).toFixed(2)}
+          <div className="text-lg font-bold text-rose-600 inline-flex items-center">
+            <SaudiRiyal size={16} />{" "}
+            {Number(record.account?.balance || 0).toFixed(2)}
           </div>
           <div className="text-xs text-gray-500 mt-1 flex items-center justify-end gap-1">
             <TrendingUp className="w-3 h-3" />
@@ -773,7 +775,7 @@ const CustomersPage = () => {
                 type="number"
                 placeholder="0.00"
                 size="large"
-                prefix={<DollarSign className="w-4 h-4 text-gray-400" />}
+                prefix={<SaudiRiyal className="w-4 h-4 text-gray-400" />}
               />
             </Form.Item>
             <Form.Item

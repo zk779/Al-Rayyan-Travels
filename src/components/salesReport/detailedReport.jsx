@@ -294,8 +294,8 @@ export default function DetailedReportTab({
                   <TableRow className="bg-gray-50">
                     <TableHead className="font-semibold">Date</TableHead>
                     <TableHead className="font-semibold">Invoice #</TableHead>
-                    <TableHead className="font-semibold">Document #</TableHead>
                     <TableHead className="font-semibold">Airline</TableHead>
+                    <TableHead className="font-semibold">Document #</TableHead>
                     <TableHead className="font-semibold">Vendor</TableHead>
                     <TableHead className="font-semibold">Customer</TableHead>
                     <TableHead className="font-semibold">Agent</TableHead>
@@ -354,9 +354,6 @@ export default function DetailedReportTab({
                             <TableCell className="font-mono text-sm">
                               {highlightText(sale.invoiceNumber, searchQuery)}
                             </TableCell>
-                            <TableCell className="font-mono text-sm">
-                              {highlightText(sale.documentNumber, searchQuery)}
-                            </TableCell>
                             <TableCell>
                               <Badge
                                 variant="secondary"
@@ -364,6 +361,9 @@ export default function DetailedReportTab({
                               >
                                 {sale.airline}
                               </Badge>
+                            </TableCell>
+                            <TableCell className="font-mono text-sm">
+                              {highlightText(sale.documentNumber, searchQuery)}
                             </TableCell>
                             <TableCell
                               className="max-w-[140px] truncate"

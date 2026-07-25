@@ -681,6 +681,54 @@ export default function SalesTabComponent() {
                     />
                   </div>
 
+                  <div className="space-y-1">
+                    <RequiredLabel>Document No</RequiredLabel>
+                    <Input
+                      value={item.documentNo}
+                      onChange={(e) =>
+                        updateSale(
+                          item.id,
+                          "documentNo",
+                          e.target.value.toUpperCase(),
+                        )
+                      }
+                      placeholder="e.g. 123"
+                      className={`h-8 text-sm ${!item.documentNo ? "border-red-300 focus-visible:ring-red-400" : ""}`}
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium text-slate-600">
+                      PNR
+                    </Label>
+                    <Input
+                      value={item.pnr}
+                      onChange={(e) =>
+                        updateSale(item.id, "pnr", e.target.value.toUpperCase())
+                      }
+                      placeholder="PNR Code"
+                      className="h-8 text-sm"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium text-slate-600">
+                      Passenger Name
+                    </Label>
+                    <Input
+                      value={item.paxName || ""}
+                      onChange={(e) =>
+                        updateSale(
+                          item.id,
+                          "paxName",
+                          e.target.value.toUpperCase(),
+                        )
+                      }
+                      placeholder="John Doe"
+                      className="h-8 text-sm"
+                    />
+                  </div>
+
                   {/* ── CHANGE 3: Vendor — required ── */}
                   <div className="space-y-1">
                     <RequiredLabel>Vendor</RequiredLabel>
@@ -704,47 +752,6 @@ export default function SalesTabComponent() {
                             : b.borderColor,
                         }),
                       }}
-                    />
-                  </div>
-
-                  {/* ── CHANGE 3: Document No — required ── */}
-                  <div className="space-y-1">
-                    <RequiredLabel>Document No</RequiredLabel>
-                    <Input
-                      value={item.documentNo}
-                      onChange={(e) =>
-                        updateSale(item.id, "documentNo", e.target.value)
-                      }
-                      placeholder="e.g. 123"
-                      className={`h-8 text-sm ${!item.documentNo ? "border-red-300 focus-visible:ring-red-400" : ""}`}
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-xs font-medium text-slate-600">
-                      Passenger Name
-                    </Label>
-                    <Input
-                      value={item.paxName || ""}
-                      onChange={(e) =>
-                        updateSale(item.id, "paxName", e.target.value)
-                      }
-                      placeholder="John Doe"
-                      className="h-8 text-sm"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-xs font-medium text-slate-600">
-                      PNR
-                    </Label>
-                    <Input
-                      value={item.pnr}
-                      onChange={(e) =>
-                        updateSale(item.id, "pnr", e.target.value)
-                      }
-                      placeholder="PNR Code"
-                      className="h-8 text-sm"
                     />
                   </div>
 
@@ -899,7 +906,7 @@ export default function SalesTabComponent() {
                       VAT 15% <SaudiRiyal size={15} />
                     </Label>
                     <div className="flex items-center gap-1 px-2 h-8 bg-blue-50 border border-blue-200 rounded text-xs font-semibold text-blue-700">
-                      <Calculator className="h-3 w-3" />$
+                      <Calculator className="h-3 w-3" />
                       {item.vatAmount || "0.00"}
                     </div>
                   </div>
@@ -909,7 +916,7 @@ export default function SalesTabComponent() {
                       Profit <SaudiRiyal size={15} />
                     </Label>
                     <div className="flex items-center gap-1 px-2 h-8 bg-green-50 border border-green-200 rounded text-xs font-semibold text-green-700">
-                      <Calculator className="h-3 w-3" />${profit}
+                      <Calculator className="h-3 w-3" />{profit}
                     </div>
                   </div>
 
