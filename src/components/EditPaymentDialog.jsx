@@ -260,6 +260,7 @@ function SlotFields({
   setOrderAmount,
   customerOptions,
   bankOptions,
+  sellPrice,
 }) {
   const slotColor =
     {
@@ -279,19 +280,28 @@ function SlotFields({
     return calculateTabbyNetAmount(orderAmount);
   }, [isTabbyOrTamara, orderAmount]);
 
+  // Restores the Order Amount when re-opening a saved Tabby/Tamara payment.
+  // Two cases:
+  //  1. A net amount was already recorded (amount > 0) — reverse the fee
+  //     math to recover the original order amount.
+  //  2. Nothing has been recorded yet (e.g. an unpaid/DUE credit sale, where
+  //     paidAmount is 0 and the backend never persisted paymentMeta.orderAmount)
+  //     — fall back to the sale's sell price, since that's what Tabby/Tamara
+  //     charged the customer before deducting their fee.
   const seededOrderAmount = useRef(false);
   useEffect(() => {
-    if (
-      isTabbyOrTamara &&
-      !orderAmount &&
-      Number(amount) > 0 &&
-      !seededOrderAmount.current
-    ) {
-      seededOrderAmount.current = true;
-      setOrderAmount(String(reverseTabbyOrderAmount(amount)));
+    if (isTabbyOrTamara && !orderAmount && !seededOrderAmount.current) {
+      const paidNum = Number(amount);
+      if (paidNum > 0) {
+        seededOrderAmount.current = true;
+        setOrderAmount(String(reverseTabbyOrderAmount(amount)));
+      } else if (Number(sellPrice) > 0) {
+        seededOrderAmount.current = true;
+        setOrderAmount(String(sellPrice));
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isTabbyOrTamara, orderAmount, amount]);
+  }, [isTabbyOrTamara, orderAmount, amount, sellPrice]);
 
   useEffect(() => {
     if (isTabbyOrTamara && tabbyCalc) {
@@ -645,6 +655,7 @@ export default function EditPaymentDialog({
               customerOptions={customerOptions}
               orderAmount={s.orderAmount}
               setOrderAmount={(v) => patch({ orderAmount: v })}
+              sellPrice={sell}
             />
           )}
 

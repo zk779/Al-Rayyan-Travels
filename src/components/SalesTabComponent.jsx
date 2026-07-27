@@ -142,6 +142,8 @@ export default function SalesTabComponent() {
   const [customers, setCustomers] = useState([]);
   const [banks, setBanks] = useState([]);
   const lastToastValue = useRef(null);
+  const docNoCheckTimers = useRef({});
+  const lastCheckedDocNo = useRef({});
 
   const token = localStorage.getItem("token");
   // ── CHANGE 1: read role once ──────────────────────────────
@@ -210,6 +212,55 @@ export default function SalesTabComponent() {
     value: b.id,
     label: `${b.bankName} — ${b.accountNumber}`,
   }));
+
+  /* ── Debounced duplicate Document No check ── */
+  useEffect(() => {
+    const timers = docNoCheckTimers.current;
+    const currentIds = new Set(uiSales.map((s) => s.id));
+
+    // Clean up rows that no longer exist
+    Object.keys(timers).forEach((id) => {
+      if (!currentIds.has(id)) {
+        clearTimeout(timers[id]);
+        delete timers[id];
+        delete lastCheckedDocNo.current[id];
+      }
+    });
+
+    uiSales.forEach((item) => {
+      const id = item.id;
+      const docNo = (item.documentNo || "").trim();
+
+      // Only (re)schedule a check if this row's document number actually changed
+      if (lastCheckedDocNo.current[id] === docNo) return;
+      lastCheckedDocNo.current[id] = docNo;
+
+      if (timers[id]) clearTimeout(timers[id]);
+      if (!docNo) return;
+
+      timers[id] = setTimeout(() => {
+        fetch(
+          `${API_BASE}/api/sales/check-document?documentNo=${encodeURIComponent(docNo)}`,
+          { headers },
+        )
+          .then((r) => r.json())
+          .then((data) => {
+            if (data.success && data.exists) {
+              appToast.warning(
+                "Duplicate Document No",
+                `Document No "${docNo}" already exists.`,
+              );
+            }
+          })
+          .catch((err) => console.error("Duplicate check failed:", err));
+      }, 500);
+    });
+  }, [uiSales, headers]);
+
+  useEffect(
+    () => () => Object.values(docNoCheckTimers.current).forEach(clearTimeout),
+    [],
+  );
 
   /* ── Destination search ── */
   const loadDestinationOptions = useCallback(
@@ -712,9 +763,9 @@ export default function SalesTabComponent() {
                   </div>
 
                   <div className="space-y-1">
-                    <Label className="text-xs font-medium text-slate-600">
+                    <RequiredLabel className="text-xs font-medium text-slate-600">
                       Passenger Name
-                    </Label>
+                    </RequiredLabel>
                     <Input
                       value={item.paxName || ""}
                       onChange={(e) =>
@@ -725,7 +776,7 @@ export default function SalesTabComponent() {
                         )
                       }
                       placeholder="John Doe"
-                      className="h-8 text-sm"
+                      className={`h-8 text-sm ${!item.documentNo ? "border-red-300 focus-visible:ring-red-400" : ""}`}
                     />
                   </div>
 

@@ -113,7 +113,6 @@ export default function EditSalesTab({ saleId }) {
 
   const user = localStorage.getItem("user");
 
-  console.log("EditSalesTab user:", user);
   const token = localStorage.getItem("token");
   const headers = useMemo(
     () => ({
