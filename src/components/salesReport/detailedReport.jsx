@@ -59,6 +59,7 @@ import SalePayment from "../PaymentComponents/SalePayment";
 import { useNavigate } from "react-router-dom";
 import { appToast } from "../../../shadcn/components/ui/appToast";
 import { useAuth } from "../../context/AuthContext"; // ✅ ADD THIS — adjust relative path if needed
+import CopyableCell from "../copyAble"
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 const COLUMN_COUNT = 14;
@@ -363,7 +364,12 @@ export default function DetailedReportTab({
                               </Badge>
                             </TableCell>
                             <TableCell className="font-mono text-sm">
-                              {highlightText(sale.documentNumber, searchQuery)}
+                              <CopyableCell value={sale.documentNumber}>
+                                {highlightText(
+                                  sale.documentNumber,
+                                  searchQuery,
+                                )}
+                              </CopyableCell>
                             </TableCell>
                             <TableCell
                               className="max-w-[140px] truncate"
@@ -481,7 +487,9 @@ export default function DetailedReportTab({
                                         <>
                                           <DropdownMenuSeparator />
                                           <DropdownMenuItem
-                                            onClick={() => setDeleteTarget(sale)}
+                                            onClick={() =>
+                                              setDeleteTarget(sale)
+                                            }
                                             className="text-red-600 focus:text-red-600 focus:bg-red-50"
                                           >
                                             <Trash2 className="mr-2 h-4 w-4" />
