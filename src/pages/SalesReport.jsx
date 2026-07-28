@@ -83,7 +83,7 @@ export default function SalesReport() {
     canViewSales ? "detailed" : canViewRefunds ? "refunds" : null
   );
   const [dateRange, setDateRange] = useState({
-    from: subDays(new Date(), 0),
+    from: subDays(new Date(), 1),
     to: new Date(),
   });
   const [selectedAgent, setSelectedAgent] = useState("all");
@@ -100,7 +100,7 @@ export default function SalesReport() {
   const [salesSummary, setSalesSummary] = useState(DEFAULT_SUMMARY);
   const [salesPagination, setSalesPagination] = useState(DEFAULT_PAGINATION);
   const [salesPage, setSalesPage] = useState(1);
-  const [salesPageSize, setSalesPageSize] = useState(20);
+  const [salesPageSize, setSalesPageSize] = useState(10);
   const [loading, setLoading] = useState(false);
 
   const [refundData, setRefundData] = useState([]);
