@@ -31,12 +31,12 @@ import {
   TabsList,
   TabsTrigger,
 } from "../../shadcn/components/ui/tabs";
-import { Calendar } from "../../shadcn/components/ui/calendar";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "../../shadcn/components/ui/popover";
+import DragRangeCalendar from "../components/DragCalendar";
 
 import DetailedReportTab from "../components/salesReport/detailedReport";
 import RefundsTab from "../components/salesReport/refundReport";
@@ -418,9 +418,10 @@ export default function SalesReport() {
                       </Button>
                     ))}
                   </div>
-                  <Calendar
-                    initialFocus
-                    mode="range"
+                  {/* Drag-to-select range calendar (mousedown a start date,
+                      drag to an end date, release to commit) replaces the
+                      old click-click react-day-picker Calendar. */}
+                  <DragRangeCalendar
                     defaultMonth={dateRange?.from}
                     selected={dateRange}
                     onSelect={setDateRange}
