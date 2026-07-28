@@ -159,6 +159,10 @@ export default function SalesReport() {
       if (dateRange?.to) params.set(toKey, format(dateRange.to, "yyyy-MM-dd"));
       if (selectedAgent !== "all") params.set(agentKey, selectedAgent);
       params.set(orderKey, sortOrder);
+      // Tells the API which local day dateFrom/dateTo actually mean — the
+      // app runs across multiple regions, so this must be the viewer's own
+      // timezone rather than a fixed one baked into the backend.
+      params.set("tz", Intl.DateTimeFormat().resolvedOptions().timeZone);
       return params.toString();
     },
     [debouncedSearch, dateRange, selectedAgent, sortOrder],
