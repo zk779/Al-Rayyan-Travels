@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   addMonths,
   subMonths,
@@ -22,70 +22,74 @@ function buildMonthGrid(monthDate) {
 }
 
 /**
- * Drop-in replacement for shadcn/react-day-picker's <Calendar mode="range" />
- * that supports selecting a range by dragging from one date to another
- * (mousedown -> mouseenter across days -> mouseup), instead of requiring
- * two separate clicks.
+ * Drop-in replacement for shadcn/react-day-picker's <Calendar mode="range" />.
  *
- * Props mirror the ones already used in SalesReport.jsx:
+ * Selection model (click, not drag):
+ *  - 1st click on a day  -> that day becomes the anchor ("picking the end date" mode).
+ *    Nothing is committed to the parent yet.
+ *  - While an anchor is set, hovering over other days shows a live preview
+ *    line from the anchor to the hovered day.
+ *  - 2nd click on a day  -> commits { from, to } (sorted low->high) via onSelect,
+ *    and clears the anchor so the calendar is ready for a brand new selection.
+ *
+ * This explicit anchor/no-anchor state is what fixes the old bug where
+ * clicking a date while a full range was already selected would just move
+ * the *end* date instead of starting a new range — every click now checks
+ * "do we have an anchor right now?" rather than assuming the click is
+ * always completing an existing range.
+ *
+ * Props mirror what SalesReport.jsx already passes:
  *   selected: { from: Date, to: Date }
  *   onSelect: (range) => void
- *   defaultMonth: Date        // which month to open on
- *   numberOfMonths: number    // how many months to show side by side
+ *   defaultMonth: Date
+ *   numberOfMonths: number
  */
-export default function DragRangeCalendar({
+export default function RangeCalendar({
   selected,
   onSelect,
   defaultMonth,
   numberOfMonths = 2,
 }) {
   const [baseMonth, setBaseMonth] = useState(defaultMonth || new Date());
-  const [dragging, setDragging] = useState(false);
-  const [anchor, setAnchor] = useState(null);
-  // Local "in progress" range shown while dragging, before it's committed
-  // via onSelect on mouseup.
-  const [previewRange, setPreviewRange] = useState(selected || null);
+  const [anchor, setAnchor] = useState(null); // day clicked first, awaiting the 2nd click
+  const [hoverDay, setHoverDay] = useState(null);
 
-  // Stay in sync with external changes (e.g. a preset button) as long as
-  // we're not in the middle of a drag.
+  // If the selection changes from outside (e.g. a preset button, or the
+  // popover was reopened), cancel any selection currently in progress.
   useEffect(() => {
-    if (!dragging) setPreviewRange(selected || null);
-  }, [selected, dragging]);
-
-  const endDragging = useCallback(() => {
-    setDragging((wasDragging) => {
-      if (wasDragging) {
-        setPreviewRange((range) => {
-          if (range?.from) onSelect(range);
-          return range;
-        });
-      }
-      return false;
-    });
     setAnchor(null);
-  }, [onSelect]);
+    setHoverDay(null);
+  }, [selected?.from, selected?.to]);
 
-  // Commit the drag even if the mouse is released outside a day cell
-  // (or outside the calendar entirely).
-  useEffect(() => {
-    if (!dragging) return undefined;
-    window.addEventListener("mouseup", endDragging);
-    return () => window.removeEventListener("mouseup", endDragging);
-  }, [dragging, endDragging]);
-
-  const handleDayMouseDown = (day) => (e) => {
-    e.preventDefault();
-    setDragging(true);
-    setAnchor(day);
-    setPreviewRange({ from: day, to: day });
+  const handleDayClick = (day) => () => {
+    if (!anchor) {
+      // First click: this day is the new start. Don't touch the parent's
+      // state yet — wait for the 2nd click so a mid-range single click
+      // can't be mistaken for a committed 1-day range.
+      setAnchor(day);
+      setHoverDay(day);
+      return;
+    }
+    // Second click: commit the range, sorted so `from` is always earliest.
+    const from = isBefore(day, anchor) ? day : anchor;
+    const to = isBefore(day, anchor) ? anchor : day;
+    onSelect({ from, to });
+    setAnchor(null);
+    setHoverDay(null);
   };
 
   const handleDayMouseEnter = (day) => () => {
-    if (!dragging || !anchor) return;
-    setPreviewRange(
-      isBefore(day, anchor) ? { from: day, to: anchor } : { from: anchor, to: day },
-    );
+    if (anchor) setHoverDay(day);
   };
+
+  // What to actually draw: the live in-progress preview while picking the
+  // 2nd date, otherwise whatever the parent currently has selected.
+  const displayRange = anchor
+    ? {
+        from: isBefore(hoverDay || anchor, anchor) ? hoverDay || anchor : anchor,
+        to: isBefore(hoverDay || anchor, anchor) ? anchor : hoverDay || anchor,
+      }
+    : selected;
 
   const months = useMemo(
     () => Array.from({ length: numberOfMonths }, (_, i) => addMonths(baseMonth, i)),
@@ -118,17 +122,24 @@ export default function DragRangeCalendar({
           <MonthGrid
             key={monthDate.toISOString()}
             monthDate={monthDate}
-            range={previewRange}
-            onDayMouseDown={handleDayMouseDown}
+            range={displayRange}
+            anchor={anchor}
+            onDayClick={handleDayClick}
             onDayMouseEnter={handleDayMouseEnter}
           />
         ))}
       </div>
+
+      {anchor && (
+        <div className="px-1 pt-2 text-xs text-muted-foreground">
+          Pick the end date — start is {format(anchor, "LLL d, y")}
+        </div>
+      )}
     </div>
   );
 }
 
-function MonthGrid({ monthDate, range, onDayMouseDown, onDayMouseEnter }) {
+function MonthGrid({ monthDate, range, anchor, onDayClick, onDayMouseEnter }) {
   const days = useMemo(() => buildMonthGrid(monthDate), [monthDate]);
   const today = new Date();
 
@@ -147,18 +158,15 @@ function MonthGrid({ monthDate, range, onDayMouseDown, onDayMouseEnter }) {
       <div className="grid grid-cols-7 gap-y-1">
         {days.map((day) => {
           const inMonth = isSameMonth(day, monthDate);
-          const from = range?.from && range?.to
-            ? (isBefore(range.from, range.to) ? range.from : range.to)
-            : range?.from;
-          const to = range?.from && range?.to
-            ? (isBefore(range.from, range.to) ? range.to : range.from)
-            : range?.to;
+          const from = range?.from;
+          const to = range?.to;
 
           const isStart = from && isSameDay(day, from);
           const isEnd = to && isSameDay(day, to);
           const isRangeSpan = from && to && !isSameDay(from, to);
           const inRange = isRangeSpan && isWithinInterval(day, { start: from, end: to });
           const isToday = isSameDay(day, today);
+          const isAnchor = anchor && isSameDay(day, anchor);
 
           return (
             <div
@@ -172,7 +180,7 @@ function MonthGrid({ monthDate, range, onDayMouseDown, onDayMouseEnter }) {
             >
               <button
                 type="button"
-                onMouseDown={onDayMouseDown(day)}
+                onClick={onDayClick(day)}
                 onMouseEnter={onDayMouseEnter(day)}
                 className={[
                   "h-9 w-9 text-sm rounded-md flex items-center justify-center transition-colors",
@@ -180,6 +188,7 @@ function MonthGrid({ monthDate, range, onDayMouseDown, onDayMouseEnter }) {
                   isStart || isEnd
                     ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
                     : "hover:bg-accent hover:text-accent-foreground",
+                  isAnchor ? "ring-2 ring-primary ring-offset-1" : "",
                   isToday && !isStart && !isEnd ? "border border-primary" : "",
                 ].join(" ")}
               >

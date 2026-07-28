@@ -36,7 +36,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "../../shadcn/components/ui/popover";
-import DragRangeCalendar from "../components/DragCalendar";
+import RangeCalendar from "../components/DragCalendar";
 
 import DetailedReportTab from "../components/salesReport/detailedReport";
 import RefundsTab from "../components/salesReport/refundReport";
@@ -418,10 +418,13 @@ export default function SalesReport() {
                       </Button>
                     ))}
                   </div>
-                  {/* Drag-to-select range calendar (mousedown a start date,
-                      drag to an end date, release to commit) replaces the
-                      old click-click react-day-picker Calendar. */}
-                  <DragRangeCalendar
+                  {/* Click-to-select range calendar: 1st click sets the
+                      start (shown ringed), hovering previews the range
+                      line up to the cursor, 2nd click commits the range.
+                      Replaces the old click-click react-day-picker Calendar
+                      that had a bug where clicking while a range was
+                      already selected would just move the end date. */}
+                  <RangeCalendar
                     defaultMonth={dateRange?.from}
                     selected={dateRange}
                     onSelect={setDateRange}
