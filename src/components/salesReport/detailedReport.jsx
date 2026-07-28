@@ -340,7 +340,7 @@ export default function DetailedReportTab({
               </span>
             )}
           </CardDescription>
-          <div className="flex flex-wrap gap-3 pt-2">
+          {/* <div className="flex flex-wrap gap-3 pt-2">
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-sm font-medium">
               <Receipt className="h-4 w-4" /> {total ?? rows.length} Transactions
             </div>
@@ -350,7 +350,7 @@ export default function DetailedReportTab({
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-50 text-green-700 text-sm font-medium">
               <TrendingUp className="h-4 w-4" /> {Number(totalProfit || 0).toFixed(2)} Total Profit
             </div>
-          </div>
+          </div> */}
         </CardHeader>
         <CardContent>
           {rows.length === 0 ? (
