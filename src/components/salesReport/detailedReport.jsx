@@ -14,8 +14,12 @@ import {
   History as HistoryIcon,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   Undo2,
   Wallet,
+  Receipt,
+  TrendingUp,
 } from "lucide-react";
 
 import {
@@ -49,6 +53,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../../shadcn/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../../shadcn/components/ui/select";
 
 // Import your reusable component
 import CustomAlertDialog from "../CustomAlertDialog";
@@ -63,12 +74,62 @@ import CopyableCell from "../copyAble"
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 const COLUMN_COUNT = 14;
+const PAGE_SIZE_OPTIONS = [10, 20, 30, 50, 100];
 const SEARCH_BY_LABELS = {
   invoiceNumber: "invoice number",
   documentNumber: "document number",
   remarks: "remarks",
   date: "date",
 };
+
+function PaginationBar({ page, pageSize, total, totalPages, onPageChange, onPageSizeChange }) {
+  const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, total);
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t mt-4">
+      <div className="flex items-center gap-2 text-sm text-gray-600">
+        <span>Rows per page</span>
+        <Select value={String(pageSize)} onValueChange={(v) => onPageSizeChange(Number(v))}>
+          <SelectTrigger className="w-[80px] h-8">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PAGE_SIZE_OPTIONS.map((n) => (
+              <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="text-sm text-gray-600">
+        {total === 0 ? "No results" : `Showing ${from}-${to} of ${total}`}
+      </div>
+
+      <div className="flex items-center gap-1">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(page - 1)}
+          disabled={page <= 1}
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <span className="text-sm px-2 whitespace-nowrap">
+          Page {page} of {totalPages || 1}
+        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(page + 1)}
+          disabled={page >= totalPages}
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 export default function DetailedReportTab({
   salesData,
@@ -77,7 +138,12 @@ export default function DetailedReportTab({
   loading,
   totalSales,
   totalProfit,
-  resolveSaleDetails,
+  page,
+  pageSize,
+  total,
+  totalPages,
+  onPageChange,
+  onPageSizeChange,
   onEdit,
   onDelete,
 }) {
@@ -267,13 +333,24 @@ export default function DetailedReportTab({
             Complete list of all sales transactions
             {searchQuery && (
               <span className="ml-2 text-blue-600">
-                • Showing {rows.length} results for "{searchQuery}"
+                • Showing {total ?? rows.length} results for "{searchQuery}"
                 {searchBy && searchBy !== "all" && SEARCH_BY_LABELS[searchBy]
                   ? ` (highlighting matches in ${SEARCH_BY_LABELS[searchBy]})`
                   : ""}
               </span>
             )}
           </CardDescription>
+          <div className="flex flex-wrap gap-3 pt-2">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-sm font-medium">
+              <Receipt className="h-4 w-4" /> {total ?? rows.length} Transactions
+            </div>
+            <div className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-purple-50 text-purple-700 text-sm font-medium">
+              <SaudiRiyal size={14} /> {Number(totalSales || 0).toFixed(2)} Total Sell
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-50 text-green-700 text-sm font-medium">
+              <TrendingUp className="h-4 w-4" /> {Number(totalProfit || 0).toFixed(2)} Total Profit
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {rows.length === 0 ? (
@@ -319,15 +396,23 @@ export default function DetailedReportTab({
                   {rows.map((sale) => {
                     const isRefunded =
                       sale.status?.toUpperCase() === "REFUNDED";
-                    const hasRefundOnOriginal = !isRefunded && !!sale.Refund;
+                    const hasRefundOnOriginal = !isRefunded && !!sale.refund;
                     const canRecordPayment =
                       canRecordPaymentPerm && // ✅ RBAC
                       !isRefunded &&
                       ["DUE", "PARTIAL"].includes(
                         sale.paymentStatus?.toUpperCase(),
                       );
-                    const { invoice, sale: fullSale } =
-                      resolveSaleDetails?.(sale) ?? {};
+                    // The row already carries every field the expanded
+                    // detail view needs — just group the invoice-ish bits.
+                    const invoice = {
+                      id: sale.invoiceId,
+                      invoiceNo: sale.invoiceNo,
+                      saleDate: sale.saleDate,
+                      createdAt: sale.createdAt,
+                      createdByName: sale.createdByName,
+                    };
+                    const fullSale = sale;
 
                     return (
                       <ExpandableSaleRow
@@ -353,46 +438,46 @@ export default function DetailedReportTab({
                                 : "N/A"}
                             </TableCell>
                             <TableCell className="font-mono text-sm">
-                              {highlightText(sale.invoiceNumber, searchQuery)}
+                              {highlightText(sale.invoiceNo, searchQuery)}
                             </TableCell>
                             <TableCell>
                               <Badge
                                 variant="secondary"
                                 className="bg-blue-50 text-blue-700"
                               >
-                                {sale.airline}
+                                {sale.airlineCode}
                               </Badge>
                             </TableCell>
                             <TableCell className="font-mono text-sm">
-                              <CopyableCell value={sale.documentNumber}>
+                              <CopyableCell value={sale.documentNo}>
                                 {highlightText(
-                                  sale.documentNumber,
+                                  sale.documentNo,
                                   searchQuery,
                                 )}
                               </CopyableCell>
                             </TableCell>
                             <TableCell
                               className="max-w-[140px] truncate"
-                              title={sale.vendor}
+                              title={sale.vendorName}
                             >
-                              {sale.vendor || "-"}
+                              {sale.vendorName || "-"}
                             </TableCell>
                             <TableCell
-                              className={`max-w-[140px] truncate ${sale.customer ? "text-blue-600" : "text-emerald-600"}`}
-                              title={sale.customer}
+                              className={`max-w-[140px] truncate ${sale.customerName ? "text-blue-600" : "text-emerald-600"}`}
+                              title={sale.customerName}
                             >
-                              {sale.customer
-                                ? sale.customer
+                              {sale.customerName
+                                ? sale.customerName
                                 : "Walkin Customer"}
                             </TableCell>
                             <TableCell
                               className="max-w-[120px] truncate"
-                              title={sale.agent}
+                              title={sale.createdByName}
                             >
-                              {sale.agent}
+                              {sale.createdByName}
                             </TableCell>
                             <TableCell>
-                              {getPaymentMethodBadge(sale.paymentMethod)}
+                              {getPaymentMethodBadge(sale.paymentType)}
                             </TableCell>
                             <TableCell>
                               {getPaymentStatusBadge(sale.paymentStatus)}
@@ -403,7 +488,7 @@ export default function DetailedReportTab({
                               <div className="flex items-center justify-end gap-1">
                                 <SaudiRiyal size={15} />
                                 {isRefunded
-                                  ? `-${sale.Refund?.netRefundToCustomer?.toFixed(2) || "0.00"}`
+                                  ? `-${sale.refund?.netRefundToCustomer?.toFixed(2) || "0.00"}`
                                   : sale.sellPrice?.toFixed(2) || "0.00"}
                               </div>
                             </TableCell>
@@ -527,6 +612,17 @@ export default function DetailedReportTab({
               </Table>
             </div>
           )}
+
+          {typeof total === "number" && (
+            <PaginationBar
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              totalPages={totalPages}
+              onPageChange={onPageChange}
+              onPageSizeChange={onPageSizeChange}
+            />
+          )}
         </CardContent>
       </Card>
 
@@ -538,7 +634,7 @@ export default function DetailedReportTab({
           title="Delete Sale & Reverse Ledger?"
           description={`Are you sure you want to delete this specific sale? This will:
 
-        - Permanently remove document ${deleteTarget?.documentNumber}.
+        - Permanently remove document ${deleteTarget?.documentNo}.
         - Reverse ${deleteTarget?.sellPrice} SAR from the customer's balance.
         - Reverse ${deleteTarget?.netPrice} SAR from the vendor's ledger.
         - Automatically update the parent invoice totals.`}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { CalendarIcon, Download, Filter, Search } from "lucide-react";
 import {
   format,
@@ -40,7 +40,7 @@ import {
 
 import DetailedReportTab from "../components/salesReport/detailedReport";
 import RefundsTab from "../components/salesReport/refundReport";
-import { useAuth } from "../context/AuthContext"; // ✅ ADD THIS
+import { useAuth } from "../context/AuthContext";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
@@ -57,6 +57,9 @@ const DATE_PRESETS = [
   ["thisYear", "This year"],
 ];
 
+const DEFAULT_PAGINATION = { total: 0, pages: 1 };
+const DEFAULT_SUMMARY = { totalSell: 0, totalProfit: 0 };
+
 // Delays updating the returned value until `value` stops changing for
 // `delay`ms — keeps the search input snappy while avoiding a network
 // request on every keystroke.
@@ -70,12 +73,12 @@ function useDebouncedValue(value, delay = 400) {
 }
 
 export default function SalesReport() {
-  // ✅ RBAC — permission flags for the two tabs
+  // RBAC — permission flags for the two tabs
   const { hasPermission } = useAuth();
   const canViewSales = hasPermission("SALE_READ");
   const canViewRefunds = hasPermission("REFUND_READ");
 
-  // ✅ Default to whichever tab the user actually has access to
+  // Default to whichever tab the user actually has access to
   const [activeTab, setActiveTab] = useState(
     canViewSales ? "detailed" : canViewRefunds ? "refunds" : null
   );
@@ -91,22 +94,17 @@ export default function SalesReport() {
   // the API already searches invoiceNo/documentNo/remarks together
   const debouncedSearch = useDebouncedValue(searchQuery);
 
-  // Users, for the Agent filter. NOTE: adjust the endpoint below if your
-  // actual users list route differs.
   const [users, setUsers] = useState([]);
 
-  const [invoices, setInvoices] = useState([]);
   const [salesData, setSalesData] = useState([]);
+  const [salesSummary, setSalesSummary] = useState(DEFAULT_SUMMARY);
+  const [salesPagination, setSalesPagination] = useState(DEFAULT_PAGINATION);
+  const [salesPage, setSalesPage] = useState(1);
+  const [salesPageSize, setSalesPageSize] = useState(20);
   const [loading, setLoading] = useState(false);
 
   const [refundData, setRefundData] = useState([]);
   const [refundLoading, setRefundLoading] = useState(false);
-
-  const invoiceById = useMemo(() => {
-    const map = new Map();
-    for (const inv of invoices) map.set(String(inv.id), inv);
-    return map;
-  }, [invoices]);
 
   const handleDatePreset = (preset) => {
     const now = new Date();
@@ -168,7 +166,13 @@ export default function SalesReport() {
     [debouncedSearch, dateRange, selectedAgent, sortOrder],
   );
 
-  /* ── Fetch sales — filtered server-side ── */
+  // Any filter change invalidates the current page — jump back to page 1
+  // rather than risk landing on a page that no longer exists.
+  useEffect(() => {
+    setSalesPage(1);
+  }, [debouncedSearch, dateRange, selectedAgent, sortOrder, salesPageSize]);
+
+  /* ── Fetch sales — filtered & paginated server-side ── */
   const fetchSales = useCallback(async () => {
     setLoading(true);
     try {
@@ -178,48 +182,30 @@ export default function SalesReport() {
         agentKey: "createdById",
         orderKey: "order",
       });
-      const res = await fetch(`${API_BASE}/api/sales?${qs}`, {
-        headers: authHeaders(),
-      });
+      const res = await fetch(
+        `${API_BASE}/api/sales?${qs}&page=${salesPage}&limit=${salesPageSize}`,
+        { headers: authHeaders() },
+      );
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.error || "Failed to fetch sales");
 
-      const apiInvoices = json.data || [];
-      setInvoices(apiInvoices);
-
-      const flattened = apiInvoices.flatMap((inv) => {
-        const invDate = inv.saleDate ? new Date(inv.saleDate) : null;
-        return (inv.sales || []).map((sale) => ({
-          id: String(sale.id),
-          invoiceId: String(inv.id),
-          date: invDate,
-          invoiceNumber: inv.invoiceNo,
-          documentNumber: sale.documentNo || sale.id,
-          airline: sale.airlineCode || "-",
-          vendor: sale.vendorName || "-",
-          customer: sale.customerName || "",
-          customerId: sale.customerId || null,
-          paymentMethod: sale.paymentType || "-",
-          paymentStatus: sale.paymentStatus || "-",
-          status: sale.status || "-",
-          netPrice: Number(sale.netPrice || 0),
-          sellPrice: Number(sale.sellPrice || 0),
-          profit: Number(sale.profit || 0),
-          agent: inv.createdByName,
-          remarks: sale.remarks || "",
-          isRefund: !!sale.isRefund,
-          Refund: sale.refund || null,
-        }));
-      });
-
-      setSalesData(flattened);
+      // Rows already arrive in the shape the table & the expanded detail
+      // view both need — just tag on a real Date for display/sorting.
+      setSalesData(
+        (json.data || []).map((s) => ({
+          ...s,
+          date: s.saleDate ? new Date(s.saleDate) : null,
+        })),
+      );
+      setSalesPagination(json.pagination || DEFAULT_PAGINATION);
+      setSalesSummary(json.summary || DEFAULT_SUMMARY);
     } catch (err) {
       console.error("Failed to fetch sales", err);
       alert(err.message);
     } finally {
       setLoading(false);
     }
-  }, [buildParams]);
+  }, [buildParams, salesPage, salesPageSize]);
 
   /* ── Fetch refunds — filtered server-side ── */
   const fetchRefunds = useCallback(async () => {
@@ -271,35 +257,15 @@ export default function SalesReport() {
   /* ── Lazy, tab-aware fetching ──────────────────────────────────────
      Sales load by default (the initial active tab). Refunds only fetch
      once the Refunds tab is actually opened, and both re-fetch whenever
-     a filter changes while their tab is the one currently in view. */
+     a filter (or the sales page/page size) changes while their tab is
+     the one currently in view. */
   useEffect(() => {
-    if (activeTab === "detailed" && canViewSales) fetchSales(); // ✅ RBAC guard
+    if (activeTab === "detailed" && canViewSales) fetchSales(); // RBAC guard
   }, [activeTab, fetchSales, canViewSales]);
 
   useEffect(() => {
-    if (activeTab === "refunds" && canViewRefunds) fetchRefunds(); // ✅ RBAC guard
+    if (activeTab === "refunds" && canViewRefunds) fetchRefunds(); // RBAC guard
   }, [activeTab, fetchRefunds, canViewRefunds]);
-
-  const totalSales = useMemo(
-    () => salesData.reduce((sum, s) => sum + (Number(s.sellPrice) || 0), 0),
-    [salesData],
-  );
-  const totalProfit = useMemo(
-    () => salesData.reduce((sum, s) => sum + (Number(s.profit) || 0), 0),
-    [salesData],
-  );
-
-  const resolveSaleDetails = useCallback(
-    (row) => {
-      const invoice = invoiceById.get(String(row.invoiceId));
-      if (!invoice) return { invoice: null, sale: null };
-      const sale = (invoice.sales || []).find(
-        (s) => String(s.id) === String(row.id),
-      );
-      return { invoice, sale: sale || null };
-    },
-    [invoiceById],
-  );
 
   const clearFilters = () => {
     setSearchQuery("");
@@ -312,9 +278,32 @@ export default function SalesReport() {
   const hasActiveFilters =
     searchQuery || selectedAgent !== "all" || sortOrder !== "desc";
 
-  // ✅ RBAC — if user has neither permission, show a simple empty state
-  // (this should rarely happen since PermissionRoute already gates the whole page,
-  // but it's a sane fallback in case route permissions and tab permissions ever diverge)
+  // Exports the currently loaded page of sales — matches what's on screen.
+  const exportCsv = () => {
+    const headers = [
+      "Date", "Invoice #", "Airline", "Document #", "Vendor", "Customer",
+      "Agent", "Payment Type", "Pay Status", "Sell Price", "Status", "Remarks",
+    ];
+    const rows = salesData.map((s) => [
+      s.date ? format(s.date, "yyyy-MM-dd") : "",
+      s.invoiceNo, s.airlineCode, s.documentNo, s.vendorName,
+      s.customerName || "Walk-in", s.createdByName, s.paymentType,
+      s.paymentStatus, s.sellPrice?.toFixed(2), s.status, s.remarks || "",
+    ]);
+    const csv = [headers, ...rows]
+      .map((r) => r.map((v) => `"${v ?? ""}"`).join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `sales-report-${format(dateRange.from, "yyyyMMdd")}-${format(dateRange.to, "yyyyMMdd")}.csv`;
+    a.click();
+  };
+
+  // RBAC — if user has neither permission, show a simple empty state
+  // (this should rarely happen since PermissionRoute already gates the whole
+  // page, but it's a sane fallback in case route permissions and tab
+  // permissions ever diverge)
   if (!canViewSales && !canViewRefunds) {
     return (
       <div className="w-full mx-auto p-6">
@@ -337,7 +326,11 @@ export default function SalesReport() {
             Comprehensive sales analytics and performance metrics
           </p>
         </div>
-        <Button variant="outline">
+        <Button
+          variant="outline"
+          onClick={exportCsv}
+          disabled={activeTab !== "detailed" || !salesData.length}
+        >
           <Download className="h-4 w-4 mr-2" />
           Export Report
         </Button>
@@ -479,7 +472,7 @@ export default function SalesReport() {
       </Card>
 
       {/* Tabs */}
-      {/* ✅ RBAC — if only one permission is granted, skip the Tabs UI entirely
+      {/* RBAC — if only one permission is granted, skip the Tabs UI entirely
           and just render that single tab's content directly (no tab switcher needed) */}
       {canViewSales && canViewRefunds ? (
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -494,9 +487,14 @@ export default function SalesReport() {
               loading={loading}
               searchQuery={searchQuery}
               searchBy={searchBy}
-              totalSales={totalSales}
-              totalProfit={totalProfit}
-              resolveSaleDetails={resolveSaleDetails}
+              totalSales={salesSummary.totalSell}
+              totalProfit={salesSummary.totalProfit}
+              page={salesPage}
+              pageSize={salesPageSize}
+              total={salesPagination.total}
+              totalPages={salesPagination.pages}
+              onPageChange={setSalesPage}
+              onPageSizeChange={setSalesPageSize}
             />
           </TabsContent>
 
@@ -515,9 +513,14 @@ export default function SalesReport() {
           loading={loading}
           searchQuery={searchQuery}
           searchBy={searchBy}
-          totalSales={totalSales}
-          totalProfit={totalProfit}
-          resolveSaleDetails={resolveSaleDetails}
+          totalSales={salesSummary.totalSell}
+          totalProfit={salesSummary.totalProfit}
+          page={salesPage}
+          pageSize={salesPageSize}
+          total={salesPagination.total}
+          totalPages={salesPagination.pages}
+          onPageChange={setSalesPage}
+          onPageSizeChange={setSalesPageSize}
         />
       ) : (
         <RefundsTab
