@@ -21,29 +21,6 @@ function buildMonthGrid(monthDate) {
   return eachDayOfInterval({ start, end });
 }
 
-/**
- * Drop-in replacement for shadcn/react-day-picker's <Calendar mode="range" />.
- *
- * Selection model (click, not drag):
- *  - 1st click on a day  -> that day becomes the anchor ("picking the end date" mode).
- *    Nothing is committed to the parent yet.
- *  - While an anchor is set, hovering over other days shows a live preview
- *    line from the anchor to the hovered day.
- *  - 2nd click on a day  -> commits { from, to } (sorted low->high) via onSelect,
- *    and clears the anchor so the calendar is ready for a brand new selection.
- *
- * This explicit anchor/no-anchor state is what fixes the old bug where
- * clicking a date while a full range was already selected would just move
- * the *end* date instead of starting a new range — every click now checks
- * "do we have an anchor right now?" rather than assuming the click is
- * always completing an existing range.
- *
- * Props mirror what SalesReport.jsx already passes:
- *   selected: { from: Date, to: Date }
- *   onSelect: (range) => void
- *   defaultMonth: Date
- *   numberOfMonths: number
- */
 export default function RangeCalendar({
   selected,
   onSelect,
