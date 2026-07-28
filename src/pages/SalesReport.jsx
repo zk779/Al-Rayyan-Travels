@@ -83,7 +83,7 @@ export default function SalesReport() {
     canViewSales ? "detailed" : canViewRefunds ? "refunds" : null
   );
   const [dateRange, setDateRange] = useState({
-    from: subDays(new Date(), 30),
+    from: subDays(new Date(), 0),
     to: new Date(),
   });
   const [selectedAgent, setSelectedAgent] = useState("all");
