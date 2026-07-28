@@ -514,7 +514,6 @@ export default function EditPaymentDialog({
             customerId: s.mode === "CREDIT" ? s.customerId : "",
             bankId: s.mode === "BANK_TRANSFER" ? s.bankId : null,
             paidAmount: s.amount || String(sell),
-            paxName: "",
           }
         : {
             paymentType: "PARTIAL",
@@ -553,7 +552,6 @@ export default function EditPaymentDialog({
             paidAmount: String(partialPaidAmount),
             // sellPrice = both legs combined (total the customer owes)
             sellPrice: String(partialTotal),
-            paxName: "",
           };
 
     onConfirm(result);
