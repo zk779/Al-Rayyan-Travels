@@ -55,6 +55,7 @@ import {
   AlertDialogTitle,
 } from "../../shadcn/components/ui/alert-dialog";
 import { Textarea } from "../../shadcn/components/ui/textarea";
+import { useAuth } from "../context/AuthContext"; // ✅ ADD THIS
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL; // e.g. http://localhost:5000
 
@@ -77,6 +78,13 @@ async function api(path, { method = "GET", body } = {}) {
 }
 
 export default function BranchesTab({ branches, setBranches, users }) {
+  // ✅ RBAC — permission flags
+  const { hasPermission } = useAuth();
+  const canCreate = hasPermission("BRANCH_CREATE");
+  const canEdit = hasPermission("BRANCH_EDIT");
+  const canDelete = hasPermission("BRANCH_DELETE");
+  const hasAnyRowAction = canEdit || canDelete;
+
   const [selectedBranches, setSelectedBranches] = useState([]);
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -125,8 +133,16 @@ export default function BranchesTab({ branches, setBranches, users }) {
     );
   };
 
+  const openAddDialog = () => {
+    if (!canCreate) return; // ✅ RBAC guard
+    setBranchForm(initialForm);
+    setIsAddDialogOpen(true);
+  };
+
   // ✅ Dynamic: Add Branch
   const handleAddBranch = async () => {
+    if (!canCreate) return; // ✅ RBAC guard
+
     try {
       const payload = {
         name: branchForm.name,
@@ -164,6 +180,8 @@ export default function BranchesTab({ branches, setBranches, users }) {
   };
 
   const handleEditBranch = (branch) => {
+    if (!canEdit) return; // ✅ RBAC guard
+
     setEditingBranch(branch);
     setBranchForm({
       name: branch.name,
@@ -181,6 +199,8 @@ export default function BranchesTab({ branches, setBranches, users }) {
 
   // ✅ Dynamic: Update Branch
   const handleUpdateBranch = async () => {
+    if (!canEdit) return; // ✅ RBAC guard
+
     try {
       const payload = {
         name: branchForm.name,
@@ -224,12 +244,16 @@ export default function BranchesTab({ branches, setBranches, users }) {
   };
 
   const handleDelete = (id) => {
+    if (!canDelete) return; // ✅ RBAC guard
     setDeleteBranchId(id);
     setIsDeleteDialogOpen(true);
   };
 
   // ✅ Dynamic: Delete Branch
   const confirmDelete = async () => {
+    if (!canDelete) return; // ✅ RBAC guard
+    if (!deleteBranchId) return;
+
     try {
       await api(`/api/branches/${deleteBranchId}`, { method: "DELETE" });
 
@@ -246,6 +270,9 @@ export default function BranchesTab({ branches, setBranches, users }) {
 
   // ✅ Dynamic: Bulk Delete
   const handleBulkDelete = async () => {
+    if (!canDelete) return; // ✅ RBAC guard
+    if (selectedBranches.length === 0) return;
+
     try {
       await Promise.all(
         selectedBranches.map((id) =>
@@ -300,178 +327,183 @@ export default function BranchesTab({ branches, setBranches, users }) {
         </div>
 
         <div className="flex gap-2">
-          {selectedBranches.length > 0 && (
+          {/* ✅ RBAC — bulk delete only if permitted */}
+          {canDelete && selectedBranches.length > 0 && (
             <Button variant="destructive" size="sm" onClick={handleBulkDelete}>
               <Trash2 className="h-4 w-4 mr-2" />
               Delete Selected ({selectedBranches.length})
             </Button>
           )}
-          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Building2Icon className="h-4 w-4 mr-2" />
-                Add Branch
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-lg">
-              <DialogHeader>
-                <DialogTitle>Add New Branch</DialogTitle>
-                <DialogDescription>
-                  Create a new branch location.
-                </DialogDescription>
-              </DialogHeader>
 
-              <div className="space-y-4 py-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Branch Name</Label>
-                    <Input
-                      placeholder="Main Branch"
-                      value={branchForm.name}
-                      onChange={(e) =>
-                        setBranchForm({ ...branchForm, name: e.target.value })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Branch Code</Label>
-                    <Input
-                      placeholder="MB001"
-                      value={branchForm.code}
-                      onChange={(e) =>
-                        setBranchForm({
-                          ...branchForm,
-                          code: e.target.value.toUpperCase(),
-                        })
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Address</Label>
-                  <Textarea
-                    placeholder="123 Business District, Downtown"
-                    value={branchForm.address}
-                    onChange={(e) =>
-                      setBranchForm({ ...branchForm, address: e.target.value })
-                    }
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>City</Label>
-                    <Input
-                      placeholder="New York"
-                      value={branchForm.city}
-                      onChange={(e) =>
-                        setBranchForm({ ...branchForm, city: e.target.value })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Country</Label>
-                    <Input
-                      placeholder="USA"
-                      value={branchForm.country}
-                      onChange={(e) =>
-                        setBranchForm({
-                          ...branchForm,
-                          country: e.target.value,
-                        })
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Phone</Label>
-                    <Input
-                      placeholder="+1 555 123 4567"
-                      value={branchForm.phone}
-                      onChange={(e) =>
-                        setBranchForm({ ...branchForm, phone: e.target.value })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Email</Label>
-                    <Input
-                      type="email"
-                      placeholder="branch@alrayyan.com"
-                      value={branchForm.email}
-                      onChange={(e) =>
-                        setBranchForm({ ...branchForm, email: e.target.value })
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Manager</Label>
-                    <Select
-                      value={branchForm.manager}
-                      onValueChange={(value) =>
-                        setBranchForm({ ...branchForm, manager: value })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select manager" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableManagers.map((u) => {
-                          const name = u.fullName || u.name;
-                          const roleName =
-                            typeof u.role === "string" ? u.role : u.role?.name;
-                          return (
-                            <SelectItem key={u.id} value={name}>
-                              {name} ({roleName})
-                            </SelectItem>
-                          );
-                        })}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Status</Label>
-                    <Select
-                      value={branchForm.status}
-                      onValueChange={(value) =>
-                        setBranchForm({ ...branchForm, status: value })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Active">Active</SelectItem>
-                        <SelectItem value="Inactive">Inactive</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setIsAddDialogOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleAddBranch}
-                  disabled={!branchForm.name || !branchForm.code}
-                >
+          {/* ✅ RBAC — hide Add Branch entirely if no create permission */}
+          {canCreate && (
+            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+              <DialogTrigger asChild>
+                <Button onClick={openAddDialog}>
+                  <Building2Icon className="h-4 w-4 mr-2" />
                   Add Branch
                 </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-lg">
+                <DialogHeader>
+                  <DialogTitle>Add New Branch</DialogTitle>
+                  <DialogDescription>
+                    Create a new branch location.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-4 py-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Branch Name</Label>
+                      <Input
+                        placeholder="Main Branch"
+                        value={branchForm.name}
+                        onChange={(e) =>
+                          setBranchForm({ ...branchForm, name: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Branch Code</Label>
+                      <Input
+                        placeholder="MB001"
+                        value={branchForm.code}
+                        onChange={(e) =>
+                          setBranchForm({
+                            ...branchForm,
+                            code: e.target.value.toUpperCase(),
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Address</Label>
+                    <Textarea
+                      placeholder="123 Business District, Downtown"
+                      value={branchForm.address}
+                      onChange={(e) =>
+                        setBranchForm({ ...branchForm, address: e.target.value })
+                      }
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>City</Label>
+                      <Input
+                        placeholder="New York"
+                        value={branchForm.city}
+                        onChange={(e) =>
+                          setBranchForm({ ...branchForm, city: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Country</Label>
+                      <Input
+                        placeholder="USA"
+                        value={branchForm.country}
+                        onChange={(e) =>
+                          setBranchForm({
+                            ...branchForm,
+                            country: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Phone</Label>
+                      <Input
+                        placeholder="+1 555 123 4567"
+                        value={branchForm.phone}
+                        onChange={(e) =>
+                          setBranchForm({ ...branchForm, phone: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Email</Label>
+                      <Input
+                        type="email"
+                        placeholder="branch@alrayyan.com"
+                        value={branchForm.email}
+                        onChange={(e) =>
+                          setBranchForm({ ...branchForm, email: e.target.value })
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Manager</Label>
+                      <Select
+                        value={branchForm.manager}
+                        onValueChange={(value) =>
+                          setBranchForm({ ...branchForm, manager: value })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select manager" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableManagers.map((u) => {
+                            const name = u.fullName || u.name;
+                            const roleName =
+                              typeof u.role === "string" ? u.role : u.role?.name;
+                            return (
+                              <SelectItem key={u.id} value={name}>
+                                {name} ({roleName})
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Status</Label>
+                      <Select
+                        value={branchForm.status}
+                        onValueChange={(value) =>
+                          setBranchForm({ ...branchForm, status: value })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Active">Active</SelectItem>
+                          <SelectItem value="Inactive">Inactive</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsAddDialogOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleAddBranch}
+                    disabled={!branchForm.name || !branchForm.code}
+                  >
+                    Add Branch
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
         </div>
       </div>
 
@@ -491,10 +523,13 @@ export default function BranchesTab({ branches, setBranches, users }) {
               selected
             </span>
           </div>
-          <Button variant="destructive" size="sm" onClick={handleBulkDelete}>
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete Selected
-          </Button>
+          {/* ✅ RBAC — bulk delete only if permitted */}
+          {canDelete && (
+            <Button variant="destructive" size="sm" onClick={handleBulkDelete}>
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete Selected
+            </Button>
+          )}
         </div>
       )}
 
@@ -548,6 +583,11 @@ export default function BranchesTab({ branches, setBranches, users }) {
                     >
                       {branch.status}
                     </Badge>
+
+                    {/* ✅ RBAC — only show the actions menu if there's an
+                        action the user is actually allowed to take (View
+                        Details stays visible on its own since reaching this
+                        tab already implies BRANCH_READ) */}
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button
@@ -563,19 +603,25 @@ export default function BranchesTab({ branches, setBranches, users }) {
                           <Eye className="h-4 w-4 mr-2" />
                           View Details
                         </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => handleEditBranch(branch)}
-                        >
-                          <Edit className="h-4 w-4 mr-2" />
-                          Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => handleDelete(branch.id)}
-                          className="text-red-600"
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Delete
-                        </DropdownMenuItem>
+
+                        {canEdit && (
+                          <DropdownMenuItem
+                            onClick={() => handleEditBranch(branch)}
+                          >
+                            <Edit className="h-4 w-4 mr-2" />
+                            Edit
+                          </DropdownMenuItem>
+                        )}
+
+                        {canDelete && (
+                          <DropdownMenuItem
+                            onClick={() => handleDelete(branch.id)}
+                            className="text-red-600"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
@@ -637,149 +683,153 @@ export default function BranchesTab({ branches, setBranches, users }) {
         )}
       </div>
 
-      {/* Edit Branch Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Edit Branch</DialogTitle>
-            <DialogDescription>Update branch information.</DialogDescription>
-          </DialogHeader>
+      {/* Edit Branch Dialog — ✅ RBAC: only mount if user can edit */}
+      {canEdit && (
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Edit Branch</DialogTitle>
+              <DialogDescription>Update branch information.</DialogDescription>
+            </DialogHeader>
 
-          <div className="space-y-4 py-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Branch Name</Label>
+                  <Input
+                    value={branchForm.name}
+                    onChange={(e) =>
+                      setBranchForm({ ...branchForm, name: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Branch Code</Label>
+                  <Input
+                    value={branchForm.code}
+                    onChange={(e) =>
+                      setBranchForm({
+                        ...branchForm,
+                        code: e.target.value.toUpperCase(),
+                      })
+                    }
+                  />
+                </div>
+              </div>
+
               <div className="space-y-2">
-                <Label>Branch Name</Label>
-                <Input
-                  value={branchForm.name}
+                <Label>Address</Label>
+                <Textarea
+                  value={branchForm.address}
                   onChange={(e) =>
-                    setBranchForm({ ...branchForm, name: e.target.value })
+                    setBranchForm({ ...branchForm, address: e.target.value })
                   }
                 />
               </div>
-              <div className="space-y-2">
-                <Label>Branch Code</Label>
-                <Input
-                  value={branchForm.code}
-                  onChange={(e) =>
-                    setBranchForm({
-                      ...branchForm,
-                      code: e.target.value.toUpperCase(),
-                    })
-                  }
-                />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>City</Label>
+                  <Input
+                    value={branchForm.city}
+                    onChange={(e) =>
+                      setBranchForm({ ...branchForm, city: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Country</Label>
+                  <Input
+                    value={branchForm.country}
+                    onChange={(e) =>
+                      setBranchForm({ ...branchForm, country: e.target.value })
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Phone</Label>
+                  <Input
+                    value={branchForm.phone}
+                    onChange={(e) =>
+                      setBranchForm({ ...branchForm, phone: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Email</Label>
+                  <Input
+                    type="email"
+                    value={branchForm.email}
+                    onChange={(e) =>
+                      setBranchForm({ ...branchForm, email: e.target.value })
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
+                <div className="space-y-2">
+                  <Label>Status</Label>
+                  <Select
+                    value={branchForm.status}
+                    onValueChange={(value) =>
+                      setBranchForm({ ...branchForm, status: value })
+                    }
+                  >
+                    <SelectTrigger className={"w-full"}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Active">Active</SelectItem>
+                      <SelectItem value="Inactive">Inactive</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Address</Label>
-              <Textarea
-                value={branchForm.address}
-                onChange={(e) =>
-                  setBranchForm({ ...branchForm, address: e.target.value })
-                }
-              />
-            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setIsEditDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleUpdateBranch}>Update Branch</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>City</Label>
-                <Input
-                  value={branchForm.city}
-                  onChange={(e) =>
-                    setBranchForm({ ...branchForm, city: e.target.value })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Country</Label>
-                <Input
-                  value={branchForm.country}
-                  onChange={(e) =>
-                    setBranchForm({ ...branchForm, country: e.target.value })
-                  }
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Phone</Label>
-                <Input
-                  value={branchForm.phone}
-                  onChange={(e) =>
-                    setBranchForm({ ...branchForm, phone: e.target.value })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Email</Label>
-                <Input
-                  type="email"
-                  value={branchForm.email}
-                  onChange={(e) =>
-                    setBranchForm({ ...branchForm, email: e.target.value })
-                  }
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
-              <div className="space-y-2">
-                <Label>Status</Label>
-                <Select
-                  value={branchForm.status}
-                  onValueChange={(value) =>
-                    setBranchForm({ ...branchForm, status: value })
-                  }
-                >
-                  <SelectTrigger className={"w-full"}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Active">Active</SelectItem>
-                    <SelectItem value="Inactive">Inactive</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsEditDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleUpdateBranch}>Update Branch</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog
-        open={isDeleteDialogOpen}
-        onOpenChange={setIsDeleteDialogOpen}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the
-              branch.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmDelete}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* Delete Confirmation Dialog — ✅ RBAC: only mount if user can delete */}
+      {canDelete && (
+        <AlertDialog
+          open={isDeleteDialogOpen}
+          onOpenChange={setIsDeleteDialogOpen}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. This will permanently delete the
+                branch.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={confirmDelete}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </div>
   );
 }

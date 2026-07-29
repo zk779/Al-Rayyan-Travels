@@ -95,7 +95,7 @@ function getUserRoleName(u) {
   return u?.role?.name || "";
 }
 function getUserRoleId(u) {
-  return u?.role?.id || u?.roleId || "";
+  return u?.roleId || u?.role?.id || "";
 }
 
 function getUserBranchName(u) {
@@ -103,7 +103,47 @@ function getUserBranchName(u) {
   return u?.branch?.name || "";
 }
 function getUserBranchId(u) {
-  return u?.branch?.id || u?.branchId || "";
+  return u?.branchId || u?.branch?.id || "";
+}
+
+// ✅ FIX: normalizes any user object — whether it came from the initial
+// GET /api/users list (populated with role/branch objects) or from a
+// POST/PUT response (which may only include roleId/branchId, with no
+// nested role/branch names) — into one consistent shape.
+//
+// Role/branch names are resolved by looking up the id against the
+// roles/branches lists already available as props. This is what was
+// causing blank Role/Branch cells right after creating or editing a
+// user, and stale-looking values when reopening the edit dialog for
+// that same user.
+function buildUserRecord(raw, roles, branches) {
+  const roleId = getUserRoleId(raw);
+  const branchId = getUserBranchId(raw);
+
+  const roleName =
+    getUserRoleName(raw) ||
+    (roles || []).find((r) => r.id === roleId)?.name ||
+    "";
+
+  const branchName =
+    getUserBranchName(raw) ||
+    (branches || []).find((b) => b.id === branchId)?.name ||
+    "";
+
+  return {
+    id: raw.id,
+    name: raw.fullName ?? raw.name ?? "",
+    email: raw.email ?? "",
+    roleId,
+    role: roleName,
+    branchId,
+    branch: branchName,
+    status: getStatusLabel(raw),
+    phone: raw.phone ?? "",
+    department: raw.department ?? "",
+    lastLogin: raw.lastLogin ?? "",
+    createdAt: raw.createdAt ?? "",
+  };
 }
 
 export default function UsersTab({ users, setUsers, roles, branches }) {
@@ -265,8 +305,13 @@ export default function UsersTab({ users, setUsers, roles, branches }) {
         });
         const created = res?.data;
 
-        // ✅ update list (prepend)
-        setUsers((prev) => [created, ...(prev || [])]);
+        // ✅ FIX: normalize before storing, resolving role/branch names
+        // from the roles/branches props instead of assuming the API
+        // response came back populated.
+        setUsers((prev) => [
+          buildUserRecord(created, roles, branches),
+          ...(prev || []),
+        ]);
       } else {
         const payload = {
           fullName: userForm.fullName,
@@ -284,9 +329,12 @@ export default function UsersTab({ users, setUsers, roles, branches }) {
           body: payload,
         });
         const updated = res?.data;
+        const normalizedUpdated = buildUserRecord(updated, roles, branches);
 
         setUsers((prev) =>
-          (prev || []).map((u) => (u.id === updated.id ? updated : u))
+          (prev || []).map((u) =>
+            u.id === normalizedUpdated.id ? normalizedUpdated : u
+          )
         );
       }
 

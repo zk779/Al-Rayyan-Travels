@@ -31,6 +31,11 @@ import {
   AlertDialogTitle,
 } from "../../shadcn/components/ui/alert-dialog";
 import { Textarea } from "../../shadcn/components/ui/textarea";
+import {
+  RadioGroup,
+  RadioGroupItem,
+} from "../../shadcn/components/ui/radio-group";
+import { useAuth } from "../context/AuthContext"; // ✅ ADD THIS
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
@@ -102,6 +107,13 @@ const normalizeRole = (r, permByKey) => {
 };
 
 export default function RolesTab() {
+  // ✅ RBAC — permission flags
+  const { hasPermission } = useAuth();
+  const canCreate = hasPermission("ROLE_CREATE");
+  const canEdit = hasPermission("ROLE_EDIT");
+  const canDelete = hasPermission("ROLE_DELETE");
+  const hasAnyRowAction = canEdit || canDelete;
+
   const [roles, setRoles] = useState([]);
   const [selectedRoles, setSelectedRoles] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -130,16 +142,54 @@ export default function RolesTab() {
     [permissions],
   );
 
-  // module => { READ: id, CREATE: id, EDIT: id, DELETE: id }
+  // module => { READ: id, CREATE: id, EDIT: id, DELETE: id, ... }
+  // ✅ FIX: previously did `const [module, action] = permission.split("_")`,
+  // which only keeps the first two segments. For a 3-part key like
+  // "SALE_VIEW_OWN" that silently drops "OWN", collapsing
+  // SALE_VIEW_OWN / SALE_VIEW_BRANCH / SALE_VIEW_ALL onto the same
+  // map.SALE.VIEW slot (last one loaded wins, the other two vanish).
+  // Now the action is everything after the first underscore, so each
+  // stays distinct: VIEW_OWN, VIEW_BRANCH, VIEW_ALL.
   const permissionMap = useMemo(() => {
     const map = {};
     for (const p of permissions) {
-      const [module, action] = (p.permission || "").split("_");
-      if (!module || !action) continue;
+      const parts = (p.permission || "").split("_");
+      if (parts.length < 2) continue;
+      const module = parts[0];
+      const action = parts.slice(1).join("_");
       (map[module] ||= {})[action] = p.id;
     }
     return map;
   }, [permissions]);
+
+  // ✅ Sales visibility scope — SALE_VIEW_OWN / SALE_VIEW_BRANCH / SALE_VIEW_ALL
+  // aren't generic CRUD actions, they're a mutually-exclusive scope for how
+  // much sales data a role can see, so they get their own section instead of
+  // a 5th column in the CRUD matrix.
+  const SALE_VIEW_SCOPES = [
+    {
+      key: "SALE_VIEW_OWN",
+      label: "Own Sales Only",
+      hint: "Can only see sales they personally created",
+    },
+    {
+      key: "SALE_VIEW_BRANCH",
+      label: "Branch Sales",
+      hint: "Can see all sales within their branch",
+    },
+    {
+      key: "SALE_VIEW_ALL",
+      label: "All Sales",
+      hint: "Can see sales across every branch",
+    },
+  ];
+  const saleViewScopes = useMemo(
+    () =>
+      SALE_VIEW_SCOPES.map((s) => ({ ...s, id: permByKey[s.key] })).filter(
+        (s) => s.id,
+      ),
+    [permByKey],
+  );
 
   const groupedModules = useMemo(
     () =>
@@ -198,6 +248,7 @@ export default function RolesTab() {
     );
 
   const openAdd = () => {
+    if (!canCreate) return; // ✅ RBAC guard
     setEditingRole(null);
     setRoleForm(EMPTY_FORM);
     setError("");
@@ -205,6 +256,7 @@ export default function RolesTab() {
   };
 
   const handleEditRole = (role) => {
+    if (!canEdit) return; // ✅ RBAC guard
     setEditingRole(role);
     setRoleForm({
       name: role.name,
@@ -229,6 +281,8 @@ export default function RolesTab() {
     roleForm.permissions.length > 0;
 
   const handleAddRole = async () => {
+    if (!canCreate) return; // ✅ RBAC guard
+
     setSaving(true);
     setError("");
     try {
@@ -251,6 +305,8 @@ export default function RolesTab() {
   };
 
   const handleUpdateRole = async () => {
+    if (!canEdit) return; // ✅ RBAC guard
+
     setSaving(true);
     setError("");
     try {
@@ -274,11 +330,15 @@ export default function RolesTab() {
   };
 
   const handleDelete = (id) => {
+    if (!canDelete) return; // ✅ RBAC guard
     setDeleteRoleId(id);
     setIsDeleteDialogOpen(true);
   };
 
   const confirmDelete = async () => {
+    if (!canDelete) return; // ✅ RBAC guard
+    if (!deleteRoleId) return;
+
     try {
       await apiRequest(`/api/roles/${deleteRoleId}`, { method: "DELETE" });
       setSelectedRoles((prev) => prev.filter((id) => id !== deleteRoleId));
@@ -292,6 +352,9 @@ export default function RolesTab() {
   };
 
   const handleBulkDelete = async () => {
+    if (!canDelete) return; // ✅ RBAC guard
+    if (selectedRoles.length === 0) return;
+
     try {
       await Promise.all(
         selectedRoles.map((id) =>
@@ -438,6 +501,82 @@ export default function RolesTab() {
         />
       </div>
       <PermissionsMatrix />
+
+      {/* ✅ Sales visibility scope — a real RadioGroup (not checkboxes) so
+          the single-select behavior is visually obvious, not just enforced
+          in code. Includes a "Clear" action since native radios can't be
+          unchecked by clicking again, and a role might not need any of
+          these three at all. */}
+      {saleViewScopes.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label>Sales Visibility Scope</Label>
+            {saleViewScopes.some((s) =>
+              roleForm.permissions.includes(s.id),
+            ) && (
+              <button
+                type="button"
+                onClick={() => {
+                  const ids = saleViewScopes.map((s) => s.id);
+                  setPermIds(ids, false);
+                }}
+                className="text-xs text-muted-foreground underline hover:text-foreground"
+              >
+                Clear selection
+              </button>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Controls how much sales data this role can see. Only one option
+            can be selected.
+          </p>
+
+          <RadioGroup
+            value={
+              saleViewScopes.find((s) =>
+                roleForm.permissions.includes(s.id),
+              )?.id || ""
+            }
+            onValueChange={(value) => {
+              const scopeIds = saleViewScopes.map((s) => s.id);
+              setRoleForm((prev) => ({
+                ...prev,
+                permissions: [
+                  ...prev.permissions.filter((id) => !scopeIds.includes(id)),
+                  ...(value ? [value] : []),
+                ],
+              }));
+            }}
+            className="grid grid-cols-1 sm:grid-cols-3 gap-2"
+          >
+            {saleViewScopes.map((scope) => {
+              const checked = roleForm.permissions.includes(scope.id);
+              return (
+                <label
+                  key={scope.id}
+                  htmlFor={`sale-scope-${scope.id}`}
+                  className={`flex flex-col gap-1 rounded-lg border p-3 cursor-pointer text-sm transition-colors ${
+                    checked
+                      ? "border-primary bg-primary/5"
+                      : "border-muted hover:bg-muted/30"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <RadioGroupItem
+                      value={scope.id}
+                      id={`sale-scope-${scope.id}`}
+                    />
+                    <span className="font-medium">{scope.label}</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {scope.hint}
+                  </span>
+                </label>
+              );
+            })}
+          </RadioGroup>
+        </div>
+      )}
     </div>
   );
 
@@ -455,45 +594,49 @@ export default function RolesTab() {
         </div>
 
         <div className="flex gap-2">
-          {selectedRoles.length > 0 && (
+          {/* ✅ RBAC — bulk delete only if permitted */}
+          {canDelete && selectedRoles.length > 0 && (
             <Button variant="destructive" size="sm" onClick={handleBulkDelete}>
               <Trash2 className="h-4 w-4 mr-2" />
               Delete Selected ({selectedRoles.length})
             </Button>
           )}
 
-          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="app" onClick={openAdd}>
-                <ShieldCheck className="h-4 w-4 mr-2" />
-                Add Role
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto scrollbar-none">
-              <DialogHeader>
-                <DialogTitle>Add New Role</DialogTitle>
-                <DialogDescription>
-                  Create a new user role with specific permissions.
-                </DialogDescription>
-              </DialogHeader>
-              {roleDialogBody}
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setIsAddDialogOpen(false)}
-                >
-                  Cancel
+          {/* ✅ RBAC — hide Add Role entirely if no create permission */}
+          {canCreate && (
+            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="app" onClick={openAdd}>
+                  <ShieldCheck className="h-4 w-4 mr-2" />
+                  Add Role
                 </Button>
-                <Button
-                  variant="app"
-                  onClick={handleAddRole}
-                  disabled={!isFormValid || saving}
-                >
-                  {saving ? "Adding..." : "Add Role"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto scrollbar-none">
+                <DialogHeader>
+                  <DialogTitle>Add New Role</DialogTitle>
+                  <DialogDescription>
+                    Create a new user role with specific permissions.
+                  </DialogDescription>
+                </DialogHeader>
+                {roleDialogBody}
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsAddDialogOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="app"
+                    onClick={handleAddRole}
+                    disabled={!isFormValid || saving}
+                  >
+                    {saving ? "Adding..." : "Add Role"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
         </div>
       </div>
 
@@ -511,10 +654,13 @@ export default function RolesTab() {
               {selectedRoles.length} of {filteredRoles.length} roles selected
             </span>
           </div>
-          <Button variant="destructive" size="sm" onClick={handleBulkDelete}>
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete Selected
-          </Button>
+          {/* ✅ RBAC — bulk delete only if permitted */}
+          {canDelete && (
+            <Button variant="destructive" size="sm" onClick={handleBulkDelete}>
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete Selected
+            </Button>
+          )}
         </div>
       )}
 
@@ -556,24 +702,33 @@ export default function RolesTab() {
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleEditRole(role)}
-                      className="h-8 w-8 p-0 hover:bg-gray-100"
-                    >
-                      <Edit className="h-4 w-4 text-gray-500" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDelete(role.id)}
-                      className="h-8 w-8 p-0 hover:bg-red-50 hover:text-red-600"
-                    >
-                      <Trash2 className="h-4 w-4 text-gray-500 hover:text-red-600" />
-                    </Button>
-                  </div>
+
+                  {/* ✅ RBAC — only render the actions cluster if the user
+                      can actually edit or delete roles */}
+                  {hasAnyRowAction && (
+                    <div className="flex items-center gap-1">
+                      {canEdit && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEditRole(role)}
+                          className="h-8 w-8 p-0 hover:bg-gray-100"
+                        >
+                          <Edit className="h-4 w-4 text-gray-500" />
+                        </Button>
+                      )}
+                      {canDelete && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDelete(role.id)}
+                          className="h-8 w-8 p-0 hover:bg-red-50 hover:text-red-600"
+                        >
+                          <Trash2 className="h-4 w-4 text-gray-500 hover:text-red-600" />
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </div>
               </CardHeader>
               <CardContent className="pt-0">
@@ -619,56 +774,62 @@ export default function RolesTab() {
         )}
       </div>
 
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Edit Role</DialogTitle>
-            <DialogDescription>
-              Update role information and permissions.
-            </DialogDescription>
-          </DialogHeader>
-          {roleDialogBody}
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsEditDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="app"
-              onClick={handleUpdateRole}
-              disabled={!isFormValid || saving}
-            >
-              {saving ? "Updating..." : "Update Role"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Edit Role Dialog — ✅ RBAC: only mount if user can edit */}
+      {canEdit && (
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Edit Role</DialogTitle>
+              <DialogDescription>
+                Update role information and permissions.
+              </DialogDescription>
+            </DialogHeader>
+            {roleDialogBody}
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setIsEditDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="app"
+                onClick={handleUpdateRole}
+                disabled={!isFormValid || saving}
+              >
+                {saving ? "Updating..." : "Update Role"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
-      <AlertDialog
-        open={isDeleteDialogOpen}
-        onOpenChange={setIsDeleteDialogOpen}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the
-              role.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmDelete}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* Delete Confirmation Dialog — ✅ RBAC: only mount if user can delete */}
+      {canDelete && (
+        <AlertDialog
+          open={isDeleteDialogOpen}
+          onOpenChange={setIsDeleteDialogOpen}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. This will permanently delete the
+                role.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={confirmDelete}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </div>
   );
 }
