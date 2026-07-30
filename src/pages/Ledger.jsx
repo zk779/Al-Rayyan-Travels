@@ -63,7 +63,7 @@ import {
 	PopoverTrigger,
 } from "../../shadcn/components/ui/popover";
 import { cn } from "../../shadcn/lib/utils";
-import { Calendar as CalendarPicker } from "../../shadcn/components/ui/calendar";
+import RangeCalendar from "../components/DragCalendar";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
@@ -1004,7 +1004,14 @@ export default function LedgerComponent() {
 									</Button>
 								</PopoverTrigger>
 								<PopoverContent className="w-auto p-0" align="start">
-									<CalendarPicker initialFocus mode="range" defaultMonth={dateRange?.from} selected={dateRange} onSelect={setDateRange} numberOfMonths={2} />
+									{/* Click-to-select range: 1st click = start date, hover
+									    previews the range line, 2nd click = end date. */}
+									<RangeCalendar
+										defaultMonth={dateRange?.from}
+										selected={dateRange}
+										onSelect={setDateRange}
+										numberOfMonths={2}
+									/>
 								</PopoverContent>
 							</Popover>
 						</div>
