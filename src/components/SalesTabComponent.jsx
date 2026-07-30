@@ -76,11 +76,12 @@ const detectRouteType = (destinations = []) => {
 
 const calcVAT = (profit) => {
   const p = Number(profit) || 0;
-  return p > 0 ? ((p / 1.15) * 0.15).toFixed(2) : "0.00";
+  return p > 0 ? (p * 0.15).toFixed(2) : "0.00";
 };
+
 const calcPaxVAT = (netPrice) => {
   const n = Number(netPrice) || 0;
-  return n > 0 ? ((n / 1.15) * 0.15).toFixed(2) : "0.00";
+  return n > 0 ? (n * 0.15).toFixed(2) : "0.00";
 };
 
 const applyRouteEffects = (item, routeType) => {
@@ -456,10 +457,7 @@ export default function SalesTabComponent() {
       paxVat: acc.paxVat + (Number(s.paxVat) || 0),
       misc: acc.misc + (Number(s.miscCharges) || 0),
       profit:
-        acc.profit +
-        ((Number(s.sellPrice) || 0) -
-          (Number(s.netPrice) || 0) -
-          (Number(s.vatAmount) || 0)),
+        acc.profit + ((Number(s.sellPrice) || 0) - (Number(s.netPrice) || 0)),
     }),
     { net: 0, sell: 0, vat: 0, paxVat: 0, misc: 0, profit: 0 },
   );
@@ -651,9 +649,7 @@ export default function SalesTabComponent() {
       <div className="space-y-3">
         {uiSales.map((item, index) => {
           const profit = (
-            (Number(item.sellPrice) || 0) -
-            (Number(item.netPrice) || 0) -
-            (Number(item.vatAmount) || 0)
+            (Number(item.sellPrice) || 0) - (Number(item.netPrice) || 0)
           ).toFixed(2);
 
           return (
@@ -967,7 +963,8 @@ export default function SalesTabComponent() {
                       Profit <SaudiRiyal size={15} />
                     </Label>
                     <div className="flex items-center gap-1 px-2 h-8 bg-green-50 border border-green-200 rounded text-xs font-semibold text-green-700">
-                      <Calculator className="h-3 w-3" />{profit}
+                      <Calculator className="h-3 w-3" />
+                      {profit}
                     </div>
                   </div>
 

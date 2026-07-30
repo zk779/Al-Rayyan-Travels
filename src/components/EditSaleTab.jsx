@@ -49,14 +49,14 @@ const detectRouteType = (destinations) => {
 
 const calcVAT = (profit) => {
   const p = Number(profit) || 0;
-  return p > 0 ? ((p / 1.15) * 0.15).toFixed(2) : "0.00";
+  return p > 0 ? (p * 0.15).toFixed(2) : "0.00";
 };
 const calcPaxVAT = (netPrice) => {
   const n = Number(netPrice) || 0;
-  return n > 0 ? ((n / 1.15) * 0.15).toFixed(2) : "0.00";
+  return n > 0 ? (n * 0.15).toFixed(2) : "0.00";
 };
-const calcProfit = (net, sell, vat) =>
-  (Number(sell || 0) - Number(net || 0) - Number(vat || 0)).toFixed(2);
+const calcProfit = (net, sell) =>
+  (Number(sell || 0) - Number(net || 0)).toFixed(2);
 
 const applyRouteEffects = (item, routeType) => {
   const u = { ...item, routeType };
@@ -314,21 +314,21 @@ export default function EditSalesTab({ saleId }) {
 
   /* ── Totals ── */
   const totals = uiSales.reduce(
-    (acc, s) => {
-      const net = Number(s.netPrice) || 0;
-      const sell = Number(s.sellPrice) || 0;
-      const vat = Number(s.vatAmount) || 0;
-      return {
-        net: acc.net + net,
-        sell: acc.sell + sell,
-        profit: acc.profit + (sell - net - vat),
-        vat: acc.vat + vat,
-        paxVat: acc.paxVat + (Number(s.paxVat) || 0),
-        misc: acc.misc + (Number(s.miscCharges) || 0),
-      };
-    },
-    { net: 0, sell: 0, profit: 0, vat: 0, paxVat: 0, misc: 0 },
-  );
+  (acc, s) => {
+    const net = Number(s.netPrice) || 0;
+    const sell = Number(s.sellPrice) || 0;
+    const vat = Number(s.vatAmount) || 0;
+    return {
+      net: acc.net + net,
+      sell: acc.sell + sell,
+      profit: acc.profit + (sell - net),
+      vat: acc.vat + vat,
+      paxVat: acc.paxVat + (Number(s.paxVat) || 0),
+      misc: acc.misc + (Number(s.miscCharges) || 0),
+    };
+  },
+  { net: 0, sell: 0, profit: 0, vat: 0, paxVat: 0, misc: 0 },
+);
 
   /* ── Submit ── */
   const handleSubmit = async () => {
@@ -544,11 +544,7 @@ export default function EditSalesTab({ saleId }) {
       {/* Sales cards */}
       <div className="space-y-3">
         {uiSales.map((item, index) => {
-          const profit = calcProfit(
-            item.netPrice,
-            item.sellPrice,
-            item.vatAmount,
-          );
+          const profit = calcProfit(item.netPrice, item.sellPrice);
           return (
             <Card
               key={item.id}

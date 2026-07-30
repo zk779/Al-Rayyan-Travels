@@ -74,6 +74,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "../../shadcn/components/ui/popover";
+import RangeCalendar from "./DragCalendar";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 const authHeaders = () => ({
@@ -512,12 +513,12 @@ export default function ReportPage() {
                       </Button>
                     ))}
                   </div>
-                  <Calendar
-                    initialFocus
-                    mode="range"
+                  {/* Click-to-select range: 1st click = start date, hover previews
+          the range line, 2nd click = end date. */}
+                  <RangeCalendar
                     defaultMonth={dateRange.from}
                     selected={dateRange}
-                    onSelect={(r) => r?.from && r?.to && setDateRange(r)}
+                    onSelect={setDateRange}
                     numberOfMonths={2}
                   />
                 </PopoverContent>
