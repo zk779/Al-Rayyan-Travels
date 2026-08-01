@@ -34,6 +34,7 @@ import { format } from "date-fns";
 import ManageDestinationsDialog from "./ManageDestinationsDialog";
 import EditPaymentDialog from "./EditPaymentDialog";
 import { appToast } from "../../shadcn/components/ui/appToast";
+import { useAuth } from "../context/AuthContext";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
@@ -111,9 +112,7 @@ export default function EditSalesTab({ saleId }) {
   const [customers, setCustomers] = useState([]);
   const [banks, setBanks] = useState([]);
 
-  const user = localStorage.getItem("user");
-
-  const token = localStorage.getItem("token");
+  const { token } = useAuth();
   const headers = useMemo(
     () => ({
       "Content-Type": "application/json",

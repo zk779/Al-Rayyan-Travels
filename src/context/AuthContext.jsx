@@ -89,7 +89,13 @@ export function AuthProvider({ children }) {
   // Call this after admin edits roles/permissions for the current user
   const refreshProfile = () => fetchProfile();
 
-  // 🔁 Sync login/logout across tabs
+  // 🔁 Sync login/logout across tabs.
+  // IMPORTANT: never call fetchProfile() here. /me reissues a new token
+  // (fresh `iat`) on every call, so a naive "token differs -> refetch" would
+  // have this tab write a new token, which the OTHER tab's listener sees as
+  // "different" and refetches again, forever — an infinite cross-tab ping-
+  // pong of /me calls. The writing tab already fetched & validated the
+  // profile, so just adopt what it already persisted to storage.
   useEffect(() => {
     const onStorage = (e) => {
       // Another tab logged out (or cleared storage)
@@ -99,15 +105,23 @@ export function AuthProvider({ children }) {
         setPermissions([]);
       }
 
-      // Another tab logged in or refreshed to a new token
+      // Another tab logged in or refreshed to a new token — adopt its
+      // already-persisted user/permissions instead of hitting the network.
       if (e.key === "token" && e.newValue && e.newValue !== token) {
-        fetchProfile(e.newValue);
+        setToken(e.newValue);
+        try {
+          const u = localStorage.getItem("user");
+          const p = localStorage.getItem("permissions");
+          if (u) setUser(JSON.parse(u));
+          if (p) setPermissions(JSON.parse(p));
+        } catch {
+          // malformed storage — ignore, next /me revalidation will fix it
+        }
       }
     };
 
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   const hasPermission = (permission) => permissions.includes(permission);
