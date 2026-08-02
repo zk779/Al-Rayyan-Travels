@@ -59,6 +59,14 @@ const getRemainingDue = (sale) =>
     ? Number(sale.dueAmount)
     : Math.max((sale?.sellPrice ?? 0) - (sale?.paidAmount ?? 0), 0);
 
+// ── Helper: format a sale's date for display (short form) ──────────────────
+const formatSaleDate = (value) => {
+  if (!value) return null;
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return null;
+  return format(d, "dd MMM yyyy");
+};
+
 // ── Customer Deposit Tab ────────────────────────────────────────────────────
 // Unlike vendor payments, a customer payment must be allocated against one or
 // more of that customer's open Sales (invoices) whose paymentStatus is DUE or
@@ -196,19 +204,24 @@ export default function CustomerDepositTab({ onClose, onSuccess }) {
       if (!res.ok) throw new Error(`Request failed (${res.status})`);
 
       const json = await res.json();
-      if (!json.success) throw new Error(json.error || "Failed to load invoices");
-
-      // IMPORTANT: normalizeSale may not forward dueAmount / isRefunded /
-      // refundedAmount (it maps to a fixed shape defined in DepositShared).
-      // Re-merge those specific fields straight from the raw API response
-      // so they reach the UI regardless of what normalizeSale does — this
-      // is what makes the refund-adjusted due amount actually show up.
-      const list = (json.data || []).map((raw) => ({
+      if (!json.success)
+        throw new Error(json.error || "Failed to load invoices");
+      let list = (json.data || []).map((raw) => ({
         ...normalizeSale(raw),
         dueAmount: raw.dueAmount,
         isRefunded: raw.isRefunded,
         refundedAmount: raw.refundedAmount,
+        saleDate:
+          raw.saleDate ?? raw.invoice?.saleDate ?? raw.createdAt ?? null,
       }));
+
+      // ── Sort ascending — oldest invoice first ──────────────────────────
+      list = [...list].sort((a, b) => {
+        const ta = a.saleDate ? new Date(a.saleDate).getTime() : 0;
+        const tb = b.saleDate ? new Date(b.saleDate).getTime() : 0;
+        return ta - tb;
+      });
+
       setSales(list);
 
       // default: pre-check nothing, but pre-fill amount = remaining due
@@ -222,7 +235,8 @@ export default function CustomerDepositTab({ onClose, onSuccess }) {
       });
       setSelections(initial);
 
-      if (list.length === 0) setSalesError("No due or partial invoices for this customer");
+      if (list.length === 0)
+        setSalesError("No due or partial invoices for this customer");
     } catch (err) {
       setSales([]);
       setSelections({});
@@ -633,6 +647,7 @@ export default function CustomerDepositTab({ onClose, onSuccess }) {
                   const amt = parseFloat(sel.amount) || 0;
                   const rowInvalid =
                     sel.checked && (amt <= 0 || amt > remaining + 0.01);
+                  const saleDateLabel = formatSaleDate(sale.saleDate);
 
                   return (
                     <div
@@ -680,6 +695,12 @@ export default function CustomerDepositTab({ onClose, onSuccess }) {
                             </div>
                           </div>
                           <div className="flex items-center gap-3 text-xs text-slate-400 mt-1 flex-wrap">
+                            {saleDateLabel && (
+                              <span className="flex items-center gap-1">
+                                <CalendarIcon className="w-3 h-3" />
+                                {saleDateLabel}
+                              </span>
+                            )}
                             {sale.paxName && <span>{sale.paxName}</span>}
                             {sale.pnr && (
                               <span className="flex items-center gap-1">
@@ -861,18 +882,28 @@ export default function CustomerDepositTab({ onClose, onSuccess }) {
               {selectedAllocations.length > 1 ? "s" : ""} for{" "}
               <span className="font-medium text-slate-600">{name}</span>
             </p>
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               {selectedAllocations.map((a) => {
                 const sale = salesById.get(a.saleId);
+                const saleDateLabel = formatSaleDate(sale?.saleDate);
                 return (
                   <div
                     key={a.saleId}
-                    className="flex items-center justify-between text-sm"
+                    className="flex items-center justify-between text-sm gap-3"
                   >
-                    <span className="text-slate-600">
-                      Invoice {sale?.invoiceNo ?? a.saleId}
-                    </span>
-                    <span className="font-medium text-slate-800">
+                    <div className="min-w-0">
+                      <p className="text-slate-600 truncate">
+                        Invoice {sale?.invoiceNo ?? a.saleId}
+                      </p>
+                      {(sale?.paxName || saleDateLabel) && (
+                        <p className="text-[11px] text-slate-400 truncate">
+                          {[sale?.paxName, saleDateLabel]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </p>
+                      )}
+                    </div>
+                    <span className="font-medium text-slate-800 whitespace-nowrap">
                       {fmt(a.amount)}
                     </span>
                   </div>
