@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { CalendarIcon, Download, Filter, Search } from "lucide-react";
+import { CalendarIcon, Download, Filter, Search, X } from "lucide-react";
 import {
   format,
   subDays,
@@ -529,23 +529,28 @@ export default function SalesReport() {
               </Select>
             </div>
 
-            <div className="space-y-2 flex items-center">
-              <div>
+            <div className="space-y-2">
+              <Label>Apply</Label>
+
+              <div className="flex items-center gap-2">
                 <Button
-                  className="w-full bg-gradient-primary"
                   onClick={runSearch}
+                  className="bg-gradient-primary min-w-[140px] h-8"
                 >
                   <Search className="h-4 w-4 mr-2" />
                   Search
                 </Button>
-              </div>
-              {hasActiveFilters && (
-                <div className="flex justify-end mt-4">
-                  <Button variant="outline" size="sm" onClick={clearFilters}>
-                    Clear All Filters
+
+                {hasActiveFilters && (
+                  <Button
+                    variant="outline"
+                    onClick={clearFilters}
+                    className="h-8 border-destructive/30 text-destructive hover:bg-destructive hover:text-destructive-foreground transition-all"
+                  >
+                    <X className="h-4 w-4" />
                   </Button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
         </CardContent>

@@ -281,13 +281,14 @@ function SlotFields({
   }, [isTabbyOrTamara, orderAmount]);
 
   // Restores the Order Amount when re-opening a saved Tabby/Tamara payment.
-  // Two cases:
-  //  1. A net amount was already recorded (amount > 0) — reverse the fee
-  //     math to recover the original order amount.
-  //  2. Nothing has been recorded yet (e.g. an unpaid/DUE credit sale, where
-  //     paidAmount is 0 and the backend never persisted paymentMeta.orderAmount)
-  //     — fall back to the sale's sell price, since that's what Tabby/Tamara
-  //     charged the customer before deducting their fee.
+  // paymentMeta (and its orderAmount) isn't persisted on the Sale model, so
+  // on reload we always have to reconstruct it from whatever WAS saved:
+  //  1. amount > 0 — a net amount was recorded as paidAmount; reverse the
+  //     fee math on that.
+  //  2. amount is 0 (the normal case for Tabby/Tamara, since paidAmount is
+  //     deliberately zeroed out — see EditSalesTab) — sellPrice is where the
+  //     net settlement amount actually lives for these sales, so reverse
+  //     the fee math on THAT instead of displaying it as-is.
   const seededOrderAmount = useRef(false);
   useEffect(() => {
     if (isTabbyOrTamara && !orderAmount && !seededOrderAmount.current) {
@@ -297,7 +298,7 @@ function SlotFields({
         setOrderAmount(String(reverseTabbyOrderAmount(amount)));
       } else if (Number(sellPrice) > 0) {
         seededOrderAmount.current = true;
-        setOrderAmount(String(sellPrice));
+        setOrderAmount(String(reverseTabbyOrderAmount(sellPrice)));
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

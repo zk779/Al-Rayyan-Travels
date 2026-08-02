@@ -927,7 +927,7 @@ export default function LedgerComponent() {
 						subColor: isPositive ? "text-blue-600" : "text-orange-500",
 					},
 				].map((c) => (
-					<Card key={c.label} className={cn("border-l-4 shadow-sm", c.border)}>
+					<Card key={c.label} className={cn("border-l-4 shadow-sm py-0!", c.border)}>
 						<CardContent className="p-4">
 							<div className="flex items-center justify-between mb-2">
 								<span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{c.label}</span>
@@ -968,7 +968,7 @@ export default function LedgerComponent() {
 			)}
 
 			{/* ── Filters ── */}
-			<Card className="shadow-sm mb-6 border-gray-200">
+			<Card className="shadow-sm mb-6 border-gray-200 py-0!">
 				<CardContent className="p-4">
 					<div className="flex items-center justify-between mb-3">
 						<div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
