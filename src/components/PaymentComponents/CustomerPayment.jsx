@@ -234,7 +234,6 @@ export default function CustomerDepositTab({ onClose, onSuccess }) {
         };
       });
       setSelections(initial);
-
       if (list.length === 0)
         setSalesError("No due or partial invoices for this customer");
     } catch (err) {
