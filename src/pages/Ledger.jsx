@@ -55,6 +55,7 @@ import {
 	Calendar,
 	ChevronsLeft,
 	ChevronsRight,
+	Scale,
 } from "lucide-react";
 import { format } from "date-fns";
 import {
@@ -66,6 +67,8 @@ import { cn } from "../../shadcn/lib/utils";
 import RangeCalendar from "../components/DragCalendar";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
+
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
 /* ======================= HELPERS ======================= */
 
@@ -757,16 +760,19 @@ export default function LedgerComponent() {
 	const [selectedVendorId, setSelectedVendorId]       = useState("all");
 	const [selectedCustomerId, setSelectedCustomerId]   = useState("all");
 
-	const [dateRange, setDateRange] = useState(() => {
-		const now = new Date();
-		return { from: new Date(now.getFullYear(), now.getMonth(), 1), to: now };
-	});
+	// No default range — an unfiltered fetch just returns the latest entries
+	// (server already sorts newest-first); a range only kicks in once picked.
+	const [dateRange, setDateRange] = useState(null);
 
 	const [page, setPage]       = useState(1);
-	const [limit]               = useState(50);
+	const [limit, setLimit]     = useState(50); // page size — user-adjustable via dropdown
 	const [total, setTotal]     = useState(0);
 	const [totalPages, setTotalPages] = useState(1);
 	const [isLoading, setIsLoading]   = useState(false);
+
+	// Server-computed totals for the FULL filtered set (all pages), from
+	// GET /api/ledger?...&includeSummary=true → { overall, byAccount }
+	const [summary, setSummary] = useState(null);
 
 	/* ---------- Master data ---------- */
 	useEffect(() => {
@@ -783,6 +789,7 @@ export default function LedgerComponent() {
 			params.set("page", page);
 			params.set("limit", limit);
 			params.set("includeDetails", "true");
+			params.set("includeSummary", "true");
 
 			if (entryType !== "ALL") params.set("entryType", entryType);
 			if (accountType === "VENDOR"   && selectedVendorId   !== "all") params.set("vendorId", selectedVendorId);
@@ -794,6 +801,7 @@ export default function LedgerComponent() {
 			setEntries(res.data || []);
 			setTotal(res.meta?.total || 0);
 			setTotalPages(res.meta?.totalPages || 1);
+			setSummary(res.summary || null);
 		} catch (e) {
 			console.error(e);
 			alert(e.message);
@@ -805,27 +813,45 @@ export default function LedgerComponent() {
 	useEffect(() => { fetchLedger(); }, [fetchLedger]);
 
 	/* ---------- Calculations ---------- */
-	const totals = useMemo(() =>
+
+	// Totals for entries loaded on the CURRENT page only.
+	const pageTotals = useMemo(() =>
 		entries.reduce((acc, e) => {
 			acc.credit += Number(e.credit || 0);
 			acc.debit  += Number(e.debit  || 0);
 			return acc;
 		}, { credit: 0, debit: 0 }),
 	[entries]);
+	const pageNet = pageTotals.credit - pageTotals.debit;
 
-	const netBalance = totals.credit - totals.debit;
+	// Totals across the ENTIRE filtered set (every page), from the server.
+	const overallTotals = summary?.overall ?? null;
+	const headlineTotals = overallTotals
+		? { credit: overallTotals.totalCredit, debit: overallTotals.totalDebit }
+		: pageTotals; // fallback while summary hasn't loaded yet
+	const netBalance = headlineTotals.credit - headlineTotals.debit;
 	const isPositive = netBalance >= 0;
+
+	// When a specific vendor/customer is selected, pull that single account's
+	// totals + live balance out of summary.byAccount.
+	const selectedReferenceId =
+		accountType === "VENDOR"   && selectedVendorId   !== "all" ? selectedVendorId :
+		accountType === "CUSTOMER" && selectedCustomerId !== "all" ? selectedCustomerId :
+		null;
+
+	const singleAccountSummary = selectedReferenceId
+		? summary?.byAccount?.find((a) => a.referenceId === selectedReferenceId) ?? null
+		: null;
 
 	/* ---------- Filters ---------- */
 	const clearFilters = () => {
 		setAccountType("VENDOR"); setEntryType("ALL");
 		setSelectedVendorId("all"); setSelectedCustomerId("all");
-		const now = new Date();
-		setDateRange({ from: new Date(now.getFullYear(), now.getMonth(), 1), to: now });
+		setDateRange(null);
 		setPage(1);
 	};
 
-	const hasActiveFilters = accountType !== "VENDOR" || entryType !== "ALL" || selectedVendorId !== "all" || selectedCustomerId !== "all";
+	const hasActiveFilters = accountType !== "VENDOR" || entryType !== "ALL" || selectedVendorId !== "all" || selectedCustomerId !== "all" || !!dateRange;
 
 	/* ---------- Export ---------- */
 	const exportCSV = () => {
@@ -877,17 +903,17 @@ export default function LedgerComponent() {
 				</div>
 			</div>
 
-			{/* ── Summary Cards ── */}
-			<div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+			{/* ── Summary Cards (totals across ALL filtered pages) ── */}
+			<div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
 				{[
 					{
-						label: "Total Credit", value: totals.credit,
+						label: "Total Credit", value: headlineTotals.credit,
 						icon: <TrendingUp className="w-5 h-5 text-emerald-600" />,
 						bg: "bg-emerald-50", border: "border-l-emerald-500",
 						sub: "Money In", subColor: "text-emerald-600",
 					},
 					{
-						label: "Total Debit", value: totals.debit,
+						label: "Total Debit", value: headlineTotals.debit,
 						icon: <TrendingDown className="w-5 h-5 text-rose-600" />,
 						bg: "bg-rose-50", border: "border-l-rose-500",
 						sub: "Money Out", subColor: "text-rose-600",
@@ -910,11 +936,36 @@ export default function LedgerComponent() {
 							<div className="text-2xl font-bold text-gray-900">
 								<Money value={c.value} size={18} />
 							</div>
-							<div className={cn("text-xs font-medium mt-1", c.subColor)}>{c.sub}</div>
+							<div className={cn("text-xs font-medium mt-1", c.subColor)}>
+								{c.sub}
+								{overallTotals && <span className="text-gray-400 font-normal"> · all pages</span>}
+							</div>
 						</CardContent>
 					</Card>
 				))}
 			</div>
+
+			{/* ── Single account balance (shown when one vendor/customer is selected) ── */}
+			{singleAccountSummary && (
+				<div className="mb-6 flex flex-wrap items-center gap-2 px-4 py-3 rounded-lg bg-slate-50 border border-slate-200">
+					{accountTypeIcon(singleAccountSummary.type)}
+					<span className="text-sm font-semibold text-gray-800">{singleAccountSummary.name}</span>
+					<span className="text-gray-300">•</span>
+					<span className="inline-flex items-center gap-1 text-xs text-gray-500">
+						<Scale className="w-3.5 h-3.5" /> Live Balance:
+					</span>
+					<Money value={singleAccountSummary.currentBalance} className="font-bold text-slate-800" />
+					<span className="text-gray-300 hidden sm:inline">•</span>
+					<span className="text-xs text-gray-500 hidden sm:inline">Filtered Debit/Credit:</span>
+					<span className="hidden sm:inline-flex items-center gap-1 text-xs font-semibold text-rose-600">
+						<Money value={singleAccountSummary.totalDebit} size={11} />
+					</span>
+					<span className="hidden sm:inline text-gray-300">/</span>
+					<span className="hidden sm:inline-flex items-center gap-1 text-xs font-semibold text-emerald-600">
+						<Money value={singleAccountSummary.totalCredit} size={11} />
+					</span>
+				</div>
+			)}
 
 			{/* ── Filters ── */}
 			<Card className="shadow-sm mb-6 border-gray-200">
@@ -1022,19 +1073,57 @@ export default function LedgerComponent() {
 			{/* ── Table ── */}
 			<Card className="shadow-sm border-gray-200">
 				<CardHeader className="pb-3 pt-4 px-4 border-b border-gray-100">
-					<div className="flex items-center justify-between">
+					<div className="flex items-center justify-between flex-wrap gap-2">
 						<div>
 							<CardTitle className="text-base font-bold text-gray-800">Ledger Entries</CardTitle>
 							<CardDescription className="text-xs mt-0.5">
 								{isLoading ? "Loading…" : `Showing ${entries.length} of ${total} records • Page ${page} of ${totalPages}`}
 							</CardDescription>
 						</div>
-						{total > 0 && (
-							<Badge variant="outline" className="text-xs px-2 py-1 bg-slate-50 border-slate-200 text-slate-600">
-								{total.toLocaleString()} Total
-							</Badge>
-						)}
+						<div className="flex items-center gap-2">
+							{total > 0 && (
+								<Badge variant="outline" className="text-xs px-2 py-1 bg-slate-50 border-slate-200 text-slate-600">
+									{total.toLocaleString()} Total
+								</Badge>
+							)}
+							{/* Page size selector */}
+							<Select value={String(limit)} onValueChange={(v) => { setLimit(Number(v)); setPage(1); }}>
+								<SelectTrigger className="h-8 w-[110px] text-xs">
+									<SelectValue />
+								</SelectTrigger>
+								<SelectContent>
+									{PAGE_SIZE_OPTIONS.map((n) => (
+										<SelectItem key={n} value={String(n)} className="text-xs">
+											{n} / page
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						</div>
 					</div>
+
+					{/* Per-page totals — computed from the entries currently loaded (this page only) */}
+					{!isLoading && entries.length > 0 && (
+						<div className="flex flex-wrap gap-3 pt-3">
+							<div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-sm font-medium">
+								<Receipt className="h-4 w-4" /> {entries.length} Transactions (page)
+							</div>
+							<div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-sm font-medium">
+								<TrendingUp className="h-4 w-4" /> <Money value={pageTotals.credit} /> Credit (page)
+							</div>
+							<div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-rose-50 text-rose-700 text-sm font-medium">
+								<TrendingDown className="h-4 w-4" /> <Money value={pageTotals.debit} /> Debit (page)
+							</div>
+							<div
+								className={cn(
+									"flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium",
+									pageNet >= 0 ? "bg-purple-50 text-purple-700" : "bg-orange-50 text-orange-700"
+								)}
+							>
+								<SaudiRiyal size={14} /> <Money value={pageNet} /> Net (page)
+							</div>
+						</div>
+					)}
 				</CardHeader>
 
 				<CardContent className="p-0">

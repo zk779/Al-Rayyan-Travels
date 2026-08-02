@@ -94,7 +94,7 @@ export default function RangeCalendar({
         </button>
       </div>
 
-      <div className="flex gap-6">
+      <div className="flex flex-col sm:flex-row gap-6 max-w-[90vw]">
         {months.map((monthDate) => (
           <MonthGrid
             key={monthDate.toISOString()}
@@ -121,7 +121,7 @@ function MonthGrid({ monthDate, range, anchor, onDayClick, onDayMouseEnter }) {
   const today = new Date();
 
   return (
-    <div className="w-[252px]">
+    <div className="w-[252px] max-w-full">
       <div className="text-center text-sm font-medium mb-2">
         {format(monthDate, "MMMM yyyy")}
       </div>

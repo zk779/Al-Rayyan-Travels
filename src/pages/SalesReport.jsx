@@ -60,14 +60,17 @@ const DATE_PRESETS = [
 const DEFAULT_PAGINATION = { total: 0, pages: 1 };
 const DEFAULT_SUMMARY = { totalSell: 0, totalProfit: 0 };
 
-function useDebouncedValue(value, delay = 400) {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const t = setTimeout(() => setDebounced(value), delay);
-    return () => clearTimeout(t);
-  }, [value, delay]);
-  return debounced;
-}
+// Everything a "search" submits. No date range by default — an unfiltered
+// fetch just returns the latest entries (server-side default sort/limit);
+// a range only kicks in once the user actually picks one.
+const defaultFilters = () => ({
+  search: "",
+  searchBy: "all",
+  dateRange: null,
+  agent: "all",
+  branch: "all",
+  order: "desc", // desc = newest first
+});
 
 export default function SalesReport() {
   const { hasPermission } = useAuth();
@@ -81,18 +84,15 @@ export default function SalesReport() {
   const [activeTab, setActiveTab] = useState(
     canViewSales ? "detailed" : canViewRefunds ? "refunds" : null,
   );
-  const [dateRange, setDateRange] = useState({
-    from: subDays(new Date(), 1),
-    to: new Date(),
-  });
-  const [selectedAgent, setSelectedAgent] = useState("all");
-  const [selectedBranch, setSelectedBranch] = useState("all");
-  const [sortOrder, setSortOrder] = useState("desc"); // desc = newest first
 
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchBy, setSearchBy] = useState("all"); // drives placeholder text only —
-  // the API already searches invoiceNo/documentNo/remarks together
-  const debouncedSearch = useDebouncedValue(searchQuery);
+  // `draft` is what the filter controls are bound to (edited freely, no
+  // network effect). `applied` is the last submitted snapshot — every
+  // fetch, and everything the table renders (highlighting, result counts),
+  // is derived from `applied` only. They start out equal so the first
+  // load uses sane defaults.
+  const [draft, setDraft] = useState(defaultFilters);
+  const [applied, setApplied] = useState(draft);
+  const setField = (key, value) => setDraft((d) => ({ ...d, [key]: value }));
 
   const [users, setUsers] = useState([]);
   const [branches, setBranches] = useState([]);
@@ -111,29 +111,31 @@ export default function SalesReport() {
     const now = new Date();
     switch (preset) {
       case "today":
-        setDateRange({ from: now, to: now });
+        setField("dateRange", { from: now, to: now });
         break;
       case "yesterday": {
         const y = subDays(now, 1);
-        setDateRange({ from: y, to: y });
+        setField("dateRange", { from: y, to: y });
         break;
       }
       case "last7days":
-        setDateRange({ from: subDays(now, 6), to: now });
+        setField("dateRange", { from: subDays(now, 6), to: now });
         break;
       case "last30days":
-        setDateRange({ from: subDays(now, 29), to: now });
+        setField("dateRange", { from: subDays(now, 29), to: now });
         break;
       case "thisMonth":
-        setDateRange({ from: startOfMonth(now), to: endOfMonth(now) });
+        setField("dateRange", { from: startOfMonth(now), to: endOfMonth(now) });
         break;
       case "thisYear":
-        setDateRange({ from: startOfYear(now), to: endOfYear(now) });
+        setField("dateRange", { from: startOfYear(now), to: endOfYear(now) });
         break;
       default:
         break;
     }
   };
+
+  /* ── Agent list, once, for the Agent dropdown ── */
   useEffect(() => {
     if (!canFilterByAgent) return;
     fetch(`${API_BASE}/api/users`, { headers: authHeaders() })
@@ -144,6 +146,7 @@ export default function SalesReport() {
       .catch(() => {});
   }, [canFilterByAgent]);
 
+  /* ── Branch list, once, for the Branch dropdown (SALE_VIEW_ALL only) ── */
   useEffect(() => {
     if (!canViewAllBranches) return;
     fetch(`${API_BASE}/api/branches`, { headers: authHeaders() })
@@ -154,44 +157,32 @@ export default function SalesReport() {
       .catch(() => {});
   }, [canViewAllBranches]);
 
+  /* ── Shared query-string builder, driven ONLY by `applied` ── */
   const buildParams = useCallback(
     ({ fromKey, toKey, agentKey, orderKey }) => {
+      const { search, dateRange, agent, branch, order } = applied;
       const params = new URLSearchParams();
-      if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
+      if (search.trim()) params.set("search", search.trim());
       if (dateRange?.from)
         params.set(fromKey, format(dateRange.from, "yyyy-MM-dd"));
       if (dateRange?.to) params.set(toKey, format(dateRange.to, "yyyy-MM-dd"));
-      // Only ever sent for users who can filter by agent — SALE_VIEW_OWN
-      // users have no agent dropdown (and no non-"all" selectedAgent) to
-      // send in the first place.
-      if (canFilterByAgent && selectedAgent !== "all")
-        params.set(agentKey, selectedAgent);
-      if (canViewAllBranches && selectedBranch !== "all")
-        params.set("branchId", selectedBranch);
-      params.set(orderKey, sortOrder);
+      // Only ever sent for users who can filter by agent/branch — everyone
+      // else has no such dropdown (and no non-"all" value) to send.
+      if (canFilterByAgent && agent !== "all") params.set(agentKey, agent);
+      if (canViewAllBranches && branch !== "all")
+        params.set("branchId", branch);
+      params.set(orderKey, order);
       params.set("tz", Intl.DateTimeFormat().resolvedOptions().timeZone);
       return params.toString();
     },
-    [
-      debouncedSearch,
-      dateRange,
-      selectedAgent,
-      selectedBranch,
-      canFilterByAgent,
-      canViewAllBranches,
-      sortOrder,
-    ],
+    [applied, canFilterByAgent, canViewAllBranches],
   );
+
+  // Page size is a display control, not a submitted filter — reset to
+  // page 1 immediately rather than waiting on Search.
   useEffect(() => {
     setSalesPage(1);
-  }, [
-    debouncedSearch,
-    dateRange,
-    selectedAgent,
-    selectedBranch,
-    sortOrder,
-    salesPageSize,
-  ]);
+  }, [salesPageSize]);
 
   /* ── Fetch sales — filtered & paginated server-side ── */
   const fetchSales = useCallback(async () => {
@@ -273,30 +264,41 @@ export default function SalesReport() {
       setRefundLoading(false);
     }
   }, [buildParams]);
+
+  /* ── Lazy, tab-aware fetching. Fires on mount, on tab switch, on
+     page/pageSize change, and whenever `applied` changes (Search/Clear) —
+     all via the `fetchSales`/`fetchRefunds` identity changing. ── */
   useEffect(() => {
-    if (activeTab === "detailed" && canViewSales) fetchSales(); // RBAC guard
+    if (activeTab === "detailed" && canViewSales) fetchSales();
   }, [activeTab, fetchSales, canViewSales]);
 
   useEffect(() => {
-    if (activeTab === "refunds" && canViewRefunds) fetchRefunds(); // RBAC guard
+    if (activeTab === "refunds" && canViewRefunds) fetchRefunds();
   }, [activeTab, fetchRefunds, canViewRefunds]);
 
+  // Submits the draft filters — the only point where a filter change
+  // actually reaches the API.
+  const runSearch = () => {
+    setApplied(draft);
+    setSalesPage(1);
+  };
+
   const clearFilters = () => {
-    setSearchQuery("");
-    setSearchBy("all");
-    setSelectedAgent("all");
-    setSelectedBranch("all");
-    setSortOrder("desc");
-    setDateRange({ from: subDays(new Date(), 30), to: new Date() });
+    const f = defaultFilters();
+    setDraft(f);
+    setApplied(f);
+    setSalesPage(1);
   };
 
   const hasActiveFilters =
-    searchQuery ||
-    selectedAgent !== "all" ||
-    selectedBranch !== "all" ||
-    sortOrder !== "desc";
+    draft.search ||
+    draft.dateRange ||
+    draft.agent !== "all" ||
+    draft.branch !== "all" ||
+    draft.order !== "desc";
 
-  // Exports the currently loaded page of sales — matches what's on screen.
+  // Exports the currently loaded page of sales — matches what's on screen,
+  // so it's keyed off `applied` (what was actually fetched), not `draft`.
   const exportCsv = () => {
     const headers = [
       "Date",
@@ -332,9 +334,14 @@ export default function SalesReport() {
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `sales-report-${format(dateRange.from, "yyyyMMdd")}-${format(dateRange.to, "yyyyMMdd")}.csv`;
+    const suffix = applied.dateRange
+      ? `${format(applied.dateRange.from, "yyyyMMdd")}-${format(applied.dateRange.to, "yyyyMMdd")}`
+      : format(new Date(), "yyyyMMdd");
+    a.download = `sales-report-${suffix}.csv`;
     a.click();
   };
+
+  // RBAC — if user has neither permission, show a simple empty state
   if (!canViewSales && !canViewRefunds) {
     return (
       <div className="w-full mx-auto p-6">
@@ -376,176 +383,175 @@ export default function SalesReport() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {(() => {
-            const FILTER_GRID_COLS = {
-              5: "lg:grid-cols-4",
-              6: "lg:grid-cols-5",
-              7: "lg:grid-cols-6",
-            };
-            const filterColumnCount =
-              5 + (canFilterByAgent ? 1 : 0) + (canViewAllBranches ? 1 : 0);
-            const filterGridClass =
-              FILTER_GRID_COLS[filterColumnCount] || "lg:grid-cols-6";
-
-            return (
-              <div
-                className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 ${filterGridClass} gap-4`}
+          {/* Auto-fit: each filter claims a 180px+ column and wraps to as
+              many rows as needed — no breakpoint/column-count bookkeeping. */}
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-4">
+            <div className="space-y-2">
+              <Label>Search By</Label>
+              <Select
+                value={draft.searchBy}
+                onValueChange={(v) => setField("searchBy", v)}
               >
-                <div className="space-y-2">
-                  <Label>Search By</Label>
-                  <Select value={searchBy} onValueChange={setSearchBy}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Fields</SelectItem>
-                      <SelectItem value="invoiceNumber">
-                        Invoice Number
-                      </SelectItem>
-                      <SelectItem value="documentNumber">
-                        Document Number
-                      </SelectItem>
-                      <SelectItem value="remarks">Remarks</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2 ">
-                  <Label>Search Query</Label>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
-                    <Input
-                      placeholder={
-                        searchBy === "invoiceNumber"
-                          ? "Search by invoice number..."
-                          : searchBy === "documentNumber"
-                            ? "Search by document number..."
-                            : searchBy === "remarks"
-                              ? "Search by remarks..."
-                              : "Search across all fields..."
-                      }
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-10 w-full"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Date Range</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="w-full justify-start text-left font-normal"
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {dateRange?.from ? (
-                          dateRange.to ? (
-                            <>
-                              {format(dateRange.from, "LLL dd, y")} -{" "}
-                              {format(dateRange.to, "LLL dd, y")}
-                            </>
-                          ) : (
-                            format(dateRange.from, "LLL dd, y")
-                          )
-                        ) : (
-                          <span>Pick a date range</span>
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <div className="p-3 border-b grid grid-cols-2 gap-2">
-                        {DATE_PRESETS.map(([key, label]) => (
-                          <Button
-                            key={key}
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDatePreset(key)}
-                          >
-                            {label}
-                          </Button>
-                        ))}
-                      </div>
-                      <RangeCalendar
-                        defaultMonth={dateRange?.from}
-                        selected={dateRange}
-                        onSelect={setDateRange}
-                        numberOfMonths={2}
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-
-                {canFilterByAgent && (
-                  <div className="space-y-2">
-                    <Label>Agent</Label>
-                    <Select
-                      value={selectedAgent}
-                      onValueChange={setSelectedAgent}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Agents</SelectItem>
-                        {users.map((u) => (
-                          <SelectItem key={u.id} value={u.id}>
-                            {u.fullName}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                {canViewAllBranches && (
-                  <div className="space-y-2">
-                    <Label>Branch</Label>
-                    <Select
-                      value={selectedBranch}
-                      onValueChange={setSelectedBranch}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Branches</SelectItem>
-                        {branches.map((b) => (
-                          <SelectItem key={b.id} value={b.id}>
-                            {b.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                <div className="space-y-2">
-                  <Label>Sort</Label>
-                  <Select value={sortOrder} onValueChange={setSortOrder}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="desc">Newest first</SelectItem>
-                      <SelectItem value="asc">Oldest first</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            );
-          })()}
-
-          {hasActiveFilters && (
-            <div className="flex justify-end mt-4">
-              <Button variant="outline" size="sm" onClick={clearFilters}>
-                Clear All Filters
-              </Button>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Fields</SelectItem>
+                  <SelectItem value="invoiceNumber">Invoice Number</SelectItem>
+                  <SelectItem value="documentNumber">
+                    Document Number
+                  </SelectItem>
+                  <SelectItem value="remarks">Remarks</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-          )}
+
+            <div className="space-y-2">
+              <Label>Search Query</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
+                <Input
+                  placeholder={
+                    draft.searchBy === "invoiceNumber"
+                      ? "Search by invoice number..."
+                      : draft.searchBy === "documentNumber"
+                        ? "Search by document number..."
+                        : draft.searchBy === "remarks"
+                          ? "Search by remarks..."
+                          : "Search across all fields..."
+                  }
+                  value={draft.search}
+                  onChange={(e) => setField("search", e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && runSearch()}
+                  className="pl-10 w-full"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Date Range</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full min-w-0 justify-start text-left font-normal"
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                    <span className="truncate">
+                      {draft.dateRange?.from
+                        ? draft.dateRange.to
+                          ? `${format(draft.dateRange.from, "dd MMM yy")} - ${format(draft.dateRange.to, "dd MMM yy")}`
+                          : format(draft.dateRange.from, "dd MMM yy")
+                        : "Pick a date range"}
+                    </span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <div className="p-3 border-b grid grid-cols-2 gap-2">
+                    {DATE_PRESETS.map(([key, label]) => (
+                      <Button
+                        key={key}
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDatePreset(key)}
+                      >
+                        {label}
+                      </Button>
+                    ))}
+                  </div>
+                  <RangeCalendar
+                    defaultMonth={draft.dateRange?.from}
+                    selected={draft.dateRange}
+                    onSelect={(range) => setField("dateRange", range)}
+                    numberOfMonths={2}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            {canFilterByAgent && (
+              <div className="space-y-2">
+                <Label>Agent</Label>
+                <Select
+                  value={draft.agent}
+                  onValueChange={(v) => setField("agent", v)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Agents</SelectItem>
+                    {users.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>
+                        {u.fullName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {canViewAllBranches && (
+              <div className="space-y-2">
+                <Label>Branch</Label>
+                <Select
+                  value={draft.branch}
+                  onValueChange={(v) => setField("branch", v)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Branches</SelectItem>
+                    {branches.map((b) => (
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label>Sort</Label>
+              <Select
+                value={draft.order}
+                onValueChange={(v) => setField("order", v)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="desc">Newest first</SelectItem>
+                  <SelectItem value="asc">Oldest first</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2 flex items-center">
+              <div>
+                <Button
+                  className="w-full bg-gradient-primary"
+                  onClick={runSearch}
+                >
+                  <Search className="h-4 w-4 mr-2" />
+                  Search
+                </Button>
+              </div>
+              {hasActiveFilters && (
+                <div className="flex justify-end mt-4">
+                  <Button variant="outline" size="sm" onClick={clearFilters}>
+                    Clear All Filters
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
         </CardContent>
       </Card>
+
+      {/* Tabs */}
       {canViewSales && canViewRefunds ? (
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-2">
@@ -557,8 +563,8 @@ export default function SalesReport() {
             <DetailedReportTab
               salesData={salesData}
               loading={loading}
-              searchQuery={searchQuery}
-              searchBy={searchBy}
+              searchQuery={applied.search}
+              searchBy={applied.searchBy}
               totalSales={salesSummary.totalSell}
               totalProfit={salesSummary.totalProfit}
               page={salesPage}
@@ -574,8 +580,8 @@ export default function SalesReport() {
             <RefundsTab
               refundData={refundData}
               loading={refundLoading}
-              searchQuery={searchQuery}
-              searchBy={searchBy}
+              searchQuery={applied.search}
+              searchBy={applied.searchBy}
             />
           </TabsContent>
         </Tabs>
@@ -583,8 +589,8 @@ export default function SalesReport() {
         <DetailedReportTab
           salesData={salesData}
           loading={loading}
-          searchQuery={searchQuery}
-          searchBy={searchBy}
+          searchQuery={applied.search}
+          searchBy={applied.searchBy}
           totalSales={salesSummary.totalSell}
           totalProfit={salesSummary.totalProfit}
           page={salesPage}
@@ -598,8 +604,8 @@ export default function SalesReport() {
         <RefundsTab
           refundData={refundData}
           loading={refundLoading}
-          searchQuery={searchQuery}
-          searchBy={searchBy}
+          searchQuery={applied.search}
+          searchBy={applied.searchBy}
         />
       )}
     </div>
