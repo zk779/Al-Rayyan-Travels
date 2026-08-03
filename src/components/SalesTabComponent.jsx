@@ -625,7 +625,18 @@ export default function SalesTabComponent() {
               <Calendar
                 mode="single"
                 selected={saleDate}
-                onSelect={(d) => d && setSaleDate(d)}
+                onSelect={(d) => {
+                  if (!d) return;
+                  const now = new Date();
+                  const merged = new Date(d);
+                  merged.setHours(
+                    now.getHours(),
+                    now.getMinutes(),
+                    now.getSeconds(),
+                    now.getMilliseconds(),
+                  );
+                  setSaleDate(merged);
+                }}
                 initialFocus
               />
             </PopoverContent>
