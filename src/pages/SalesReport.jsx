@@ -103,7 +103,8 @@ export default function SalesReport() {
   const [salesPage, setSalesPage] = useState(1);
   const [salesPageSize, setSalesPageSize] = useState(10);
   const [loading, setLoading] = useState(false);
-
+// Add this alongside your other useState declarations
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [refundData, setRefundData] = useState([]);
   const [refundLoading, setRefundLoading] = useState(false);
 
@@ -430,7 +431,7 @@ export default function SalesReport() {
 
             <div className="space-y-2">
               <Label>Date Range</Label>
-              <Popover>
+              <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"

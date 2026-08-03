@@ -24,6 +24,7 @@ function buildMonthGrid(monthDate) {
 export default function RangeCalendar({
   selected,
   onSelect,
+  onRangeComplete, // NEW: called right after the 2nd click commits a range — use this to close the parent Popover
   defaultMonth,
   numberOfMonths = 2,
 }) {
@@ -53,6 +54,7 @@ export default function RangeCalendar({
     onSelect({ from, to });
     setAnchor(null);
     setHoverDay(null);
+    onRangeComplete?.({ from, to }); // NEW: let the parent close the popover
   };
 
   const handleDayMouseEnter = (day) => () => {

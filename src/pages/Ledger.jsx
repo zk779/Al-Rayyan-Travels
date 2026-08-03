@@ -56,6 +56,7 @@ import {
 	ChevronsLeft,
 	ChevronsRight,
 	Scale,
+	Pointer,
 } from "lucide-react";
 import { format } from "date-fns";
 import {
@@ -559,6 +560,15 @@ function LedgerRow({ entry }) {
 						{format(new Date(entry.transactionDate), "dd MMM yyyy")}
 					</div>
 				</TableCell>
+				<TableCell className="py-3 max-w-[180px]">
+					<div className="text-xs text-gray-600 space-y-0.5">
+						{details?.sale?.pnr && (
+							<div className="flex items-center gap-1 font-mono font-semibold text-slate-700">
+								<span className="text-gray-400">{details.sale.documentNo}</span>
+							</div>
+						)}
+						</div>
+				</TableCell>
 
 				{/* Account */}
 				<TableCell className="py-3 max-w-[160px]">
@@ -631,12 +641,12 @@ function LedgerRow({ entry }) {
 					)}
 				</TableCell>
 
-				{/* Balance (running, if available) */}
+				{/* Balance (running, if available)
 				<TableCell className="py-3 text-right">
 					<span className="text-sm font-semibold text-slate-700">
 						{entry.balanceAfter != null ? <Money value={entry.balanceAfter} size={13} /> : "—"}
 					</span>
-				</TableCell>
+				</TableCell> */}
 
 				{/* Expand toggle */}
 				<TableCell className="py-3 w-8 text-center">
@@ -755,10 +765,12 @@ export default function LedgerComponent() {
 	const [vendors, setVendors]           = useState([]);
 	const [customers, setCustomers]       = useState([]);
 
-	const [accountType, setAccountType]   = useState("VENDOR");
+	const [accountType, setAccountType] = useState("SELECT"); // was "VENDOR"
 	const [entryType, setEntryType]       = useState("ALL");
 	const [selectedVendorId, setSelectedVendorId]       = useState("all");
 	const [selectedCustomerId, setSelectedCustomerId]   = useState("all");
+	// Add this alongside your other useState declarations
+	const [datePickerOpen, setDatePickerOpen] = useState(false);
 
 	// No default range — an unfiltered fetch just returns the latest entries
 	// (server already sorts newest-first); a range only kicks in once picked.
@@ -782,8 +794,16 @@ export default function LedgerComponent() {
 
 	/* ---------- Fetch ledger ---------- */
 	const fetchLedger = useCallback(async () => {
-		setIsLoading(true);
-		try {
+			if (accountType === "SELECT") {
+				setEntries([]);
+				setTotal(0);
+				setTotalPages(1);
+				setSummary(null);
+				return;
+			}
+		
+			setIsLoading(true);
+			try {
 			const params = new URLSearchParams();
 			params.set("accountType", accountType);
 			params.set("page", page);
@@ -794,8 +814,15 @@ export default function LedgerComponent() {
 			if (entryType !== "ALL") params.set("entryType", entryType);
 			if (accountType === "VENDOR"   && selectedVendorId   !== "all") params.set("vendorId", selectedVendorId);
 			if (accountType === "CUSTOMER" && selectedCustomerId !== "all") params.set("customerId", selectedCustomerId);
-			if (dateRange?.from) params.set("from", dateRange.from.toISOString());
-			if (dateRange?.to)   params.set("to",   dateRange.to.toISOString());
+
+			// Send plain local calendar dates (no time/Z) — the backend's
+			// localDayRangeToUtc converts these using the timezone below,
+			// so we must NOT pre-convert to ISO/UTC here ourselves.
+			if (dateRange?.from) params.set("from", format(dateRange.from, "yyyy-MM-dd"));
+			if (dateRange?.to)   params.set("to",   format(dateRange.to,   "yyyy-MM-dd"));
+			if (dateRange?.from || dateRange?.to) {
+				params.set("timezone", Intl.DateTimeFormat().resolvedOptions().timeZone);
+			}
 
 			const res = await apiRequest(`/api/ledger?${params.toString()}`);
 			setEntries(res.data || []);
@@ -845,13 +872,13 @@ export default function LedgerComponent() {
 
 	/* ---------- Filters ---------- */
 	const clearFilters = () => {
-		setAccountType("VENDOR"); setEntryType("ALL");
-		setSelectedVendorId("all"); setSelectedCustomerId("all");
-		setDateRange(null);
-		setPage(1);
-	};
+	setAccountType("SELECT"); setEntryType("ALL");
+	setSelectedVendorId("all"); setSelectedCustomerId("all");
+	setDateRange(null);
+	setPage(1);
+};
 
-	const hasActiveFilters = accountType !== "VENDOR" || entryType !== "ALL" || selectedVendorId !== "all" || selectedCustomerId !== "all" || !!dateRange;
+	const hasActiveFilters = accountType !== "SELECT" || entryType !== "ALL" || selectedVendorId !== "all" || selectedCustomerId !== "all" || !!dateRange;
 
 	/* ---------- Export ---------- */
 	const exportCSV = () => {
@@ -989,7 +1016,7 @@ export default function LedgerComponent() {
 							<Select value={accountType} onValueChange={(v) => { setAccountType(v); setSelectedVendorId("all"); setSelectedCustomerId("all"); setPage(1); }}>
 								<SelectTrigger className="h-9 text-sm w-full"><SelectValue /></SelectTrigger>
 								<SelectContent>
-									{[["VENDOR","Vendor",Building2],["CUSTOMER","Customer",Users],["EXPENSE","Expense",CreditCard],["CASH","Cash",Wallet],["BANK","Bank",Building2]].map(([val, label, Icon]) => (
+									{[["SELECT","Select Account",Pointer],["VENDOR","Vendor",Building2],["CUSTOMER","Customer",Users],["EXPENSE","Expense",CreditCard],["CASH","Cash",Wallet],["BANK","Bank",Building2]].map(([val, label, Icon]) => (
 										<SelectItem key={val} value={val}>
 											<div className="flex items-center gap-2"><Icon className="w-3.5 h-3.5" />{label}</div>
 										</SelectItem>
@@ -1042,15 +1069,14 @@ export default function LedgerComponent() {
 							</div>
 						)}
 
-						{/* Date Range */}
 						<div className={cn("space-y-1", (accountType === "VENDOR" || accountType === "CUSTOMER") ? "lg:col-span-2" : "lg:col-span-3")}>
-							<label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Date Range</label>
-							<Popover>
+						<label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Date Range</label>
+							<Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
 								<PopoverTrigger asChild>
-									<Button variant="outline" className="w-full justify-start h-9 text-sm font-normal">
+									<Button variant="outline" className="w-full justify-start h-9 text-sm 						font-normal">
 										<CalendarIcon className="mr-2 h-3.5 w-3.5 text-gray-400" />
 										{dateRange?.from && dateRange?.to
-											? <>{format(dateRange.from, "dd MMM yyyy")} — {format(dateRange.to, "dd MMM yyyy")}</>
+											? <>{format(dateRange.from, "dd MMM yyyy")} — {format(dateRange.to, 						"dd MMM yyyy")}</>
 											: <span className="text-gray-400">Pick range…</span>}
 									</Button>
 								</PopoverTrigger>
@@ -1061,11 +1087,12 @@ export default function LedgerComponent() {
 										defaultMonth={dateRange?.from}
 										selected={dateRange}
 										onSelect={setDateRange}
+										onRangeComplete={() => setDatePickerOpen(false)}
 										numberOfMonths={2}
 									/>
 								</PopoverContent>
 							</Popover>
-						</div>
+</div>
 					</div>
 				</CardContent>
 			</Card>
@@ -1132,12 +1159,13 @@ export default function LedgerComponent() {
 							<TableHeader>
 								<TableRow className="bg-gray-50 hover:bg-gray-50 border-b border-gray-200">
 									<TableHead className="text-xs font-bold text-gray-500 uppercase tracking-wide py-3 pl-4">Date</TableHead>
+									<TableHead className="text-xs font-bold text-gray-500 uppercase tracking-wide py-3 pl-4">Doc#</TableHead>
 									<TableHead className="text-xs font-bold text-gray-500 uppercase tracking-wide py-3">Account</TableHead>
 									<TableHead className="text-xs font-bold text-gray-500 uppercase tracking-wide py-3">Entry</TableHead>
 									<TableHead className="text-xs font-bold text-gray-500 uppercase tracking-wide py-3">Reference</TableHead>
 									<TableHead className="text-xs font-bold text-gray-500 uppercase tracking-wide py-3 text-right">Debit</TableHead>
 									<TableHead className="text-xs font-bold text-gray-500 uppercase tracking-wide py-3 text-right">Credit</TableHead>
-									<TableHead className="text-xs font-bold text-gray-500 uppercase tracking-wide py-3 text-right">Balance</TableHead>
+									{/* <TableHead className="text-xs font-bold text-gray-500 uppercase tracking-wide py-3 text-right">Balance</TableHead> */}
 									<TableHead className="w-8 py-3" />
 								</TableRow>
 							</TableHeader>
@@ -1157,12 +1185,16 @@ export default function LedgerComponent() {
 										<TableCell colSpan={8} className="text-center py-16">
 											<div className="flex flex-col items-center gap-2">
 												<BookOpen className="w-10 h-10 text-gray-200" />
-												<p className="text-gray-500 font-medium">No entries found</p>
-												<p className="text-gray-400 text-sm">Try adjusting your filters or date range</p>
+												<p className="text-gray-500 font-medium">
+													{accountType === "SELECT" ? "Select an account to view its ledger" : "No entries found"}
+												</p>
+												<p className="text-gray-400 text-sm">
+													{accountType === "SELECT" ? "Choose an Account Type above to get started" : "Try adjusting your filters or date range"}
+												</p>
 											</div>
 										</TableCell>
 									</TableRow>
-								) : (
+									) : (
 									entries.map((e) => <LedgerRow key={e.id} entry={e} />)
 								)}
 							</TableBody>

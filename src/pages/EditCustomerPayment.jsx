@@ -16,28 +16,49 @@ import { cn } from "../../shadcn/lib/utils";
 import SlideButton from "../../shadcn/components/ui/slide-button";
 import { API_BASE, authHeaders, fmt, balMeta, normalizeSale } from "../components/PaymentComponents/DepositShared";
 
-const CLOUDINARY_CLOUD_NAME = "REPLACE_WITH_CLOUD_NAME";
-const CLOUDINARY_UPLOAD_PRESET = "REPLACE_WITH_UNSIGNED_PRESET";
+const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+
+const ALLOWED_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp", "application/pdf"];
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB — keep in sync with backend limit
 
 async function uploadAttachment(file, setUploading) {
   if (!file) return null;
+
+  // Fail fast on the client before ever hitting Cloudinary
+  if (!ALLOWED_TYPES.includes(file.type)) {
+    throw new Error(`Unsupported file type "${file.type}". Allowed: jpg, jpeg, png, webp, pdf`);
+  }
+  if (file.size > MAX_FILE_SIZE) {
+    throw new Error("File is larger than 10MB");
+  }
+
   setUploading(true);
   try {
     const form = new FormData();
     form.append("file", file);
     form.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`, {
-      method: "POST",
-      body: form,
-    });
+    const resourceType = file.type === "application/pdf" ? "image" : "auto";
+
+    const res = await fetch(
+      `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`,
+      { method: "POST", body: form }
+    );
+
     const json = await res.json();
-    if (!json.secure_url) throw new Error("Upload failed");
+
+    if (!res.ok || !json.secure_url) {
+      throw new Error(json?.error?.message || "Upload failed");
+    }
+
     return json.secure_url;
+  } catch (err) {
+    console.error("Cloudinary upload error:", err);
+    throw err; // let the caller (component) show a toast/error state
   } finally {
     setUploading(false);
   }
 }
-
 // payment.customer must include a nested `account` relation.
 // payment.ledgerEntries (with saleId + credit) drives the existing allocation.
 export default function EditCustomerPayment({ payment, onClose, onSuccess }) {
