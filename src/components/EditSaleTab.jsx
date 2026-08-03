@@ -59,6 +59,9 @@ const calcPaxVAT = (netPrice) => {
 const calcProfit = (net, sell) =>
   (Number(sell || 0) - Number(net || 0)).toFixed(2);
 
+const isOriginKSA = (destinations = []) =>
+  destinations[0]?.airport?.country === "SA";
+
 const applyRouteEffects = (item, routeType) => {
   const u = { ...item, routeType };
   if (routeType === "DOMESTIC") {
@@ -68,8 +71,12 @@ const applyRouteEffects = (item, routeType) => {
     u.paxVat = "";
     u.vatAmount = "0.00";
   } else {
+    // MIXED
     u.paxVat = "";
     u.miscCharges = "";
+    u.vatAmount = isOriginKSA(item.destinations)
+      ? calcVAT(Number(item.sellPrice || 0) - Number(item.netPrice || 0))
+      : "0.00";
   }
   return u;
 };
@@ -90,7 +97,8 @@ const compactSelectStyles = {
 
 const routeTypeOptions = [
   { value: "DOMESTIC", label: "Domestic (KSA Only)" },
-  { value: "MIXED", label: "Domestic/International (Mixed)" },
+  { value: "MIXED", label: "External International (Mixed)" },
+  { value: "Internal", label: "Internal International (Mixed)" },
   { value: "ZERO_VAT", label: "Zero VAT Route (Non-KSA)" },
 ];
 
@@ -284,10 +292,16 @@ export default function EditSalesTab({ saleId }) {
           const updated = { ...item, [field]: value };
           const profit =
             Number(updated.sellPrice || 0) - Number(updated.netPrice || 0);
-          if (updated.routeType === "DOMESTIC")
+          if (updated.routeType === "DOMESTIC") {
             updated.paxVat = calcPaxVAT(updated.netPrice);
-          updated.vatAmount =
-            updated.routeType === "ZERO_VAT" ? "0.00" : calcVAT(profit);
+            updated.vatAmount = calcVAT(profit);
+          } else if (updated.routeType === "ZERO_VAT") {
+            updated.vatAmount = "0.00";
+          } else if (updated.routeType === "MIXED") {
+            updated.vatAmount = isOriginKSA(updated.destinations)
+              ? calcVAT(profit)
+              : "0.00";
+          }
           return updated;
         }
 
@@ -576,9 +590,17 @@ export default function EditSalesTab({ saleId }) {
                     <Select
                       options={routeTypeOptions}
                       value={
-                        routeTypeOptions.find(
-                          (o) => o.value === item.routeType,
-                        ) || null
+                        item.routeType === "MIXED"
+                          ? routeTypeOptions.find(
+                              (o) =>
+                                o.value ===
+                                (isOriginKSA(item.destinations)
+                                  ? "Internal"
+                                  : "MIXED"),
+                            ) || null
+                          : routeTypeOptions.find(
+                              (o) => o.value === item.routeType,
+                            ) || null
                       }
                       placeholder="Based on Destinations"
                       menuPortalTarget={document.body}
@@ -759,7 +781,15 @@ export default function EditSalesTab({ saleId }) {
 
                 {/* Row 2: Financials */}
                 <div
-                  className={`grid grid-cols-2 ${item.routeType === "DOMESTIC" ? "md:grid-cols-8" : "md:grid-cols-7"} gap-3`}
+                  className={`grid grid-cols-2 ${
+                    item.routeType === "DOMESTIC"
+                      ? "md:grid-cols-8"
+                      : item.routeType === "ZERO_VAT" ||
+                          (item.routeType === "MIXED" &&
+                            !isOriginKSA(item.destinations))
+                        ? "md:grid-cols-6"
+                        : "md:grid-cols-7"
+                  } gap-3`}
                 >
                   <div className="space-y-1">
                     <Label className="text-xs font-medium text-slate-600">
@@ -831,15 +861,21 @@ export default function EditSalesTab({ saleId }) {
                       className="h-8 text-sm cursor-not-allowed"
                     />
                   </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs font-medium text-blue-700">
-                      VAT 15% <SaudiRiyal size={15} />
-                    </Label>
-                    <div className="flex items-center gap-1 px-2 h-8 bg-blue-50 border border-blue-200 rounded text-xs font-semibold text-blue-700">
-                      <Calculator className="h-3 w-3" />$
-                      {item.vatAmount || "0.00"}
+                  {!(
+                    item.routeType === "ZERO_VAT" ||
+                    (item.routeType === "MIXED" &&
+                      !isOriginKSA(item.destinations))
+                  ) && (
+                    <div className="space-y-1">
+                      <Label className="text-xs font-medium text-blue-700">
+                        VAT 15% <SaudiRiyal size={15} />
+                      </Label>
+                      <div className="flex items-center gap-1 px-2 h-8 bg-blue-50 border border-blue-200 rounded text-xs font-semibold text-blue-700">
+                        <Calculator className="h-3 w-3" />$
+                        {item.vatAmount || "0.00"}
+                      </div>
                     </div>
-                  </div>
+                  )}
                   <div className="space-y-1">
                     <Label className="text-xs font-medium text-green-700">
                       Profit <SaudiRiyal size={15} />

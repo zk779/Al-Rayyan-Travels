@@ -9,8 +9,6 @@ export const SidebarProvider = ({ children }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [sidebarHidden, setSidebarHidden] = useState(false); // New flag
 
-  console.log("sidebarHidden:", sidebarHidden);
-  console.log("Sidebar Collapse:", isCollapsed);
 
   return (
     <SidebarContext.Provider

@@ -21,8 +21,6 @@ export const ThemeProvider = ({ children }) => {
     });
   };
 
-  console.log("ThemeContext: isDarkMode =", isDarkMode);
-
   // Apply the theme to the html tag when it changes
   useEffect(() => {
     if (isDarkMode) {
