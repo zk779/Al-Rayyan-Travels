@@ -561,13 +561,13 @@ function LedgerRow({ entry }) {
 					</div>
 				</TableCell>
 				<TableCell className="py-3 max-w-[180px]">
-					<div className="text-xs text-gray-600 space-y-0.5">
-						{details?.sale?.pnr && (
-							<div className="flex items-center gap-1 font-mono font-semibold text-slate-700">
-								<span className="text-gray-400">{details.sale.documentNo}</span>
-							</div>
-						)}
-						</div>
+    				<div className="text-xs text-gray-600 space-y-0.5">
+    				    {details?.sale?.documentNo && (
+    				        <div className="flex items-center gap-1 font-mono font-semibold text-slate-700">
+    				            <span className="text-gray-400">{details.sale.documentNo}</span>
+    				        </div>
+    				    )}
+    				</div>
 				</TableCell>
 
 				{/* Account */}

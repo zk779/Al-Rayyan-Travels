@@ -313,21 +313,21 @@ export default function EditSalesTab({ saleId }) {
 
   /* ── Totals ── */
   const totals = uiSales.reduce(
-  (acc, s) => {
-    const net = Number(s.netPrice) || 0;
-    const sell = Number(s.sellPrice) || 0;
-    const vat = Number(s.vatAmount) || 0;
-    return {
-      net: acc.net + net,
-      sell: acc.sell + sell,
-      profit: acc.profit + (sell - net),
-      vat: acc.vat + vat,
-      paxVat: acc.paxVat + (Number(s.paxVat) || 0),
-      misc: acc.misc + (Number(s.miscCharges) || 0),
-    };
-  },
-  { net: 0, sell: 0, profit: 0, vat: 0, paxVat: 0, misc: 0 },
-);
+    (acc, s) => {
+      const net = Number(s.netPrice) || 0;
+      const sell = Number(s.sellPrice) || 0;
+      const vat = Number(s.vatAmount) || 0;
+      return {
+        net: acc.net + net,
+        sell: acc.sell + sell,
+        profit: acc.profit + (sell - net),
+        vat: acc.vat + vat,
+        paxVat: acc.paxVat + (Number(s.paxVat) || 0),
+        misc: acc.misc + (Number(s.miscCharges) || 0),
+      };
+    },
+    { net: 0, sell: 0, profit: 0, vat: 0, paxVat: 0, misc: 0 },
+  );
 
   /* ── Submit ── */
   const handleSubmit = async () => {
@@ -525,7 +525,22 @@ export default function EditSalesTab({ saleId }) {
                   <Calendar
                     mode="single"
                     selected={saleDate}
-                    onSelect={(d) => d && setSaleDate(d)}
+                    onSelect={(d) => {
+                      if (!d) return;
+                      // The calendar returns the picked day at local midnight (time
+                      // stripped). Stored as-is, toISOString() shifts it by the
+                      // timezone offset, producing a wrong time. Keep the picked
+                      // date, but re-stamp it with the CURRENT time.
+                      const now = new Date();
+                      const merged = new Date(d);
+                      merged.setHours(
+                        now.getHours(),
+                        now.getMinutes(),
+                        now.getSeconds(),
+                        now.getMilliseconds(),
+                      );
+                      setSaleDate(merged);
+                    }}
                     initialFocus
                   />
                 </PopoverContent>
