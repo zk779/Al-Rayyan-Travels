@@ -809,7 +809,7 @@ export default function EditSalesTab({ saleId }) {
                       Net <SaudiRiyal size={15} />
                     </Label>
                     <Input
-                      type="number"
+                      type="tel"
                       value={item.netPrice || ""}
                       onChange={(e) =>
                         updateSale(item.id, "netPrice", e.target.value)
@@ -836,7 +836,7 @@ export default function EditSalesTab({ saleId }) {
                       MISC <SaudiRiyal size={15} />
                     </Label>
                     <Input
-                      type="number"
+                      type="tel"
                       value={item.miscCharges || ""}
                       onChange={(e) =>
                         updateSale(item.id, "miscCharges", e.target.value)
@@ -850,7 +850,7 @@ export default function EditSalesTab({ saleId }) {
                       Sell <SaudiRiyal size={15} />
                     </Label>
                     <Input
-                      type="number"
+                      type="tel"
                       value={item.sellPrice || ""}
                       onChange={(e) =>
                         updateSale(item.id, "sellPrice", e.target.value)
@@ -864,7 +864,7 @@ export default function EditSalesTab({ saleId }) {
                       Paid <SaudiRiyal size={15} />
                     </Label>
                     <Input
-                      type="number"
+                      type="tel"
                       readOnly
                       value={item.paidAmount || ""}
                       onChange={(e) =>

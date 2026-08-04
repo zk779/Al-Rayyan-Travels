@@ -925,7 +925,7 @@ export default function SalesTabComponent() {
                       Net <SaudiRiyal size={15} />
                     </RequiredLabel>
                     <Input
-                      type="number"
+                      type="tel"
                       value={item.netPrice}
                       onChange={(e) =>
                         updateSale(item.id, "netPrice", e.target.value)
@@ -952,7 +952,7 @@ export default function SalesTabComponent() {
                       MISC <SaudiRiyal size={15} />
                     </Label>
                     <Input
-                      type="number"
+                      type="tel"
                       value={item.miscCharges}
                       onChange={(e) =>
                         updateSale(item.id, "miscCharges", e.target.value)
@@ -968,7 +968,7 @@ export default function SalesTabComponent() {
                       Sell <SaudiRiyal size={15} />
                     </RequiredLabel>
                     <Input
-                      type="number"
+                      type="tel"
                       value={item.sellPrice}
                       onChange={(e) =>
                         updateSale(item.id, "sellPrice", e.target.value)
@@ -989,7 +989,7 @@ export default function SalesTabComponent() {
                       )}
                     </Label>
                     <Input
-                      type="number"
+                      type="tel"
                       value={item.paidAmount}
                       readOnly
                       placeholder="0.00"
