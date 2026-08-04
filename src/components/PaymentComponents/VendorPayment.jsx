@@ -60,6 +60,7 @@ export default function VendorDepositTab({ onClose, onSuccess }) {
   const [uploading, setUploading] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("CASH"); // CASH | BANK_TRANSFER
   const [bankId, setBankId] = useState("");
+  const [bankSlipNo, setBankSlipNo] = useState("");
   const [banks, setBanks] = useState([]);
   const [remarks, setRemarks] = useState("");
   const [success, setSuccess] = useState(false);
@@ -157,7 +158,10 @@ export default function VendorDepositTab({ onClose, onSuccess }) {
         form.append("partyType", "VENDOR");
         form.append("vendorId", entity.id);
         form.append("method", paymentMethod);
-        if (paymentMethod === "BANK_TRANSFER") form.append("bankId", bankId);
+        if (paymentMethod === "BANK_TRANSFER") {
+          form.append("bankId", bankId);
+          if (bankSlipNo) form.append("bankSlipNo", bankSlipNo); // NEW
+        }
         form.append("amount", String(parseFloat(amount) || 0));
         if (remarks) form.append("remarks", remarks);
         form.append("transactionDate", date.toISOString());
@@ -213,6 +217,7 @@ export default function VendorDepositTab({ onClose, onSuccess }) {
     setQuery("");
     setPaymentMethod("CASH");
     setBankId("");
+    setBankSlipNo("");
     setPayError("");
     setStep(1);
   };
@@ -662,6 +667,21 @@ export default function VendorDepositTab({ onClose, onSuccess }) {
                       </option>
                     ))}
                   </select>
+                </div>
+              )}
+
+              {/* NEW — Bank slip number */}
+              {paymentMethod === "BANK_TRANSFER" && (
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-medium text-slate-700">
+                    Bank Slip / Transaction No.
+                  </Label>
+                  <Input
+                    placeholder="e.g. 034421313001"
+                    value={bankSlipNo}
+                    onChange={(e) => setBankSlipNo(e.target.value)}
+                    className="h-10 text-sm"
+                  />
                 </div>
               )}
 

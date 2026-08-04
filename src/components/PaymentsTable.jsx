@@ -31,6 +31,8 @@ import {
   Paperclip,
   Receipt,
   Split,
+  Hash,
+  Building,
 } from "lucide-react";
 import { cn } from "../../shadcn/lib/utils";
 
@@ -137,8 +139,8 @@ function TableSkeleton({ cols }) {
   );
 }
 
-// party, [category|bank], amount, date, method, attachment, remarks, actions
-const COL_COUNT = 8;
+// voucher#, party, [category|bank], amount, date, method, attachment, remarks, actions
+const COL_COUNT = 9;
 
 // ─── Payments Table ────────────────────────────────────────────────────────
 export default function PaymentsTable({
@@ -178,6 +180,11 @@ export default function PaymentsTable({
         p.method.toLowerCase().includes(q) ||
         String(p.amount).includes(q) ||
         (p.remarks ?? "").toLowerCase().includes(q) ||
+        (p.pvNo ?? "").toLowerCase().includes(q) ||
+        (p.bankSlipNo ?? "").toLowerCase().includes(q) ||
+        (p.branch?.name ?? "").toLowerCase().includes(q) ||
+        (p.branch?.code ?? "").toLowerCase().includes(q) ||
+        (p.createdBy?.fullName ?? "").toLowerCase().includes(q) ||
         invoiceNo.toLowerCase().includes(q) ||
         documentNo.toLowerCase().includes(q)
       );
@@ -192,8 +199,8 @@ export default function PaymentsTable({
           <Input
             placeholder={
               isVendor
-                ? "Search by vendor, amount, method…"
-                : "Search by customer, invoice #, amount, method…"
+                ? "Search by vendor, voucher #, amount, method…"
+                : "Search by customer, invoice #, voucher #, amount, method…"
             }
             className="pl-9 bg-white border-slate-200 focus-visible:ring-slate-400"
             value={search}
@@ -229,6 +236,9 @@ export default function PaymentsTable({
         <Table>
           <TableHeader>
             <TableRow className="bg-slate-50 hover:bg-slate-50 border-slate-100">
+              <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Voucher #
+              </TableHead>
               <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
                 {isVendor ? "Vendor" : "Customer"}
               </TableHead>
@@ -280,6 +290,26 @@ export default function PaymentsTable({
                     onClick={() => onView(p)}
                   >
                     <TableCell>
+                      {p.pvNo ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold font-mono bg-slate-100 text-slate-700">
+                          <Hash className="h-3 w-3 text-slate-400" />
+                          {p.pvNo}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-300">—</span>
+                      )}
+                      {p.branch?.code && (
+                        <span
+                          className="mt-1 flex items-center gap-1 text-[10px] text-slate-400"
+                          title={p.branch.name}
+                        >
+                          <Building className="h-2.5 w-2.5" />
+                          {p.branch.code}
+                        </span>
+                      )}
+                    </TableCell>
+
+                    <TableCell>
                       <div className="flex items-center gap-2.5">
                         <InitialsAvatar
                           name={displayName}
@@ -309,6 +339,14 @@ export default function PaymentsTable({
                               title={saleRef}
                             >
                               {saleRef}
+                            </span>
+                          )}
+                          {p.createdBy?.fullName && (
+                            <span
+                              className="text-[11px] text-slate-300 truncate block max-w-[220px]"
+                              title={`Recorded by ${p.createdBy.fullName}`}
+                            >
+                              by {p.createdBy.fullName}
                             </span>
                           )}
                         </div>
@@ -349,6 +387,14 @@ export default function PaymentsTable({
                         <span className="text-sm text-slate-500">
                           {p.bank?.bankName ?? "—"}
                         </span>
+                        {p.bankSlipNo && (
+                          <span
+                            className="text-[11px] text-slate-400 block truncate max-w-[140px]"
+                            title={`Slip # ${p.bankSlipNo}`}
+                          >
+                            Slip #{p.bankSlipNo}
+                          </span>
+                        )}
                       </TableCell>
                     )}
 

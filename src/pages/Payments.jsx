@@ -222,7 +222,7 @@ function PaymentDetailDrawer({ paymentId, open, onClose, onPreview }) {
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent className="w-full sm:max-w-md overflow-y-auto">
+      <SheetContent className="w-full sm:max-w-md overflow-y-auto p-4">
         <SheetHeader className="pb-4 border-b">
           <SheetTitle className="text-lg font-semibold text-slate-900">
             Payment Details
@@ -302,8 +302,13 @@ function PaymentDetailDrawer({ paymentId, open, onClose, onPreview }) {
             </div>
 
             {/* Details grid */}
+            {/* Details grid */}
             <div className="grid grid-cols-2 gap-3">
               {[
+                {
+                  label: "Voucher No.", // NEW
+                  value: payment.pvNo ?? "—",
+                },
                 {
                   label: "Method",
                   value: <MethodBadge method={payment.method} />,
@@ -319,6 +324,12 @@ function PaymentDetailDrawer({ paymentId, open, onClose, onPreview }) {
                     },
                   ),
                 },
+                ...(payment.branch // NEW
+                  ? [{ label: "Branch", value: payment.branch.name }]
+                  : []),
+                ...(payment.createdBy // NEW
+                  ? [{ label: "Recorded By", value: payment.createdBy.fullName }]
+                  : []),
                 ...(payment.bank
                   ? [
                       { label: "Bank", value: payment.bank.bankName },
@@ -326,6 +337,9 @@ function PaymentDetailDrawer({ paymentId, open, onClose, onPreview }) {
                         label: "Account No.",
                         value: payment.bank.accountNumber,
                       },
+                      ...(payment.bankSlipNo // NEW
+                        ? [{ label: "Bank Slip No.", value: payment.bankSlipNo }]
+                        : []),
                     ]
                   : []),
                 ...(payment.remarks
@@ -480,6 +494,7 @@ function EditSalePayment({ payment, onClose, onSuccess }) {
   const [bankId, setBankId] = useState(
     payment.bankId ?? payment.bank?.id ?? "",
   );
+  const [bankSlipNo, setBankSlipNo] = useState(payment.bankSlipNo ?? "");
   const [banks, setBanks] = useState([]);
   const [date, setDate] = useState(
     payment.transactionDate ? payment.transactionDate.slice(0, 10) : "",
@@ -516,6 +531,8 @@ function EditSalePayment({ payment, onClose, onSuccess }) {
             amount: amt,
             method,
             bankId: method === "BANK_TRANSFER" ? bankId : undefined,
+            bankSlipNo:
+              method === "BANK_TRANSFER" ? bankSlipNo || undefined : undefined, // NEW
             remarks,
             transactionDate: date ? new Date(date).toISOString() : undefined,
           }),
@@ -607,6 +624,18 @@ function EditSalePayment({ payment, onClose, onSuccess }) {
               </option>
             ))}
           </select>
+        </div>
+      )}
+
+      {/* NEW — Bank slip number */}
+      {method === "BANK_TRANSFER" && (
+        <div className="space-y-1.5">
+          <Label>Bank Slip / Transaction No.</Label>
+          <Input
+            placeholder="e.g. 034421313001"
+            value={bankSlipNo}
+            onChange={(e) => setBankSlipNo(e.target.value)}
+          />
         </div>
       )}
 

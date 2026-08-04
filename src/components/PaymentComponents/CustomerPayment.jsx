@@ -100,6 +100,7 @@ export default function CustomerDepositTab({ onClose, onSuccess }) {
   const [uploading, setUploading] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("CASH"); // CASH | BANK_TRANSFER
   const [bankId, setBankId] = useState("");
+  const [bankSlipNo, setBankSlipNo] = useState(""); // NEW
   const [banks, setBanks] = useState([]);
   const [remarks, setRemarks] = useState("");
   const [success, setSuccess] = useState(false);
@@ -322,7 +323,10 @@ export default function CustomerDepositTab({ onClose, onSuccess }) {
         form.append("partyType", "CUSTOMER");
         form.append("customerId", entity.id);
         form.append("method", paymentMethod);
-        if (paymentMethod === "BANK_TRANSFER") form.append("bankId", bankId);
+        if (paymentMethod === "BANK_TRANSFER") {
+          form.append("bankId", bankId);
+          if (bankSlipNo) form.append("bankSlipNo", bankSlipNo); // NEW
+        }
         form.append("amount", String(totalAmount));
         form.append("saleAllocations", JSON.stringify(selectedAllocations));
         if (remarks) form.append("remarks", remarks);
@@ -381,6 +385,7 @@ export default function CustomerDepositTab({ onClose, onSuccess }) {
     setSelections({});
     setPaymentMethod("CASH");
     setBankId("");
+    setBankSlipNo("");
     setPayError("");
     setStep(1);
   };
@@ -1054,6 +1059,21 @@ export default function CustomerDepositTab({ onClose, onSuccess }) {
                       </option>
                     ))}
                   </select>
+                </div>
+              )}
+
+              {/* NEW — Bank slip number */}
+              {paymentMethod === "BANK_TRANSFER" && (
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-medium text-slate-700">
+                    Bank Slip / Transaction No.
+                  </Label>
+                  <Input
+                    placeholder="e.g. 034421313001"
+                    value={bankSlipNo}
+                    onChange={(e) => setBankSlipNo(e.target.value)}
+                    className="h-10 text-sm"
+                  />
                 </div>
               )}
 

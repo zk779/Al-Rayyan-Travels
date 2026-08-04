@@ -52,7 +52,8 @@ const authHeaders = () => ({
 const validateFile = (file) => {
   const maxSize = 10 * 1024 * 1024;
   const allowed = ["application/pdf", "image/jpeg", "image/jpg", "image/png"];
-  if (!allowed.includes(file.type)) return "Only PDF, JPG, or PNG files are allowed";
+  if (!allowed.includes(file.type))
+    return "Only PDF, JPG, or PNG files are allowed";
   if (file.size > maxSize) return "File must be under 10MB";
   return "";
 };
@@ -84,6 +85,7 @@ export default function SalePayment({ saleId, onClose, onSuccess }) {
   const [uploading, setUploading] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("CASH"); // CASH | BANK_TRANSFER
   const [bankId, setBankId] = useState("");
+  const [bankSlipNo, setBankSlipNo] = useState("");
   const [banks, setBanks] = useState([]);
   const [remarks, setRemarks] = useState("");
   const [success, setSuccess] = useState(false);
@@ -132,7 +134,8 @@ export default function SalePayment({ saleId, onClose, onSuccess }) {
 
         if (cancelled) return;
         setSale(json.data);
-        const due = json.data?.dueAmount != null ? Number(json.data.dueAmount) : 0;
+        const due =
+          json.data?.dueAmount != null ? Number(json.data.dueAmount) : 0;
         setAmount(due.toFixed(2));
       } catch (err) {
         if (!cancelled) setLoadError(err.message || "Failed to load sale");
@@ -187,7 +190,10 @@ export default function SalePayment({ saleId, onClose, onSuccess }) {
 
         const form = new FormData();
         form.append("method", paymentMethod);
-        if (paymentMethod === "BANK_TRANSFER") form.append("bankId", bankId);
+        if (paymentMethod === "BANK_TRANSFER") {
+          form.append("bankId", bankId);
+          if (bankSlipNo) form.append("bankSlipNo", bankSlipNo); // NEW
+        }
         form.append("amount", String(amt));
         if (remarks) form.append("remarks", remarks);
         form.append("transactionDate", date.toISOString());
@@ -444,8 +450,8 @@ export default function SalePayment({ saleId, onClose, onSuccess }) {
             </div>
             {isAmountInvalid && (
               <p className="text-[11px] text-red-500">
-                Amount must be greater than 0 and not exceed the remaining due
-                ({fmt(remainingDue)}).
+                Amount must be greater than 0 and not exceed the remaining due (
+                {fmt(remainingDue)}).
               </p>
             )}
           </div>
@@ -503,6 +509,21 @@ export default function SalePayment({ saleId, onClose, onSuccess }) {
                   </option>
                 ))}
               </select>
+            </div>
+          )}
+
+          {/* NEW — Bank slip number */}
+          {paymentMethod === "BANK_TRANSFER" && (
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium text-slate-700">
+                Bank Slip / Transaction No.
+              </Label>
+              <Input
+                placeholder="e.g. 034421313001"
+                value={bankSlipNo}
+                onChange={(e) => setBankSlipNo(e.target.value)}
+                className="h-10 text-sm"
+              />
             </div>
           )}
 
