@@ -13,6 +13,10 @@ import {
   SaudiRiyal,
   Save,
   CalendarIcon,
+  Banknote,
+  Building2,
+  CreditCard,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "../../shadcn/components/ui/button";
 import {
@@ -35,6 +39,7 @@ import ManageDestinationsDialog from "./ManageDestinationsDialog";
 import EditPaymentDialog from "./EditPaymentDialog";
 import { appToast } from "../../shadcn/components/ui/appToast";
 import { useAuth } from "../context/AuthContext";
+import { computePaymentBreakdown } from "./paymentBreakdown";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
@@ -341,6 +346,14 @@ export default function EditSalesTab({ saleId }) {
       };
     },
     { net: 0, sell: 0, profit: 0, vat: 0, paxVat: 0, misc: 0 },
+  );
+
+  /* ── Payment method breakdown (Cash / Bank Transfer / Credit) ──
+     Prefers whatever was just re-picked via EditPaymentDialog this session;
+     falls back to the server's resolved paymentSummary for untouched rows. */
+  const { totals: paymentTotals, tabbyRows } = useMemo(
+    () => computePaymentBreakdown(uiSales, customerOptions),
+    [uiSales, customerOptions],
   );
 
   /* ── Submit ── */
@@ -973,6 +986,101 @@ export default function EditSalesTab({ saleId }) {
               </div>
             ))}
           </div>
+
+          {/* Payment method breakdown */}
+          <div className="mt-4 pt-4 border-t border-blue-200/60">
+            <div className="text-sm font-semibold text-blue-800 mb-2">
+              Payment Breakdown
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {[
+                {
+                  label: "Total Cash",
+                  value: paymentTotals.cash.toFixed(2),
+                  color: "emerald",
+                  Icon: Banknote,
+                },
+                {
+                  label: "Total Bank Transfer",
+                  value: paymentTotals.bank.toFixed(2),
+                  color: "sky",
+                  Icon: Building2,
+                },
+                {
+                  label: "Total Credit",
+                  value: paymentTotals.credit.toFixed(2),
+                  color: "violet",
+                  Icon: CreditCard,
+                },
+              ].map(({ label, value, color, Icon }) => (
+                <div
+                  key={label}
+                  className={`bg-white rounded-lg p-4 shadow-sm border border-${color}-200`}
+                >
+                  <div
+                    className={`flex items-center gap-1.5 text-sm text-${color}-600 mb-1 font-medium`}
+                  >
+                    <Icon className="h-3.5 w-3.5" /> {label}
+                  </div>
+                  <div
+                    className={`flex items-center gap-1 text-3xl font-bold text-${color}-700`}
+                  >
+                    <SaudiRiyal size={18} />
+                    {value}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Tabby / Tamara details — only when a credit sale (or split leg)
+              was booked to a Tabby/Tamara customer */}
+          {tabbyRows.length > 0 && (
+            <div className="mt-4 rounded-lg border border-fuchsia-200 bg-fuchsia-50 p-4">
+              <div className="flex items-center gap-1.5 text-sm font-semibold text-fuchsia-700 mb-3">
+                <Sparkles className="h-4 w-4" /> Tabby / Tamara Details
+              </div>
+              <div className="space-y-2">
+                {tabbyRows.map((row, i) => (
+                  <div
+                    key={i}
+                    className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs bg-white rounded-md border border-fuchsia-100 p-2.5"
+                  >
+                    <div>
+                      <div className="text-slate-400">Sale / Customer</div>
+                      <div className="font-semibold text-slate-700 truncate">
+                        {row.saleLabel} · {row.customerName}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-slate-400">Order Amount</div>
+                      <div className="font-semibold text-slate-700">
+                        {row.orderAmount.toFixed(2)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-slate-400">Fee + VAT</div>
+                      <div className="font-semibold text-rose-600">
+                        -{row.totalDeduction.toFixed(2)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-slate-400">VAT (15%)</div>
+                      <div className="font-semibold text-slate-700">
+                        {row.vat.toFixed(2)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-slate-400">Net Amount</div>
+                      <div className="font-semibold text-fuchsia-700">
+                        {row.netAmount.toFixed(2)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
