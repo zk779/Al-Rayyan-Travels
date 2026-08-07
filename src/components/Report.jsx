@@ -732,7 +732,7 @@ export default function ReportPage() {
               trend="up"
             />
             <KpiCard
-              label="Total Profit"
+              label="Total Sales Profit"
               value={money(t.totalProfit)}
               sub={`Avg ${money(t.avgSaleValue)}/sale`}
               icon={Wallet}
