@@ -25,6 +25,7 @@ import {
   Store,
   X,
   Percent,
+  Globe2,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -75,6 +76,8 @@ import {
   PopoverTrigger,
 } from "../../shadcn/components/ui/popover";
 import RangeCalendar from "./DragCalendar";
+import ReportDetailTables from "../components/Reportdetailtables";
+import { money, compact, getLocalTimeZone, downloadCsv } from "../utils/reportUtils";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 const authHeaders = () => ({
@@ -82,6 +85,7 @@ const authHeaders = () => ({
 });
 
 const DATE_PRESETS = [
+  ["allTime", "All time"],
   ["today", "Today"],
   ["yesterday", "Yesterday"],
   ["last7days", "Last 7 days"],
@@ -103,11 +107,6 @@ const PAYMENT_STATUSES = ["DUE", "PARTIAL", "PAID"];
 const SALE_STATUSES = ["PENDING", "COMPLETED", "CANCELLED", "REFUNDED"];
 const PAYMENT_METHODS = ["CASH", "CREDIT", "BANK_TRANSFER", "PARTIAL"];
 const ALL = "__all__";
-
-const money = (v) =>
-  `SAR ${Number(v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const compact = (v) =>
-  Number(v || 0).toLocaleString("en-US", { maximumFractionDigits: 0 });
 
 function KpiCard({ label, value, sub, icon: Icon, trend, tone = "slate" }) {
   const toneMap = {
@@ -150,6 +149,19 @@ function KpiCard({ label, value, sub, icon: Icon, trend, tone = "slate" }) {
   );
 }
 
+const KpiSkeleton = () => (
+  <Card className="border-slate-100 shadow-sm">
+    <CardContent className="p-5 flex items-start justify-between">
+      <div className="space-y-2 w-full">
+        <div className="h-3 w-20 rounded bg-slate-100 animate-pulse" />
+        <div className="h-6 w-28 rounded bg-slate-100 animate-pulse" />
+        <div className="h-3 w-24 rounded bg-slate-100 animate-pulse" />
+      </div>
+      <div className="h-10 w-10 rounded-xl bg-slate-100 animate-pulse shrink-0" />
+    </CardContent>
+  </Card>
+);
+
 const EmptyChart = ({ label = "No data for the selected filters" }) => (
   <div className="h-[260px] flex items-center justify-center text-sm text-slate-400">
     {label}
@@ -173,6 +185,8 @@ const ChipFilter = ({ label, active, onClear }) =>
   );
 
 export default function ReportPage() {
+  const timeZone = useMemo(getLocalTimeZone, []);
+
   const [vendors, setVendors] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [branches, setBranches] = useState([]);
@@ -183,10 +197,15 @@ export default function ReportPage() {
   const [refunds, setRefunds] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [totals, setTotals] = useState(null);
+  const [meta, setMeta] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
 
+  // allTime=true means "no date filter" — the API is asked for the
+  // complete, all-time report. dateRange is still kept around so the
+  // calendar has something sane to show if the user switches back.
+  const [allTime, setAllTime] = useState(false);
   const [dateRange, setDateRange] = useState({
     from: subDays(new Date(), 30),
     to: new Date(),
@@ -219,6 +238,10 @@ export default function ReportPage() {
   }, []);
 
   const handleDatePreset = (preset) => {
+    if (preset === "allTime") {
+      setAllTime(true);
+      return;
+    }
     const now = new Date();
     const map = {
       today: { from: now, to: now },
@@ -228,19 +251,28 @@ export default function ReportPage() {
       thisMonth: { from: startOfMonth(now), to: endOfMonth(now) },
       thisYear: { from: startOfYear(now), to: endOfYear(now) },
     };
-    if (map[preset]) setDateRange(map[preset]);
+    if (map[preset]) {
+      setAllTime(false);
+      setDateRange(map[preset]);
+    }
   };
 
-  // ── Single server-side fetch — filtering & profit/VAT math both happen in the API ──
+  const handleRangeSelect = (range) => {
+    setAllTime(false);
+    setDateRange(range);
+  };
+
+  // ── Single server-side fetch — filtering & profit math both happen in the API ──
   const fetchData = useCallback(
     async (isRefresh = false) => {
       isRefresh ? setRefreshing(true) : setLoading(true);
       setError("");
       try {
-        const params = new URLSearchParams({
-          dateFrom: format(dateRange.from, "yyyy-MM-dd"),
-          dateTo: format(dateRange.to, "yyyy-MM-dd"),
-        });
+        const params = new URLSearchParams({ timeZone });
+        if (!allTime) {
+          params.set("dateFrom", format(dateRange.from, "yyyy-MM-dd"));
+          params.set("dateTo", format(dateRange.to, "yyyy-MM-dd"));
+        }
         Object.entries(filters).forEach(
           ([k, v]) => v !== ALL && params.set(k, v),
         );
@@ -256,6 +288,7 @@ export default function ReportPage() {
         setRefunds(json.data.refunds || []);
         setExpenses(json.data.expenses || []);
         setTotals(json.totals);
+        setMeta(json.meta || null);
       } catch (err) {
         setError(err.message || "Failed to load report data");
       } finally {
@@ -263,7 +296,7 @@ export default function ReportPage() {
         setRefreshing(false);
       }
     },
-    [dateRange, filters],
+    [dateRange, filters, allTime, timeZone],
   );
 
   useEffect(() => {
@@ -272,7 +305,7 @@ export default function ReportPage() {
 
   // ── Trend chart (day or month buckets depending on range length) ──
   const trendData = useMemo(() => {
-    const byMonth = differenceInCalendarDays(dateRange.to, dateRange.from) > 62;
+    const byMonth = allTime || differenceInCalendarDays(dateRange.to, dateRange.from) > 62;
     const keyOf = (d) => format(new Date(d), byMonth ? "MMM yyyy" : "MMM dd");
     const map = new Map();
     const bump = (date, field, amount) => {
@@ -297,7 +330,7 @@ export default function ReportPage() {
     return [...map.values()].sort(
       (a, b) => new Date(a.key) - new Date(b.key) || a.key.localeCompare(b.key),
     );
-  }, [sales, refunds, expenses, dateRange]);
+  }, [sales, refunds, expenses, dateRange, allTime]);
 
   // ── Simple group-and-sum helper, reused for all breakdown tables/charts ──
   const groupBy = (list, keyFn, valFn) => {
@@ -398,7 +431,7 @@ export default function ReportPage() {
       "Net",
       "Sell",
       "VAT",
-      "Profit (excl. VAT)",
+      "Profit",
     ];
     const rows = sales.map((s) => [
       s.date ? format(new Date(s.date), "yyyy-MM-dd") : "",
@@ -415,14 +448,10 @@ export default function ReportPage() {
       s.vatTotal?.toFixed(2),
       s.profit?.toFixed(2),
     ]);
-    const csv = [headers, ...rows]
-      .map((r) => r.map((v) => `"${v ?? ""}"`).join(","))
-      .join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `report-${format(dateRange.from, "yyyyMMdd")}-${format(dateRange.to, "yyyyMMdd")}.csv`;
-    a.click();
+    const suffix = allTime
+      ? "all-time"
+      : `${format(dateRange.from, "yyyyMMdd")}-${format(dateRange.to, "yyyyMMdd")}`;
+    downloadCsv(`report-${suffix}.csv`, headers, rows);
   };
 
   const t = totals || {};
@@ -447,9 +476,25 @@ export default function ReportPage() {
           <h1 className="text-3xl font-bold text-slate-900">
             Business Reports
           </h1>
-          <p className="text-slate-500 mt-1">
-            Sales, profit, VAT, expenses & refund analytics
-          </p>
+          <div className="flex flex-wrap items-center gap-2 mt-1.5">
+            <p className="text-slate-500">
+              Sales, profit, VAT, expenses & refund analytics
+            </p>
+            {meta && (
+              <Badge
+                variant="outline"
+                className="gap-1 text-slate-500 border-slate-200 font-normal"
+              >
+                <Globe2 className="h-3 w-3" />
+                {timeZone}
+              </Badge>
+            )}
+            {meta?.isCompleteRange && (
+              <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200 border font-normal">
+                All-time report
+              </Badge>
+            )}
+          </div>
         </div>
         <div className="flex gap-2">
           <Button
@@ -496,8 +541,9 @@ export default function ReportPage() {
                     className="w-full justify-start text-left font-normal"
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    {format(dateRange.from, "LLL dd, y")} -{" "}
-                    {format(dateRange.to, "LLL dd, y")}
+                    {allTime
+                      ? "All time"
+                      : `${format(dateRange.from, "LLL dd, y")} - ${format(dateRange.to, "LLL dd, y")}`}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
@@ -507,6 +553,11 @@ export default function ReportPage() {
                         key={key}
                         variant="ghost"
                         size="sm"
+                        className={
+                          (key === "allTime" && allTime)
+                            ? "bg-indigo-50 text-indigo-700"
+                            : ""
+                        }
                         onClick={() => handleDatePreset(key)}
                       >
                         {label}
@@ -514,11 +565,12 @@ export default function ReportPage() {
                     ))}
                   </div>
                   {/* Click-to-select range: 1st click = start date, hover previews
-          the range line, 2nd click = end date. */}
+          the range line, 2nd click = end date. Picking a range always
+          switches out of "All time" mode. */}
                   <RangeCalendar
                     defaultMonth={dateRange.from}
                     selected={dateRange}
-                    onSelect={setDateRange}
+                    onSelect={handleRangeSelect}
                     numberOfMonths={2}
                   />
                 </PopoverContent>
@@ -667,67 +719,73 @@ export default function ReportPage() {
 
       {/* KPI Cards — driven entirely by backend `totals`, no client-side recompute */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard
-          label="Total Sales"
-          value={money(t.totalSellPrice)}
-          sub={`${t.salesCount || 0} transactions`}
-          icon={TrendingUp}
-          tone="indigo"
-          trend="up"
-        />
-        <KpiCard
-          label="Profit (excl. VAT)"
-          value={money(t.totalProfitExclVat)}
-          sub={`Avg ${money(t.avgSaleValue)}/sale`}
-          icon={Wallet}
-          tone="emerald"
-          trend="up"
-        />
-        <KpiCard
-          label="Total VAT"
-          value={money(t.totalVat)}
-          sub={`Pax ${money(t.totalPaxVat)} · Other ${money(t.totalVatAmount)}`}
-          icon={Percent}
-          tone="sky"
-        />
-        <KpiCard
-          label="Cancellation Charges"
-          value={money(t.totalCancellationCharges)}
-          sub="Added to profit"
-          icon={Undo2}
-          tone="amber"
-          trend="up"
-        />
-        <KpiCard
-          label="Total Expenses"
-          value={money(t.totalExpenses)}
-          sub={`${t.expensesCount || 0} records`}
-          icon={Receipt}
-          tone="rose"
-          trend="down"
-        />
-        <KpiCard
-          label="Net Revenue"
-          value={money(t.netRevenue)}
-          sub="Profit + Cancellation − Expenses"
-          icon={Landmark}
-          tone={t.netRevenue >= 0 ? "emerald" : "rose"}
-          trend={t.netRevenue >= 0 ? "up" : "down"}
-        />
-        <KpiCard
-          label="Outstanding Due"
-          value={money(t.outstandingDue)}
-          sub="Across due & partial sales"
-          icon={Wallet}
-          tone="rose"
-        />
-        <KpiCard
-          label="Refunded to Customers"
-          value={money(t.totalRefundedToCustomers)}
-          sub={`${t.refundsCount || 0} refunds (informational)`}
-          icon={Undo2}
-          tone="slate"
-        />
+        {loading && !totals ? (
+          Array.from({ length: 8 }).map((_, i) => <KpiSkeleton key={i} />)
+        ) : (
+          <>
+            <KpiCard
+              label="Total Sales"
+              value={money(t.totalSellPrice)}
+              sub={`${t.salesCount || 0} transactions`}
+              icon={TrendingUp}
+              tone="indigo"
+              trend="up"
+            />
+            <KpiCard
+              label="Total Profit"
+              value={money(t.totalProfit)}
+              sub={`Avg ${money(t.avgSaleValue)}/sale`}
+              icon={Wallet}
+              tone="emerald"
+              trend="up"
+            />
+            <KpiCard
+              label="Total VAT"
+              value={money(t.totalVat)}
+              sub={`Pax ${money(t.totalPaxVat)} · Other ${money(t.totalVatAmount)} (informational)`}
+              icon={Percent}
+              tone="sky"
+            />
+            <KpiCard
+              label="Cancellation Charges"
+              value={money(t.totalCancellationCharges)}
+              sub="Added to profit"
+              icon={Undo2}
+              tone="amber"
+              trend="up"
+            />
+            <KpiCard
+              label="Total Expenses"
+              value={money(t.totalExpenses)}
+              sub={`${t.expensesCount || 0} records`}
+              icon={Receipt}
+              tone="rose"
+              trend="down"
+            />
+            <KpiCard
+              label="Net Revenue"
+              value={money(t.netRevenue)}
+              sub="Profit + Cancellation − Expenses"
+              icon={Landmark}
+              tone={t.netRevenue >= 0 ? "emerald" : "rose"}
+              trend={t.netRevenue >= 0 ? "up" : "down"}
+            />
+            <KpiCard
+              label="Outstanding Due"
+              value={money(t.outstandingDue)}
+              sub="Across due & partial sales"
+              icon={Wallet}
+              tone="rose"
+            />
+            <KpiCard
+              label="Refunded to Customers"
+              value={money(t.totalRefundedToCustomers)}
+              sub={`${t.refundsCount || 0} refunds (informational)`}
+              icon={Undo2}
+              tone="slate"
+            />
+          </>
+        )}
       </div>
 
       {/* Trend chart */}
@@ -1034,6 +1092,14 @@ export default function ReportPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Full row-level detail — sales / refunds / expenses, searchable & paginated */}
+      <ReportDetailTables
+        sales={sales}
+        refunds={refunds}
+        expenses={expenses}
+        loading={loading}
+      />
     </div>
   );
 }
