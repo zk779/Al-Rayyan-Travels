@@ -31,6 +31,10 @@ function tabbyFromNet(netAmount) {
   return tabbyFromOrder(orderAmount);
 }
 
+// Exported for ExportSalesReport, which reconstructs the same breakdown
+// from a row's net settlement amount (sellPrice, or a PARTIAL leg's amount).
+export { tabbyFromNet };
+
 const isTabbyCustomer = (customerId, customerOptions) =>
   customerOptions?.find((o) => o.value === customerId)?.customerType === "TABBY_OR_TAMARA";
 

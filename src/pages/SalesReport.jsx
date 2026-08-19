@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { CalendarIcon, Download, Filter, Search, X } from "lucide-react";
+import { CalendarIcon, Filter, Search, X } from "lucide-react";
 import {
   format,
   subDays,
@@ -40,6 +40,7 @@ import RangeCalendar from "../components/DragCalendar";
 
 import DetailedReportTab from "../components/salesReport/detailedReport";
 import RefundsTab from "../components/salesReport/refundReport";
+import ExportSalesReport from "../components/salesReport/ExportSalesReport";
 import { useAuth } from "../context/AuthContext";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
@@ -298,50 +299,6 @@ export default function SalesReport() {
     draft.branch !== "all" ||
     draft.order !== "desc";
 
-  // Exports the currently loaded page of sales — matches what's on screen,
-  // so it's keyed off `applied` (what was actually fetched), not `draft`.
-  const exportCsv = () => {
-    const headers = [
-      "Date",
-      "Invoice #",
-      "Airline",
-      "Document #",
-      "Vendor",
-      "Customer",
-      "Agent",
-      "Payment Type",
-      "Pay Status",
-      "Sell Price",
-      "Status",
-      "Remarks",
-    ];
-    const rows = salesData.map((s) => [
-      s.date ? format(s.date, "yyyy-MM-dd") : "",
-      s.invoiceNo,
-      s.airlineCode,
-      s.documentNo,
-      s.vendorName,
-      s.customerName || "Walk-in",
-      s.createdByName,
-      s.paymentType,
-      s.paymentStatus,
-      s.sellPrice?.toFixed(2),
-      s.status,
-      s.remarks || "",
-    ]);
-    const csv = [headers, ...rows]
-      .map((r) => r.map((v) => `"${v ?? ""}"`).join(","))
-      .join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    const suffix = applied.dateRange
-      ? `${format(applied.dateRange.from, "yyyyMMdd")}-${format(applied.dateRange.to, "yyyyMMdd")}`
-      : format(new Date(), "yyyyMMdd");
-    a.download = `sales-report-${suffix}.csv`;
-    a.click();
-  };
-
   // RBAC — if user has neither permission, show a simple empty state
   if (!canViewSales && !canViewRefunds) {
     return (
@@ -365,14 +322,10 @@ export default function SalesReport() {
             Comprehensive sales analytics and performance metrics
           </p>
         </div>
-        <Button
-          variant="outline"
-          onClick={exportCsv}
+        <ExportSalesReport
+          sales={salesData}
           disabled={activeTab !== "detailed" || !salesData.length}
-        >
-          <Download className="h-4 w-4 mr-2" />
-          Export Report
-        </Button>
+        />
       </div>
 
       {/* Filters */}
