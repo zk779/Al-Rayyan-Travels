@@ -58,6 +58,7 @@ import {
 	Scale,
 	Pointer,
 } from "lucide-react";
+import { Checkbox } from "../../shadcn/components/ui/checkbox";
 import { format } from "date-fns";
 import {
 	Popover,
@@ -66,6 +67,8 @@ import {
 } from "../../shadcn/components/ui/popover";
 import { cn } from "../../shadcn/lib/utils";
 import RangeCalendar from "../components/DragCalendar";
+import { appToast } from "../../shadcn/components/ui/appToast";
+
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
@@ -766,7 +769,16 @@ export default function LedgerComponent() {
 	const [customers, setCustomers]       = useState([]);
 
 	const [accountType, setAccountType] = useState("SELECT"); // was "VENDOR"
-	const [entryType, setEntryType]       = useState("ALL");
+	// was: const [entryType, setEntryType] = useState("ALL");
+	const [entryTypes, setEntryTypes] = useState([]); // [] = All Entries
+	const [entryTypeOpen, setEntryTypeOpen] = useState(false);
+
+	const toggleEntryType = (val) => {
+		setEntryTypes((prev) =>
+			prev.includes(val) ? prev.filter((v) => v !== val) : [...prev, val]
+		);
+		setPage(1);
+	};
 	const [selectedVendorId, setSelectedVendorId]       = useState("all");
 	const [selectedCustomerId, setSelectedCustomerId]   = useState("all");
 	// Add this alongside your other useState declarations
@@ -811,7 +823,7 @@ export default function LedgerComponent() {
 			params.set("includeDetails", "true");
 			params.set("includeSummary", "true");
 
-			if (entryType !== "ALL") params.set("entryType", entryType);
+			if (entryTypes.length > 0) params.set("entryType", entryTypes.join(","));
 			if (accountType === "VENDOR"   && selectedVendorId   !== "all") params.set("vendorId", selectedVendorId);
 			if (accountType === "CUSTOMER" && selectedCustomerId !== "all") params.set("customerId", selectedCustomerId);
 
@@ -831,11 +843,11 @@ export default function LedgerComponent() {
 			setSummary(res.summary || null);
 		} catch (e) {
 			console.error(e);
-			alert(e.message);
+			appToast.error(e.message);
 		} finally {
 			setIsLoading(false);
 		}
-	}, [accountType, entryType, selectedVendorId, selectedCustomerId, dateRange, page, limit]);
+	}, [accountType, entryTypes, selectedVendorId, selectedCustomerId, dateRange, page, limit]);
 
 	useEffect(() => { fetchLedger(); }, [fetchLedger]);
 
@@ -872,13 +884,13 @@ export default function LedgerComponent() {
 
 	/* ---------- Filters ---------- */
 	const clearFilters = () => {
-	setAccountType("SELECT"); setEntryType("ALL");
+	setAccountType("SELECT");  setEntryTypes([]);
 	setSelectedVendorId("all"); setSelectedCustomerId("all");
 	setDateRange(null);
 	setPage(1);
 };
 
-	const hasActiveFilters = accountType !== "SELECT" || entryType !== "ALL" || selectedVendorId !== "all" || selectedCustomerId !== "all" || !!dateRange;
+	const hasActiveFilters = accountType !== "SELECT" || entryTypes.length > 0 || selectedVendorId !== "all" || selectedCustomerId !== "all" || !!dateRange;
 
 	/* ---------- Export ---------- */
 	const exportCSV = () => {
@@ -903,6 +915,14 @@ export default function LedgerComponent() {
 		a.href = url; a.download = `ledger_${format(new Date(), "yyyy-MM-dd")}.csv`; a.click();
 		URL.revokeObjectURL(url);
 	};
+
+	const ENTRY_TYPE_OPTIONS = [
+	{ value: "OPENING_BALANCE", label: "Opening Balance" },
+	{ value: "SALE", label: "Sale" },
+	{ value: "PAYMENT", label: "Payment" },
+	{ value: "REFUND", label: "Refund" },
+	{ value: "EXPENSE", label: "Expense" },
+];
 
 	/* ======================= UI ======================= */
 	return (
@@ -1028,17 +1048,40 @@ export default function LedgerComponent() {
 						{/* Entry Type */}
 						<div className="space-y-1">
 							<label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Entry Type</label>
-							<Select value={entryType} onValueChange={(v) => { setEntryType(v); setPage(1); }}>
-								<SelectTrigger className="h-9 text-sm w-full"><SelectValue /></SelectTrigger>
-								<SelectContent>
-									<SelectItem value="ALL">All Entries</SelectItem>
-									<SelectItem value="OPENING_BALANCE">Opening Balance</SelectItem>
-									<SelectItem value="SALE">Sale</SelectItem>
-									<SelectItem value="PAYMENT">Payment</SelectItem>
-									<SelectItem value="REFUND">Refund</SelectItem>
-									<SelectItem value="EXPENSE">Expense</SelectItem>
-								</SelectContent>
-							</Select>
+							<Popover open={entryTypeOpen} onOpenChange={setEntryTypeOpen}>
+								<PopoverTrigger asChild>
+									<Button variant="outline" className="w-full justify-between h-9 text-sm font-normal">
+										<span className="truncate">
+											{entryTypes.length === 0
+												? "All Entries"
+												: entryTypes.length === 1
+												? ENTRY_TYPE_OPTIONS.find((o) => o.value === entryTypes[0])?.label
+												: `${entryTypes.length} selected`}
+										</span>
+										<ChevronDown className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+									</Button>
+								</PopoverTrigger>
+								<PopoverContent className="w-56 p-2" align="start">
+									<div
+										className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer text-sm"
+										onClick={() => { setEntryTypes([]); setPage(1); }}
+									>
+										<Checkbox checked={entryTypes.length === 0} className="pointer-events-none" />
+										<span className="font-medium">All Entries</span>
+									</div>
+									<div className="h-px bg-gray-100 my-1" />
+									{ENTRY_TYPE_OPTIONS.map((opt) => (
+										<div
+											key={opt.value}
+											className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer text-sm"
+											onClick={() => toggleEntryType(opt.value)}
+										>
+											<Checkbox checked={entryTypes.includes(opt.value)} className="pointer-events-none" />
+											<span>{opt.label}</span>
+										</div>
+									))}
+								</PopoverContent>
+							</Popover>
 						</div>
 
 						{/* Vendor */}
