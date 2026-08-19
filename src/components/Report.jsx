@@ -118,8 +118,8 @@ function KpiCard({ label, value, sub, icon: Icon, trend, tone = "slate" }) {
     sky: "from-sky-500 to-sky-700",
   };
   return (
-    <Card className="border-slate-100 shadow-sm hover:shadow-md transition-shadow">
-      <CardContent className="p-5 flex items-start justify-between">
+    <Card className="border-slate-100 shadow-sm hover:shadow-md transition-shadow p-1!">
+      <CardContent className="p-2 flex items-start justify-between">
         <div className="space-y-1 min-w-0">
           <p className="text-xs font-medium text-slate-500 uppercase tracking-wider truncate">
             {label}
@@ -524,14 +524,14 @@ export default function ReportPage() {
       )}
 
       {/* Filters */}
-      <Card className="border-slate-200">
+      <Card className="border-slate-200 gap-0!">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <Filter className="h-4 w-4" /> Filters
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             <div className="space-y-2">
               <Label>Date Range</Label>
               <Popover>
@@ -564,9 +564,6 @@ export default function ReportPage() {
                       </Button>
                     ))}
                   </div>
-                  {/* Click-to-select range: 1st click = start date, hover previews
-          the range line, 2nd click = end date. Picking a range always
-          switches out of "All time" mode. */}
                   <RangeCalendar
                     defaultMonth={dateRange.from}
                     selected={dateRange}
@@ -718,7 +715,7 @@ export default function ReportPage() {
       </Card>
 
       {/* KPI Cards — driven entirely by backend `totals`, no client-side recompute */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {loading && !totals ? (
           Array.from({ length: 8 }).map((_, i) => <KpiSkeleton key={i} />)
         ) : (
@@ -726,6 +723,14 @@ export default function ReportPage() {
             <KpiCard
               label="Total Sales"
               value={money(t.totalSellPrice)}
+              sub={`${t.salesCount || 0} transactions`}
+              icon={TrendingUp}
+              tone="indigo"
+              trend="up"
+            />
+            <KpiCard
+              label="Total Sales"
+              value={money(t.totalNetPrice)}
               sub={`${t.salesCount || 0} transactions`}
               icon={TrendingUp}
               tone="indigo"

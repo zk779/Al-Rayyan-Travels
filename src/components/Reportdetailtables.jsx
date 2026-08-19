@@ -220,7 +220,7 @@ export default function ReportDetailTables({ sales = [], refunds = [], expenses 
   }, [tab, salesSearch.filtered, refundsSearch.filtered, expensesSearch.filtered]);
 
   return (
-    <Card className="border-slate-200">
+    <Card className="border-slate-200 py-5 gap-4">
       <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <CardTitle className="text-base">Transaction Details</CardTitle>
