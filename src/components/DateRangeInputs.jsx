@@ -12,25 +12,28 @@ import {
   PopoverTrigger,
 } from "../../shadcn/components/ui/popover";
 
-function DateField({ label, date, onSelect, disabledMatcher, disabled }) {
+function DateField({ label, date, onSelect, disabledMatcher, disabled, showLabel, className, dateFormat }) {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="flex-1 min-w-0 space-y-1">
-      <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">
-        {label}
-      </span>
+    <div className={showLabel ? "flex-1 min-w-0 space-y-1" : "shrink-0"}>
+      {showLabel && (
+        <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">
+          {label}
+        </span>
+      )}
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
             variant="outline"
             size="sm"
             disabled={disabled}
-            className="w-full min-w-0 justify-start text-left font-normal"
+            title={label}
+            className={className || "w-full min-w-0 justify-start text-left font-normal"}
           >
             <CalendarIcon className="mr-1.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
             <span className="truncate">
-              {date ? format(date, "dd MMM yyyy") : "Select"}
+              {date ? format(date, dateFormat) : "Select"}
             </span>
           </Button>
         </PopoverTrigger>
@@ -55,26 +58,38 @@ function DateField({ label, date, onSelect, disabledMatcher, disabled }) {
 
 // Two explicit Start/End date pickers instead of a single range calendar —
 // each date is constrained so the range can never end up inverted.
-export default function DateRangeInputs({ from, to, onChange, disabled }) {
+// `compact` drops the uppercase labels and shrinks each field to a fixed
+// width, for use inline in a toolbar rather than a full-width filter grid.
+export default function DateRangeInputs({ from, to, onChange, disabled, compact = false }) {
   const handleFrom = (date) => onChange({ from: date, to: to && date > to ? date : to });
   const handleTo = (date) => onChange({ from: from && date < from ? date : from, to: date });
 
+  const fieldClassName = compact
+    ? "w-[128px] justify-start text-left font-normal"
+    : undefined;
+
   return (
-    <div className="flex items-end gap-2">
+    <div className={`flex items-end gap-2 ${compact ? "" : ""}`}>
       <DateField
         label="Start date"
         date={from}
         onSelect={handleFrom}
         disabledMatcher={to ? { after: to } : undefined}
         disabled={disabled}
+        showLabel={!compact}
+        className={fieldClassName}
+        dateFormat={compact ? "dd MMM yy" : "dd MMM yyyy"}
       />
-      <ArrowRight className="h-3.5 w-3.5 text-slate-300 shrink-0 mb-2.5" />
+      <ArrowRight className={`h-3.5 w-3.5 text-slate-300 shrink-0 ${compact ? "" : "mb-2.5"}`} />
       <DateField
         label="End date"
         date={to}
         onSelect={handleTo}
         disabledMatcher={from ? { before: from } : undefined}
         disabled={disabled}
+        showLabel={!compact}
+        className={fieldClassName}
+        dateFormat={compact ? "dd MMM yy" : "dd MMM yyyy"}
       />
     </div>
   );

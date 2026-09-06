@@ -1,17 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
+import { format, subDays, differenceInCalendarDays } from "date-fns";
 import {
-  format,
-  subDays,
-  startOfMonth,
-  endOfMonth,
-  startOfYear,
-  endOfYear,
-  differenceInCalendarDays,
-} from "date-fns";
-import {
-  Download,
   Filter,
   RefreshCw,
   TrendingUp,
@@ -25,8 +16,8 @@ import {
   X,
   Percent,
   Globe2,
-  ChevronDown,
   ChevronUp,
+  Check,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -72,27 +63,13 @@ import {
 } from "../../shadcn/components/ui/table";
 import DateRangeInputs from "./DateRangeInputs";
 import ReportDetailTables from "../components/Reportdetailtables";
-import {
-  money,
-  compact,
-  getLocalTimeZone,
-  downloadCsv,
-} from "../utils/reportUtils";
+import { money, compact, getLocalTimeZone } from "../utils/reportUtils";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 const authHeaders = () => ({
   Authorization: `Bearer ${localStorage.getItem("token")}`,
 });
 
-const DATE_PRESETS = [
-  ["allTime", "All time"],
-  ["today", "Today"],
-  ["yesterday", "Yesterday"],
-  ["last7days", "Last 7 days"],
-  ["last30days", "Last 30 days"],
-  ["thisMonth", "This month"],
-  ["thisYear", "This year"],
-];
 const CHART_COLORS = [
   "#6366f1",
   "#0ea5e9",
@@ -266,26 +243,6 @@ export default function ReportPage() {
     load("/api/users", setUsers);
   }, []);
 
-  const handleDatePreset = (preset) => {
-    if (preset === "allTime") {
-      setDraftAllTime(true);
-      return;
-    }
-    const now = new Date();
-    const map = {
-      today: { from: now, to: now },
-      yesterday: { from: subDays(now, 1), to: subDays(now, 1) },
-      last7days: { from: subDays(now, 6), to: now },
-      last30days: { from: subDays(now, 29), to: now },
-      thisMonth: { from: startOfMonth(now), to: endOfMonth(now) },
-      thisYear: { from: startOfYear(now), to: endOfYear(now) },
-    };
-    if (map[preset]) {
-      setDraftAllTime(false);
-      setDraftDateRange(map[preset]);
-    }
-  };
-
   const handleRangeSelect = (range) => {
     setDraftAllTime(false);
     setDraftDateRange(range);
@@ -437,8 +394,6 @@ export default function ReportPage() {
     [sales],
   );
 
-  const hasActiveFilters = Object.values(draftFilters).some((v) => v !== ALL);
-
   // Draft differs from what's actually been fetched — the Apply button
   // highlights this so it's obvious there are unapplied changes.
   const isDirty =
@@ -454,56 +409,26 @@ export default function ReportPage() {
       filters: draftFilters,
     });
 
-  const clearFilters = () => {
-    const filters = defaultFilters();
-    const dateRange = defaultDateRange();
-    setDraftFilters(filters);
-    setDraftDateRange(dateRange);
-    setDraftAllTime(false);
-    setApplied({ allTime: false, dateRange, filters });
-  };
-
-  const exportCsv = () => {
-    const headers = [
-      "Date",
-      "Invoice #",
-      "Airline",
-      "Vendor",
-      "Customer",
-      "Agent",
-      "Method",
-      "Payment Status",
-      "Status",
-      "Net",
-      "Sell",
-      "VAT",
-      "Profit",
-    ];
-    const rows = sales.map((s) => [
-      s.date ? format(new Date(s.date), "yyyy-MM-dd") : "",
-      s.invoiceNumber,
-      s.airline,
-      s.vendor,
-      s.customer || "Walk-in",
-      s.agent,
-      s.paymentMethod,
-      s.paymentStatus,
-      s.status,
-      s.netPrice?.toFixed(2),
-      s.sellPrice?.toFixed(2),
-      s.vatTotal?.toFixed(2),
-      s.profit?.toFixed(2),
-    ]);
-    const suffix = applied.allTime
-      ? "all-time"
-      : `${format(applied.dateRange.from, "yyyyMMdd")}-${format(applied.dateRange.to, "yyyyMMdd")}`;
-    downloadCsv(`report-${suffix}.csv`, headers, rows);
+  // Scoped to just the Advanced Filters panel — Branch/Agent/Date Range now
+  // live in the header and aren't touched by this "Clear all".
+  const ADVANCED_KEYS = ["vendorId", "customerId", "airlineCode", "paymentStatus", "saleStatus", "paymentMethod"];
+  const hasActiveAdvancedFilters = ADVANCED_KEYS.some((k) => draftFilters[k] !== ALL);
+  const clearAdvancedFilters = () => {
+    const next = { ...draftFilters };
+    ADVANCED_KEYS.forEach((k) => (next[k] = ALL));
+    setDraftFilters(next);
+    setApplied((a) => ({ ...a, filters: next }));
   };
 
   const t = totals || {};
 
-  const filterFields = [
+  // Promoted to the page header as always-visible "main" filters.
+  const mainFilterFields = [
     { key: "branchId", label: "Branch", list: branches, nameKey: "name" },
+    { key: "agentId", label: "Agent", list: users, nameKey: "fullName" },
+  ];
+  // Everything else stays tucked away in the Advanced Filters panel.
+  const advancedFilterFields = [
     { key: "vendorId", label: "Vendor", list: vendors, nameKey: "vendorName" },
     {
       key: "customerId",
@@ -511,31 +436,15 @@ export default function ReportPage() {
       list: customers,
       nameKey: "customerName",
     },
-    { key: "agentId", label: "Agent", list: users, nameKey: "fullName" },
   ];
 
-  // What's actually driving the loaded data — shown as a compact chip row
-  // when the filter panel is collapsed, so the active filters stay visible.
-  const appliedSummary = [
-    ...filterFields.map(({ key, label, list, nameKey }) =>
-      applied.filters[key] !== ALL
-        ? `${label}: ${list.find((x) => x.id === applied.filters[key])?.[nameKey] || "—"}`
-        : null,
-    ),
-    applied.filters.airlineCode !== ALL
-      ? `Airline: ${applied.filters.airlineCode}`
-      : null,
-    applied.filters.paymentStatus !== ALL
-      ? `Payment: ${applied.filters.paymentStatus}`
-      : null,
-    applied.filters.saleStatus !== ALL
-      ? `Status: ${applied.filters.saleStatus}`
-      : null,
-    applied.filters.paymentMethod !== ALL
-      ? `Method: ${applied.filters.paymentMethod}`
-      : null,
-    applied.allTime ? "All time" : null,
-  ].filter(Boolean);
+  // Badge count on the Advanced Filters trigger — only counts filters that
+  // actually live in that panel (main ones are already visible in the header).
+  const advancedActiveCount =
+    advancedFilterFields.filter(({ key }) => applied.filters[key] !== ALL).length +
+    ["airlineCode", "paymentStatus", "saleStatus", "paymentMethod"].filter(
+      (key) => applied.filters[key] !== ALL,
+    ).length;
 
   return (
     <div className="w-full mx-auto p-6 space-y-6">
@@ -565,24 +474,89 @@ export default function ReportPage() {
             )}
           </div>
         </div>
-        <div className="flex gap-2">
+        {/* Main filters — the ones adjusted most often live right in the
+            header. Everything else is one hover away in Advanced Filters. */}
+        <div className="flex flex-wrap items-end gap-2">
+          <DateRangeInputs
+            from={draftDateRange.from}
+            to={draftDateRange.to}
+            onChange={handleRangeSelect}
+            disabled={draftAllTime}
+            compact
+          />
+          <button
+            type="button"
+            onClick={() => setDraftAllTime((v) => !v)}
+            title="Show every record, ignoring the date range"
+            className={`h-8 px-2 rounded-md text-xs font-medium border transition-colors ${
+              draftAllTime
+                ? "bg-indigo-50 border-indigo-200 text-indigo-700"
+                : "border-slate-200 text-slate-500 hover:bg-slate-50"
+            }`}
+          >
+            All time
+          </button>
+
+          {mainFilterFields.map(({ key, label, list, nameKey }) => (
+            <Select key={key} value={draftFilters[key]} onValueChange={setDraftFilter(key)}>
+              <SelectTrigger size="sm" className="w-[130px]">
+                <SelectValue placeholder={`All ${label}s`} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>All {label}s</SelectItem>
+                {list.map((item) => (
+                  <SelectItem key={item.id} value={item.id}>
+                    {item[nameKey]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ))}
+
+          <Button
+            size="sm"
+            onClick={applyFilters}
+            className="relative gap-1.5 bg-indigo-600 hover:bg-indigo-700"
+          >
+            <Check className="h-3.5 w-3.5" /> Apply
+            {isDirty && (
+              <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-white animate-pulse" />
+            )}
+          </Button>
+
           <Button
             variant="outline"
+            size="icon"
             onClick={() => fetchData(true)}
             disabled={refreshing}
-            className="gap-2"
+            title="Refresh"
+            className="h-8 w-8"
           >
-            <RefreshCw
-              className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
-            />{" "}
-            Refresh
+            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
           </Button>
-          <Button
-            onClick={exportCsv}
-            className="gap-2 bg-indigo-600 hover:bg-indigo-700"
+
+          {/* Advanced Filters — icon-only, expands to show its label on
+              hover; click toggles the panel below. */}
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((o) => !o)}
+            title="Advance Filters"
+            className={`group flex items-center h-8 gap-1.5 px-2 rounded-md border text-sm transition-colors ${
+              filtersOpen
+                ? "bg-indigo-50 border-indigo-200 text-indigo-700"
+                : "border-slate-200 text-slate-500 hover:bg-slate-50"
+            }`}
           >
-            <Download className="h-4 w-4" /> Export CSV
-          </Button>
+            <Filter className="h-3.5 w-3.5 shrink-0" />
+            <span className="max-w-0 group-hover:max-w-[110px] opacity-0 group-hover:opacity-100 overflow-hidden whitespace-nowrap transition-all duration-200 font-medium">
+              Advance Filters
+            </span>
+            {advancedActiveCount > 0 && (
+              <Badge variant="secondary" className="h-4 px-1 text-[10px] font-semibold">
+                {advancedActiveCount}
+              </Badge>
+            )}
+          </button>
         </div>
       </div>
 
@@ -592,106 +566,30 @@ export default function ReportPage() {
         </p>
       )}
 
-      {/* Filters — collapsible so 8+ filters don't dominate the page; stays
-          visible (not a modal) since this page is filter-driven and users
-          adjust it often. Nothing is fetched until "Apply Filters" is hit. */}
-      <Card className="border-slate-200 gap-0! py-4">
-        <CardHeader className="pb-0">
-          <div className="flex items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={() => setFiltersOpen((o) => !o)}
-              className="flex items-center gap-2 text-sm font-semibold text-slate-800 shrink-0"
-            >
-              <Filter className="h-3.5 w-3.5" /> Filters
-              {appliedSummary.length > 0 && (
-                <Badge
-                  variant="secondary"
-                  className="h-5 px-1.5 text-[11px] font-semibold"
-                >
-                  {appliedSummary.length}
-                </Badge>
-              )}
-              {filtersOpen ? (
-                <ChevronUp className="h-3.5 w-3.5 text-slate-400" />
-              ) : (
-                <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
-              )}
-            </button>
+      {/* Advanced Filters — opened via the header's hover icon, not a modal
+          (this page is filter-driven and gets adjusted often) but fully
+          hidden when closed so it costs no space. Shares the same draft/
+          Apply flow as the header's main filters — one Apply covers both. */}
+      {filtersOpen && (
+        <Card className="border-slate-200 gap-0! py-4">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <Filter className="h-3.5 w-3.5" /> Advanced Filters
+              </CardTitle>
+              <button
+                type="button"
+                onClick={() => setFiltersOpen(false)}
+                className="flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-700"
+              >
+                Hide <ChevronUp className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </CardHeader>
 
-            {!filtersOpen && (
-              <div className="flex flex-wrap items-center gap-1 justify-end min-w-12">
-                {appliedSummary.length === 0 ? (
-                  <span className="text-xs text-slate-400">
-                    No filters applied
-                  </span>
-                ) : (
-                  appliedSummary.map((s) => (
-                    <Badge
-                      key={s}
-                      variant="secondary"
-                      className="text-[11px] font-normal bg-slate-100 text-slate-600"
-                    >
-                      {s}
-                    </Badge>
-                  ))
-                )}
-              </div>
-            )}
-          </div>
-        </CardHeader>
-
-        {filtersOpen && (
           <CardContent className="space-y-3 pt-1">
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(100px,1fr))] gap-3">
-              <div className="space-y-1 sm:col-span-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs font-medium text-slate-500">
-                    Date Range
-                  </Label>
-                  {draftAllTime && (
-                    <span className="text-[11px] text-indigo-600 font-medium">
-                      All time selected
-                    </span>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {DATE_PRESETS.map(([key, label]) => (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => handleDatePreset(key)}
-                      className={`px-2 py-0.5 rounded-md text-[11px] font-medium border transition-colors ${
-                        key === "allTime" && draftAllTime
-                          ? "bg-indigo-50 border-indigo-200 text-indigo-700"
-                          : "border-slate-200 text-slate-500 hover:bg-slate-50"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex items-end gap-2 mt-1.5">
-                  <DateRangeInputs
-                    from={draftDateRange.from}
-                    to={draftDateRange.to}
-                    onChange={handleRangeSelect}
-                    disabled={draftAllTime}
-                  />
-                  <Button
-                    size="sm"
-                    onClick={applyFilters}
-                    className="relative gap-1.5 bg-indigo-600 hover:bg-indigo-700"
-                  >
-                    <Filter className="h-3.5 w-3.5" /> Apply Filters
-                    {isDirty && (
-                      <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-white animate-pulse" />
-                    )}
-                  </Button>
-                </div>
-              </div>
-
-              {filterFields.map(({ key, label, list, nameKey }) => (
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
+              {advancedFilterFields.map(({ key, label, list, nameKey }) => (
                 <div className="space-y-1" key={key}>
                   <Label className="text-xs font-medium text-slate-500">
                     {label}
@@ -806,7 +704,7 @@ export default function ReportPage() {
 
             <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
               <div className="flex flex-wrap items-center gap-1.5">
-                {filterFields.map(({ key, label, list, nameKey }) => (
+                {advancedFilterFields.map(({ key, label, list, nameKey }) => (
                   <ChipFilter
                     key={key}
                     label={`${label}: ${list.find((x) => x.id === draftFilters[key])?.[nameKey]}`}
@@ -834,21 +732,32 @@ export default function ReportPage() {
                   active={draftFilters.paymentMethod !== ALL}
                   onClear={() => setDraftFilter("paymentMethod")(ALL)}
                 />
-                {hasActiveFilters && (
+                {hasActiveAdvancedFilters && (
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={clearFilters}
+                    onClick={clearAdvancedFilters}
                     className="text-slate-500 h-7"
                   >
                     Clear all
                   </Button>
                 )}
               </div>
+
+              <Button
+                size="sm"
+                onClick={applyFilters}
+                className="relative gap-1.5 bg-indigo-600 hover:bg-indigo-700"
+              >
+                <Check className="h-3.5 w-3.5" /> Apply Filters
+                {isDirty && (
+                  <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-white animate-pulse" />
+                )}
+              </Button>
             </div>
           </CardContent>
-        )}
-      </Card>
+        </Card>
+      )}
 
       {/* KPI Cards — driven entirely by backend `totals`, no client-side recompute */}
       <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
