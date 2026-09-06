@@ -729,7 +729,7 @@ export default function ReportPage() {
               trend="up"
             />
             <KpiCard
-              label="Total Sales"
+              label="Total Net Sales"
               value={money(t.totalNetPrice)}
               sub={`${t.salesCount || 0} transactions`}
               icon={TrendingUp}
