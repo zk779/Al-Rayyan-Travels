@@ -233,7 +233,7 @@ function SlotFields({
               Order Amount <SaudiRiyal size={11} className="inline" />
             </Label>
             <Input
-              type="number"
+              type="tel"
               value={orderAmount}
               onChange={(e) => setOrderAmount(e.target.value)}
               placeholder="e.g. 1000"
@@ -279,7 +279,7 @@ function SlotFields({
           )}
         </Label>
         <Input
-          type="number"
+          type="tel"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           placeholder="0.00"
