@@ -11,7 +11,6 @@ import {
   differenceInCalendarDays,
 } from "date-fns";
 import {
-  CalendarIcon,
   Download,
   Filter,
   RefreshCw,
@@ -26,6 +25,8 @@ import {
   X,
   Percent,
   Globe2,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -69,15 +70,14 @@ import {
   TableHeader,
   TableRow,
 } from "../../shadcn/components/ui/table";
-import { Calendar } from "../../shadcn/components/ui/calendar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "../../shadcn/components/ui/popover";
-import RangeCalendar from "./DragCalendar";
+import DateRangeInputs from "./DateRangeInputs";
 import ReportDetailTables from "../components/Reportdetailtables";
-import { money, compact, getLocalTimeZone, downloadCsv } from "../utils/reportUtils";
+import {
+  money,
+  compact,
+  getLocalTimeZone,
+  downloadCsv,
+} from "../utils/reportUtils";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 const authHeaders = () => ({
@@ -132,14 +132,18 @@ function KpiCard({ label, value, sub, icon: Icon, trend, tone = "slate" }) {
       <div className={`h-1 bg-gradient-to-r ${toneMap[tone]}`} />
       <CardContent className="px-3 py-2.5">
         <div className="flex items-center gap-1.5 mb-1 min-w-0">
-          <div className={`p-1 rounded-md bg-gradient-to-br ${toneMap[tone]} shrink-0`}>
+          <div
+            className={`p-1 rounded-md bg-gradient-to-br ${toneMap[tone]} shrink-0`}
+          >
             <Icon className="h-3 w-3 text-white" />
           </div>
           <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide leading-tight break-words">
             {label}
           </p>
         </div>
-        <p className={`${fitValueClass(value)} font-bold text-slate-900 tabular-nums leading-tight break-words`}>
+        <p
+          className={`${fitValueClass(value)} font-bold text-slate-900 tabular-nums leading-tight break-words`}
+        >
           {value}
         </p>
         {sub && (
@@ -212,15 +216,7 @@ export default function ReportPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
 
-  // allTime=true means "no date filter" — the API is asked for the
-  // complete, all-time report. dateRange is still kept around so the
-  // calendar has something sane to show if the user switches back.
-  const [allTime, setAllTime] = useState(false);
-  const [dateRange, setDateRange] = useState({
-    from: subDays(new Date(), 30),
-    to: new Date(),
-  });
-  const [filters, setFilters] = useState({
+  const defaultFilters = () => ({
     branchId: ALL,
     vendorId: ALL,
     customerId: ALL,
@@ -230,7 +226,30 @@ export default function ReportPage() {
     saleStatus: ALL,
     paymentMethod: ALL,
   });
-  const setFilter = (key) => (val) => setFilters((f) => ({ ...f, [key]: val }));
+  const defaultDateRange = () => ({
+    from: subDays(new Date(), 30),
+    to: new Date(),
+  });
+
+  // `draft*` is what the filter panel is bound to (edited freely). Nothing
+  // is fetched until "Apply Filters" copies it into `applied`, which is the
+  // only thing fetchData/trendData/exportCsv ever read from.
+  // allTime=true means "no date filter" — the API is asked for the
+  // complete, all-time report. dateRange is still kept around so the
+  // date fields have something sane to show if the user switches back.
+  const [draftAllTime, setDraftAllTime] = useState(false);
+  const [draftDateRange, setDraftDateRange] = useState(defaultDateRange);
+  const [draftFilters, setDraftFilters] = useState(defaultFilters);
+  const setDraftFilter = (key) => (val) =>
+    setDraftFilters((f) => ({ ...f, [key]: val }));
+
+  const [applied, setApplied] = useState(() => ({
+    allTime: draftAllTime,
+    dateRange: draftDateRange,
+    filters: draftFilters,
+  }));
+
+  const [filtersOpen, setFiltersOpen] = useState(true);
 
   // ── Reference lists, once ──
   useEffect(() => {
@@ -249,7 +268,7 @@ export default function ReportPage() {
 
   const handleDatePreset = (preset) => {
     if (preset === "allTime") {
-      setAllTime(true);
+      setDraftAllTime(true);
       return;
     }
     const now = new Date();
@@ -262,28 +281,29 @@ export default function ReportPage() {
       thisYear: { from: startOfYear(now), to: endOfYear(now) },
     };
     if (map[preset]) {
-      setAllTime(false);
-      setDateRange(map[preset]);
+      setDraftAllTime(false);
+      setDraftDateRange(map[preset]);
     }
   };
 
   const handleRangeSelect = (range) => {
-    setAllTime(false);
-    setDateRange(range);
+    setDraftAllTime(false);
+    setDraftDateRange(range);
   };
 
-  // ── Single server-side fetch — filtering & profit math both happen in the API ──
+  // ── Single server-side fetch — filtering & profit math both happen in the
+  // API, driven entirely by `applied` (never the in-progress draft) ──
   const fetchData = useCallback(
     async (isRefresh = false) => {
       isRefresh ? setRefreshing(true) : setLoading(true);
       setError("");
       try {
         const params = new URLSearchParams({ timeZone });
-        if (!allTime) {
-          params.set("dateFrom", format(dateRange.from, "yyyy-MM-dd"));
-          params.set("dateTo", format(dateRange.to, "yyyy-MM-dd"));
+        if (!applied.allTime) {
+          params.set("dateFrom", format(applied.dateRange.from, "yyyy-MM-dd"));
+          params.set("dateTo", format(applied.dateRange.to, "yyyy-MM-dd"));
         }
-        Object.entries(filters).forEach(
+        Object.entries(applied.filters).forEach(
           ([k, v]) => v !== ALL && params.set(k, v),
         );
 
@@ -306,7 +326,7 @@ export default function ReportPage() {
         setRefreshing(false);
       }
     },
-    [dateRange, filters, allTime, timeZone],
+    [applied, timeZone],
   );
 
   useEffect(() => {
@@ -315,7 +335,10 @@ export default function ReportPage() {
 
   // ── Trend chart (day or month buckets depending on range length) ──
   const trendData = useMemo(() => {
-    const byMonth = allTime || differenceInCalendarDays(dateRange.to, dateRange.from) > 62;
+    const byMonth =
+      applied.allTime ||
+      differenceInCalendarDays(applied.dateRange.to, applied.dateRange.from) >
+        62;
     const keyOf = (d) => format(new Date(d), byMonth ? "MMM yyyy" : "MMM dd");
     const map = new Map();
     const bump = (date, field, amount) => {
@@ -340,7 +363,7 @@ export default function ReportPage() {
     return [...map.values()].sort(
       (a, b) => new Date(a.key) - new Date(b.key) || a.key.localeCompare(b.key),
     );
-  }, [sales, refunds, expenses, dateRange, allTime]);
+  }, [sales, refunds, expenses, applied]);
 
   // ── Simple group-and-sum helper, reused for all breakdown tables/charts ──
   const groupBy = (list, keyFn, valFn) => {
@@ -414,18 +437,31 @@ export default function ReportPage() {
     [sales],
   );
 
-  const hasActiveFilters = Object.values(filters).some((v) => v !== ALL);
-  const clearFilters = () =>
-    setFilters({
-      branchId: ALL,
-      vendorId: ALL,
-      customerId: ALL,
-      airlineCode: ALL,
-      agentId: ALL,
-      paymentStatus: ALL,
-      saleStatus: ALL,
-      paymentMethod: ALL,
+  const hasActiveFilters = Object.values(draftFilters).some((v) => v !== ALL);
+
+  // Draft differs from what's actually been fetched — the Apply button
+  // highlights this so it's obvious there are unapplied changes.
+  const isDirty =
+    draftAllTime !== applied.allTime ||
+    draftDateRange.from?.getTime() !== applied.dateRange.from?.getTime() ||
+    draftDateRange.to?.getTime() !== applied.dateRange.to?.getTime() ||
+    Object.entries(draftFilters).some(([k, v]) => applied.filters[k] !== v);
+
+  const applyFilters = () =>
+    setApplied({
+      allTime: draftAllTime,
+      dateRange: draftDateRange,
+      filters: draftFilters,
     });
+
+  const clearFilters = () => {
+    const filters = defaultFilters();
+    const dateRange = defaultDateRange();
+    setDraftFilters(filters);
+    setDraftDateRange(dateRange);
+    setDraftAllTime(false);
+    setApplied({ allTime: false, dateRange, filters });
+  };
 
   const exportCsv = () => {
     const headers = [
@@ -458,9 +494,9 @@ export default function ReportPage() {
       s.vatTotal?.toFixed(2),
       s.profit?.toFixed(2),
     ]);
-    const suffix = allTime
+    const suffix = applied.allTime
       ? "all-time"
-      : `${format(dateRange.from, "yyyyMMdd")}-${format(dateRange.to, "yyyyMMdd")}`;
+      : `${format(applied.dateRange.from, "yyyyMMdd")}-${format(applied.dateRange.to, "yyyyMMdd")}`;
     downloadCsv(`report-${suffix}.csv`, headers, rows);
   };
 
@@ -477,6 +513,29 @@ export default function ReportPage() {
     },
     { key: "agentId", label: "Agent", list: users, nameKey: "fullName" },
   ];
+
+  // What's actually driving the loaded data — shown as a compact chip row
+  // when the filter panel is collapsed, so the active filters stay visible.
+  const appliedSummary = [
+    ...filterFields.map(({ key, label, list, nameKey }) =>
+      applied.filters[key] !== ALL
+        ? `${label}: ${list.find((x) => x.id === applied.filters[key])?.[nameKey] || "—"}`
+        : null,
+    ),
+    applied.filters.airlineCode !== ALL
+      ? `Airline: ${applied.filters.airlineCode}`
+      : null,
+    applied.filters.paymentStatus !== ALL
+      ? `Payment: ${applied.filters.paymentStatus}`
+      : null,
+    applied.filters.saleStatus !== ALL
+      ? `Status: ${applied.filters.saleStatus}`
+      : null,
+    applied.filters.paymentMethod !== ALL
+      ? `Method: ${applied.filters.paymentMethod}`
+      : null,
+    applied.allTime ? "All time" : null,
+  ].filter(Boolean);
 
   return (
     <div className="w-full mx-auto p-6 space-y-6">
@@ -533,198 +592,262 @@ export default function ReportPage() {
         </p>
       )}
 
-      {/* Filters */}
+      {/* Filters — collapsible so 8+ filters don't dominate the page; stays
+          visible (not a modal) since this page is filter-driven and users
+          adjust it often. Nothing is fetched until "Apply Filters" is hit. */}
       <Card className="border-slate-200 gap-0! py-4">
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-sm">
-            <Filter className="h-3.5 w-3.5" /> Filters
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs font-medium text-slate-500">Date Range</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full min-w-0 justify-start text-left font-normal"
-                  >
-                    <CalendarIcon className="mr-1.5 h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate">
-                      {allTime
-                        ? "All time"
-                        : `${format(dateRange.from, "dd MMM yy")} - ${format(dateRange.to, "dd MMM yy")}`}
-                    </span>
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <div className="p-3 border-b grid grid-cols-2 gap-2">
-                    {DATE_PRESETS.map(([key, label]) => (
-                      <Button
-                        key={key}
-                        variant="ghost"
-                        size="sm"
-                        className={
-                          (key === "allTime" && allTime)
-                            ? "bg-indigo-50 text-indigo-700"
-                            : ""
-                        }
-                        onClick={() => handleDatePreset(key)}
-                      >
-                        {label}
-                      </Button>
-                    ))}
-                  </div>
-                  <RangeCalendar
-                    defaultMonth={dateRange.from}
-                    selected={dateRange}
-                    onSelect={handleRangeSelect}
-                    numberOfMonths={2}
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
+        <CardHeader className="pb-0">
+          <div className="flex items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={() => setFiltersOpen((o) => !o)}
+              className="flex items-center gap-2 text-sm font-semibold text-slate-800 shrink-0"
+            >
+              <Filter className="h-3.5 w-3.5" /> Filters
+              {appliedSummary.length > 0 && (
+                <Badge
+                  variant="secondary"
+                  className="h-5 px-1.5 text-[11px] font-semibold"
+                >
+                  {appliedSummary.length}
+                </Badge>
+              )}
+              {filtersOpen ? (
+                <ChevronUp className="h-3.5 w-3.5 text-slate-400" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+              )}
+            </button>
 
-            {filterFields.map(({ key, label, list, nameKey }) => (
-              <div className="space-y-1" key={key}>
-                <Label className="text-xs font-medium text-slate-500">{label}</Label>
-                <Select value={filters[key]} onValueChange={setFilter(key)}>
+            {!filtersOpen && (
+              <div className="flex flex-wrap items-center gap-1 justify-end min-w-12">
+                {appliedSummary.length === 0 ? (
+                  <span className="text-xs text-slate-400">
+                    No filters applied
+                  </span>
+                ) : (
+                  appliedSummary.map((s) => (
+                    <Badge
+                      key={s}
+                      variant="secondary"
+                      className="text-[11px] font-normal bg-slate-100 text-slate-600"
+                    >
+                      {s}
+                    </Badge>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        </CardHeader>
+
+        {filtersOpen && (
+          <CardContent className="space-y-3 pt-1">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(100px,1fr))] gap-3">
+              <div className="space-y-1 sm:col-span-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-medium text-slate-500">
+                    Date Range
+                  </Label>
+                  {draftAllTime && (
+                    <span className="text-[11px] text-indigo-600 font-medium">
+                      All time selected
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {DATE_PRESETS.map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => handleDatePreset(key)}
+                      className={`px-2 py-0.5 rounded-md text-[11px] font-medium border transition-colors ${
+                        key === "allTime" && draftAllTime
+                          ? "bg-indigo-50 border-indigo-200 text-indigo-700"
+                          : "border-slate-200 text-slate-500 hover:bg-slate-50"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-end gap-2 mt-1.5">
+                  <DateRangeInputs
+                    from={draftDateRange.from}
+                    to={draftDateRange.to}
+                    onChange={handleRangeSelect}
+                    disabled={draftAllTime}
+                  />
+                  <Button
+                    size="sm"
+                    onClick={applyFilters}
+                    className="relative gap-1.5 bg-indigo-600 hover:bg-indigo-700"
+                  >
+                    <Filter className="h-3.5 w-3.5" /> Apply Filters
+                    {isDirty && (
+                      <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-white animate-pulse" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              {filterFields.map(({ key, label, list, nameKey }) => (
+                <div className="space-y-1" key={key}>
+                  <Label className="text-xs font-medium text-slate-500">
+                    {label}
+                  </Label>
+                  <Select
+                    value={draftFilters[key]}
+                    onValueChange={setDraftFilter(key)}
+                  >
+                    <SelectTrigger size="sm" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL}>All {label}s</SelectItem>
+                      {list.map((item) => (
+                        <SelectItem key={item.id} value={item.id}>
+                          {item[nameKey]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ))}
+
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-slate-500">
+                  Airline
+                </Label>
+                <Select
+                  value={draftFilters.airlineCode}
+                  onValueChange={setDraftFilter("airlineCode")}
+                >
                   <SelectTrigger size="sm" className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={ALL}>All {label}s</SelectItem>
-                    {list.map((item) => (
-                      <SelectItem key={item.id} value={item.id}>
-                        {item[nameKey]}
+                    <SelectItem value={ALL}>All Airlines</SelectItem>
+                    {airlines.map((a) => (
+                      <SelectItem
+                        key={a.id}
+                        value={a.airlineCode || a.iataName}
+                      >
+                        {a.airlineName}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-            ))}
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-slate-500">
+                  Payment Status
+                </Label>
+                <Select
+                  value={draftFilters.paymentStatus}
+                  onValueChange={setDraftFilter("paymentStatus")}
+                >
+                  <SelectTrigger size="sm" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL}>All Payment Status</SelectItem>
+                    {PAYMENT_STATUSES.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {s}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-slate-500">
+                  Sale Status
+                </Label>
+                <Select
+                  value={draftFilters.saleStatus}
+                  onValueChange={setDraftFilter("saleStatus")}
+                >
+                  <SelectTrigger size="sm" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL}>All Sale Status</SelectItem>
+                    {SALE_STATUSES.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {s}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-slate-500">
+                  Payment Method
+                </Label>
+                <Select
+                  value={draftFilters.paymentMethod}
+                  onValueChange={setDraftFilter("paymentMethod")}
+                >
+                  <SelectTrigger size="sm" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL}>All Methods</SelectItem>
+                    {PAYMENT_METHODS.map((m) => (
+                      <SelectItem key={m} value={m}>
+                        {m.replace("_", " ")}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
 
-            <div className="space-y-1">
-              <Label className="text-xs font-medium text-slate-500">Airline</Label>
-              <Select
-                value={filters.airlineCode}
-                onValueChange={setFilter("airlineCode")}
-              >
-                <SelectTrigger size="sm" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL}>All Airlines</SelectItem>
-                  {airlines.map((a) => (
-                    <SelectItem key={a.id} value={a.airlineCode || a.iataName}>
-                      {a.airlineName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs font-medium text-slate-500">Payment Status</Label>
-              <Select
-                value={filters.paymentStatus}
-                onValueChange={setFilter("paymentStatus")}
-              >
-                <SelectTrigger size="sm" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL}>All Payment Status</SelectItem>
-                  {PAYMENT_STATUSES.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs font-medium text-slate-500">Sale Status</Label>
-              <Select
-                value={filters.saleStatus}
-                onValueChange={setFilter("saleStatus")}
-              >
-                <SelectTrigger size="sm" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL}>All Sale Status</SelectItem>
-                  {SALE_STATUSES.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs font-medium text-slate-500">Payment Method</Label>
-              <Select
-                value={filters.paymentMethod}
-                onValueChange={setFilter("paymentMethod")}
-              >
-                <SelectTrigger size="sm" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL}>All Methods</SelectItem>
-                  {PAYMENT_METHODS.map((m) => (
-                    <SelectItem key={m} value={m}>
-                      {m.replace("_", " ")}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {hasActiveFilters && (
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              {filterFields.map(({ key, label, list, nameKey }) => (
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {filterFields.map(({ key, label, list, nameKey }) => (
+                  <ChipFilter
+                    key={key}
+                    label={`${label}: ${list.find((x) => x.id === draftFilters[key])?.[nameKey]}`}
+                    active={draftFilters[key] !== ALL}
+                    onClear={() => setDraftFilter(key)(ALL)}
+                  />
+                ))}
                 <ChipFilter
-                  key={key}
-                  label={`${label}: ${list.find((x) => x.id === filters[key])?.[nameKey]}`}
-                  active={filters[key] !== ALL}
-                  onClear={() => setFilter(key)(ALL)}
+                  label={`Airline: ${draftFilters.airlineCode}`}
+                  active={draftFilters.airlineCode !== ALL}
+                  onClear={() => setDraftFilter("airlineCode")(ALL)}
                 />
-              ))}
-              <ChipFilter
-                label={`Airline: ${filters.airlineCode}`}
-                active={filters.airlineCode !== ALL}
-                onClear={() => setFilter("airlineCode")(ALL)}
-              />
-              <ChipFilter
-                label={`Payment: ${filters.paymentStatus}`}
-                active={filters.paymentStatus !== ALL}
-                onClear={() => setFilter("paymentStatus")(ALL)}
-              />
-              <ChipFilter
-                label={`Status: ${filters.saleStatus}`}
-                active={filters.saleStatus !== ALL}
-                onClear={() => setFilter("saleStatus")(ALL)}
-              />
-              <ChipFilter
-                label={`Method: ${filters.paymentMethod}`}
-                active={filters.paymentMethod !== ALL}
-                onClear={() => setFilter("paymentMethod")(ALL)}
-              />
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={clearFilters}
-                className="text-slate-500 h-7"
-              >
-                Clear all
-              </Button>
+                <ChipFilter
+                  label={`Payment: ${draftFilters.paymentStatus}`}
+                  active={draftFilters.paymentStatus !== ALL}
+                  onClear={() => setDraftFilter("paymentStatus")(ALL)}
+                />
+                <ChipFilter
+                  label={`Status: ${draftFilters.saleStatus}`}
+                  active={draftFilters.saleStatus !== ALL}
+                  onClear={() => setDraftFilter("saleStatus")(ALL)}
+                />
+                <ChipFilter
+                  label={`Method: ${draftFilters.paymentMethod}`}
+                  active={draftFilters.paymentMethod !== ALL}
+                  onClear={() => setDraftFilter("paymentMethod")(ALL)}
+                />
+                {hasActiveFilters && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearFilters}
+                    className="text-slate-500 h-7"
+                  >
+                    Clear all
+                  </Button>
+                )}
+              </div>
             </div>
-          )}
-        </CardContent>
+          </CardContent>
+        )}
       </Card>
 
       {/* KPI Cards — driven entirely by backend `totals`, no client-side recompute */}
@@ -806,8 +929,7 @@ export default function ReportPage() {
         )}
       </div>
 
-
-            {/* Full row-level detail — sales / refunds / expenses, searchable & paginated */}
+      {/* Full row-level detail — sales / refunds / expenses, searchable & paginated */}
       <ReportDetailTables
         sales={sales}
         refunds={refunds}
@@ -1119,8 +1241,6 @@ export default function ReportPage() {
           )}
         </CardContent>
       </Card>
-
-
     </div>
   );
 }
