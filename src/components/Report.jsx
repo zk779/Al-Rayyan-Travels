@@ -806,6 +806,15 @@ export default function ReportPage() {
         )}
       </div>
 
+
+            {/* Full row-level detail — sales / refunds / expenses, searchable & paginated */}
+      <ReportDetailTables
+        sales={sales}
+        refunds={refunds}
+        expenses={expenses}
+        loading={loading}
+      />
+
       {/* Trend chart */}
       <Card className="border-slate-200">
         <CardHeader>
@@ -1111,13 +1120,7 @@ export default function ReportPage() {
         </CardContent>
       </Card>
 
-      {/* Full row-level detail — sales / refunds / expenses, searchable & paginated */}
-      <ReportDetailTables
-        sales={sales}
-        refunds={refunds}
-        expenses={expenses}
-        loading={loading}
-      />
+
     </div>
   );
 }
