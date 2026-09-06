@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { format, subDays, differenceInCalendarDays } from "date-fns";
+import { format, differenceInCalendarDays } from "date-fns";
 import {
   Filter,
   RefreshCw,
@@ -159,6 +159,22 @@ const EmptyChart = ({ label = "No data for the selected filters" }) => (
   </div>
 );
 
+const NoSearchYet = () => (
+  <Card className="border-dashed border-slate-200">
+    <CardContent className="py-16 flex flex-col items-center text-center gap-2">
+      <div className="p-3 rounded-full bg-indigo-50">
+        <Filter className="h-5 w-5 text-indigo-500" />
+      </div>
+      <p className="text-sm font-medium text-slate-700">
+        Pick a date range and hit Apply to generate the report
+      </p>
+      <p className="text-xs text-slate-400 max-w-sm">
+        Or toggle "All time" if you want everything, regardless of date.
+      </p>
+    </CardContent>
+  </Card>
+);
+
 const ChipFilter = ({ label, active, onClear }) =>
   !active ? null : (
     <Badge
@@ -189,7 +205,7 @@ export default function ReportPage() {
   const [expenses, setExpenses] = useState([]);
   const [totals, setTotals] = useState(null);
   const [meta, setMeta] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
 
@@ -203,10 +219,10 @@ export default function ReportPage() {
     saleStatus: ALL,
     paymentMethod: ALL,
   });
-  const defaultDateRange = () => ({
-    from: subDays(new Date(), 30),
-    to: new Date(),
-  });
+  // Start date is left blank on purpose — the report shows nothing until
+  // the user picks one and hits Apply. End date defaults to today, since
+  // "up to now" is almost always what's meant once a start date is chosen.
+  const defaultDateRange = () => ({ from: new Date(), to: new Date() });
 
   // `draft*` is what the filter panel is bound to (edited freely). Nothing
   // is fetched until "Apply Filters" copies it into `applied`, which is the
@@ -225,6 +241,11 @@ export default function ReportPage() {
     dateRange: draftDateRange,
     filters: draftFilters,
   }));
+
+  // Nothing has been searched yet — no start date was ever chosen (or "All
+  // time" toggled) and Apply hasn't been pressed, so the report body stays
+  // empty rather than auto-loading a default range.
+  const [hasSearched, setHasSearched] = useState(false);
 
   const [filtersOpen, setFiltersOpen] = useState(false);
 
@@ -256,7 +277,7 @@ export default function ReportPage() {
       setError("");
       try {
         const params = new URLSearchParams({ timeZone });
-        if (!applied.allTime) {
+        if (!applied.allTime && applied.dateRange.from) {
           params.set("dateFrom", format(applied.dateRange.from, "yyyy-MM-dd"));
           params.set("dateTo", format(applied.dateRange.to, "yyyy-MM-dd"));
         }
@@ -286,14 +307,17 @@ export default function ReportPage() {
     [applied, timeZone],
   );
 
+  // Only fetches once the user has actually searched (see `applyFilters`) —
+  // no auto-load of a default range on first mount.
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (hasSearched) fetchData();
+  }, [fetchData, hasSearched]);
 
   // ── Trend chart (day or month buckets depending on range length) ──
   const trendData = useMemo(() => {
     const byMonth =
       applied.allTime ||
+      !applied.dateRange.from ||
       differenceInCalendarDays(applied.dateRange.to, applied.dateRange.from) >
         62;
     const keyOf = (d) => format(new Date(d), byMonth ? "MMM yyyy" : "MMM dd");
@@ -402,12 +426,18 @@ export default function ReportPage() {
     draftDateRange.to?.getTime() !== applied.dateRange.to?.getTime() ||
     Object.entries(draftFilters).some(([k, v]) => applied.filters[k] !== v);
 
-  const applyFilters = () =>
+  // A start date (or "All time") is required — nothing to search otherwise.
+  const canApply = draftAllTime || !!draftDateRange.from;
+
+  const applyFilters = () => {
+    if (!canApply) return;
     setApplied({
       allTime: draftAllTime,
       dateRange: draftDateRange,
       filters: draftFilters,
     });
+    setHasSearched(true);
+  };
 
   // Scoped to just the Advanced Filters panel — Branch/Agent/Date Range now
   // live in the header and aren't touched by this "Clear all".
@@ -516,10 +546,12 @@ export default function ReportPage() {
           <Button
             size="sm"
             onClick={applyFilters}
+            disabled={!canApply}
+            title={canApply ? undefined : "Pick a start date (or All time) first"}
             className="relative gap-1.5 bg-indigo-600 hover:bg-indigo-700"
           >
             <Check className="h-3.5 w-3.5" /> Apply
-            {isDirty && (
+            {isDirty && canApply && (
               <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-white animate-pulse" />
             )}
           </Button>
@@ -528,7 +560,7 @@ export default function ReportPage() {
             variant="outline"
             size="icon"
             onClick={() => fetchData(true)}
-            disabled={refreshing}
+            disabled={refreshing || !hasSearched}
             title="Refresh"
             className="h-8 w-8"
           >
@@ -747,10 +779,12 @@ export default function ReportPage() {
               <Button
                 size="sm"
                 onClick={applyFilters}
+                disabled={!canApply}
+                title={canApply ? undefined : "Pick a start date (or All time) first"}
                 className="relative gap-1.5 bg-indigo-600 hover:bg-indigo-700"
               >
                 <Check className="h-3.5 w-3.5" /> Apply Filters
-                {isDirty && (
+                {isDirty && canApply && (
                   <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-white animate-pulse" />
                 )}
               </Button>
@@ -759,6 +793,10 @@ export default function ReportPage() {
         </Card>
       )}
 
+      {!hasSearched ? (
+        <NoSearchYet />
+      ) : (
+        <>
       {/* KPI Cards — driven entirely by backend `totals`, no client-side recompute */}
       <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
         {loading && !totals ? (
@@ -1151,6 +1189,8 @@ export default function ReportPage() {
           )}
         </CardContent>
       </Card>
+        </>
+      )}
     </div>
   );
 }
