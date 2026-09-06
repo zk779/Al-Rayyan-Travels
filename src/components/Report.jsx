@@ -108,6 +108,16 @@ const SALE_STATUSES = ["PENDING", "COMPLETED", "CANCELLED", "REFUNDED"];
 const PAYMENT_METHODS = ["CASH", "CREDIT", "BANK_TRANSFER", "PARTIAL"];
 const ALL = "__all__";
 
+// Length-based fallback so a big number never gets clipped/truncated —
+// long values shrink a step instead, short ones stay nice and bold.
+const fitValueClass = (value) => {
+  const len = String(value ?? "").length;
+  if (len > 17) return "text-sm";
+  if (len > 13) return "text-base";
+  if (len > 10) return "text-lg";
+  return "text-xl";
+};
+
 function KpiCard({ label, value, sub, icon: Icon, trend, tone = "slate" }) {
   const toneMap = {
     slate: "from-slate-600 to-slate-800",
@@ -118,46 +128,46 @@ function KpiCard({ label, value, sub, icon: Icon, trend, tone = "slate" }) {
     sky: "from-sky-500 to-sky-700",
   };
   return (
-    <Card className="border-slate-100 shadow-sm hover:shadow-md transition-shadow p-1!">
-      <CardContent className="p-2 flex items-start justify-between">
-        <div className="space-y-1 min-w-0">
-          <p className="text-xs font-medium text-slate-500 uppercase tracking-wider truncate">
+    <Card className="relative overflow-hidden border-slate-100 shadow-sm hover:shadow-md transition-shadow py-0 gap-0">
+      <div className={`h-1 bg-gradient-to-r ${toneMap[tone]}`} />
+      <CardContent className="px-3 py-2.5">
+        <div className="flex items-center gap-1.5 mb-1 min-w-0">
+          <div className={`p-1 rounded-md bg-gradient-to-br ${toneMap[tone]} shrink-0`}>
+            <Icon className="h-3 w-3 text-white" />
+          </div>
+          <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide leading-tight break-words">
             {label}
           </p>
-          <p className="text-2xl font-bold text-slate-900 tabular-nums truncate">
-            {value}
+        </div>
+        <p className={`${fitValueClass(value)} font-bold text-slate-900 tabular-nums leading-tight break-words`}>
+          {value}
+        </p>
+        {sub && (
+          <p className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5 leading-snug break-words">
+            {trend === "up" && (
+              <TrendingUp className="h-3 w-3 text-emerald-500 shrink-0" />
+            )}
+            {trend === "down" && (
+              <TrendingDown className="h-3 w-3 text-rose-500 shrink-0" />
+            )}
+            {sub}
           </p>
-          {sub && (
-            <p className="text-xs text-slate-400 flex items-center gap-1">
-              {trend === "up" && (
-                <TrendingUp className="h-3 w-3 text-emerald-500" />
-              )}
-              {trend === "down" && (
-                <TrendingDown className="h-3 w-3 text-rose-500" />
-              )}
-              {sub}
-            </p>
-          )}
-        </div>
-        <div
-          className={`p-2.5 rounded-xl shadow-sm bg-gradient-to-br ${toneMap[tone]} shrink-0`}
-        >
-          <Icon className="h-5 w-5 text-white" />
-        </div>
+        )}
       </CardContent>
     </Card>
   );
 }
 
 const KpiSkeleton = () => (
-  <Card className="border-slate-100 shadow-sm">
-    <CardContent className="p-5 flex items-start justify-between">
-      <div className="space-y-2 w-full">
-        <div className="h-3 w-20 rounded bg-slate-100 animate-pulse" />
-        <div className="h-6 w-28 rounded bg-slate-100 animate-pulse" />
-        <div className="h-3 w-24 rounded bg-slate-100 animate-pulse" />
+  <Card className="relative overflow-hidden border-slate-100 shadow-sm py-0 gap-0">
+    <div className="h-1 bg-slate-100" />
+    <CardContent className="px-3 py-2.5 space-y-2">
+      <div className="flex items-center gap-1.5">
+        <div className="h-4 w-4 rounded-md bg-slate-100 animate-pulse shrink-0" />
+        <div className="h-2.5 w-16 rounded bg-slate-100 animate-pulse" />
       </div>
-      <div className="h-10 w-10 rounded-xl bg-slate-100 animate-pulse shrink-0" />
+      <div className="h-5 w-24 rounded bg-slate-100 animate-pulse" />
+      <div className="h-2.5 w-20 rounded bg-slate-100 animate-pulse" />
     </CardContent>
   </Card>
 );
@@ -524,26 +534,29 @@ export default function ReportPage() {
       )}
 
       {/* Filters */}
-      <Card className="border-slate-200 gap-0!">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Filter className="h-4 w-4" /> Filters
+      <Card className="border-slate-200 gap-0! py-4">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <Filter className="h-3.5 w-3.5" /> Filters
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            <div className="space-y-2">
-              <Label>Date Range</Label>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs font-medium text-slate-500">Date Range</Label>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
-                    className="w-full justify-start text-left font-normal"
+                    size="sm"
+                    className="w-full min-w-0 justify-start text-left font-normal"
                   >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {allTime
-                      ? "All time"
-                      : `${format(dateRange.from, "LLL dd, y")} - ${format(dateRange.to, "LLL dd, y")}`}
+                    <CalendarIcon className="mr-1.5 h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">
+                      {allTime
+                        ? "All time"
+                        : `${format(dateRange.from, "dd MMM yy")} - ${format(dateRange.to, "dd MMM yy")}`}
+                    </span>
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
@@ -575,10 +588,10 @@ export default function ReportPage() {
             </div>
 
             {filterFields.map(({ key, label, list, nameKey }) => (
-              <div className="space-y-2" key={key}>
-                <Label>{label}</Label>
+              <div className="space-y-1" key={key}>
+                <Label className="text-xs font-medium text-slate-500">{label}</Label>
                 <Select value={filters[key]} onValueChange={setFilter(key)}>
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger size="sm" className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -593,13 +606,13 @@ export default function ReportPage() {
               </div>
             ))}
 
-            <div className="space-y-2">
-              <Label>Airline</Label>
+            <div className="space-y-1">
+              <Label className="text-xs font-medium text-slate-500">Airline</Label>
               <Select
                 value={filters.airlineCode}
                 onValueChange={setFilter("airlineCode")}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger size="sm" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -612,13 +625,13 @@ export default function ReportPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Payment Status</Label>
+            <div className="space-y-1">
+              <Label className="text-xs font-medium text-slate-500">Payment Status</Label>
               <Select
                 value={filters.paymentStatus}
                 onValueChange={setFilter("paymentStatus")}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger size="sm" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -631,13 +644,13 @@ export default function ReportPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Sale Status</Label>
+            <div className="space-y-1">
+              <Label className="text-xs font-medium text-slate-500">Sale Status</Label>
               <Select
                 value={filters.saleStatus}
                 onValueChange={setFilter("saleStatus")}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger size="sm" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -650,13 +663,13 @@ export default function ReportPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Payment Method</Label>
+            <div className="space-y-1">
+              <Label className="text-xs font-medium text-slate-500">Payment Method</Label>
               <Select
                 value={filters.paymentMethod}
                 onValueChange={setFilter("paymentMethod")}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger size="sm" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -715,7 +728,7 @@ export default function ReportPage() {
       </Card>
 
       {/* KPI Cards — driven entirely by backend `totals`, no client-side recompute */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
         {loading && !totals ? (
           Array.from({ length: 8 }).map((_, i) => <KpiSkeleton key={i} />)
         ) : (
