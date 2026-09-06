@@ -306,6 +306,7 @@ export default function ReportDetailTables({ sales = [], refunds = [], expenses 
                         <TableHead>Invoice #</TableHead>
                         <TableHead>Airline</TableHead>
                         <TableHead>Vendor</TableHead>
+                        <TableHead>Doc No.</TableHead>
                         <TableHead>Customer</TableHead>
                         <TableHead>Agent</TableHead>
                         <TableHead>Method</TableHead>
@@ -329,6 +330,7 @@ export default function ReportDetailTables({ sales = [], refunds = [], expenses 
                           <TableCell className="font-medium">{s.invoiceNumber || "—"}</TableCell>
                           <TableCell>{s.airline}</TableCell>
                           <TableCell>{s.vendor}</TableCell>
+                          <TableCell>{s.documentNo}</TableCell>
                           <TableCell>
                             {s.customer || <span className="italic text-slate-400">Walk-in</span>}
                           </TableCell>
