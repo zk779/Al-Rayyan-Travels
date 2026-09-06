@@ -23,6 +23,7 @@ import {
   TableRow,
 } from "../../shadcn/components/ui/table";
 import { money, downloadCsv } from "../utils/reportUtils";
+import { tabbyFromNet } from "./paymentBreakdown";
 
 const PAGE_SIZE = 10;
 
@@ -119,8 +120,23 @@ function Pagination({ page, pageCount, setPage, total }) {
   );
 }
 
-export default function ReportDetailTables({ sales = [], refunds = [], expenses = [], loading }) {
+export default function ReportDetailTables({ sales = [], refunds = [], expenses = [], loading, customers = [] }) {
   const [tab, setTab] = useState("sales");
+
+  // Tabby/Tamara sales are stored net-of-fees (paidAmount zeroed, sellPrice
+  // holding the net settlement amount) — reverse that here to show what the
+  // customer's original order was actually worth, same math as the sales
+  // tab's Payment Breakdown summary and the Excel export.
+  const customerTypeById = useMemo(
+    () => new Map(customers.map((c) => [c.id, c.customerType])),
+    [customers],
+  );
+  const tabbyOrderPrice = (sale) => {
+    if (String(sale.paymentMethod).toUpperCase() !== "CREDIT") return null;
+    if (customerTypeById.get(sale.customerId) !== "TABBY_OR_TAMARA") return null;
+    return tabbyFromNet(sale.sellPrice).orderAmount;
+  };
+  const hasTabbyRows = sales.some((s) => tabbyOrderPrice(s) != null);
 
   const salesSearch = usePagedSearch(sales, [
     "invoiceNumber",
@@ -145,13 +161,14 @@ export default function ReportDetailTables({ sales = [], refunds = [], expenses 
     if (tab === "sales") {
       downloadCsv(
         `sales-detail-${format(new Date(), "yyyyMMdd-HHmm")}.csv`,
-        ["Date", "Invoice #", "Airline", "Vendor", "Customer", "Agent", "Method", "Payment Status", "Status", "Net", "Sell", "VAT", "Profit", "Paid"],
+        ["Date", "Invoice #", "Airline", "Vendor", "Customer", "Tabby/Tamara Order Price", "Agent", "Method", "Payment Status", "Status", "Net", "Sell", "VAT", "Profit", "Paid"],
         salesSearch.filtered.map((s) => [
           s.date ? format(new Date(s.date), "yyyy-MM-dd") : "",
           s.invoiceNumber,
           s.airline,
           s.vendor,
           s.customer || "Walk-in",
+          tabbyOrderPrice(s)?.toFixed(2) || "",
           s.agent,
           s.paymentMethod,
           s.paymentStatus,
@@ -292,15 +309,21 @@ export default function ReportDetailTables({ sales = [], refunds = [], expenses 
                         <TableHead>Customer</TableHead>
                         <TableHead>Agent</TableHead>
                         <TableHead>Method</TableHead>
+                        {hasTabbyRows && (
+                          <TableHead className="">Tabby/Tamara OP</TableHead>
+                        )}
+                        <TableHead className="">Net</TableHead>
+                        <TableHead className="">Sell</TableHead>
+                        <TableHead className="">VAT</TableHead>
+                        <TableHead className="">Profit</TableHead>
                         <TableHead>Payment</TableHead>
                         <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Sell</TableHead>
-                        <TableHead className="text-right">VAT</TableHead>
-                        <TableHead className="text-right">Profit</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {salesSearch.paged.map((s) => (
+                      {salesSearch.paged.map((s) => {
+                        const orderPrice = tabbyOrderPrice(s);
+                        return (
                         <TableRow key={s.id}>
                           <TableCell className="whitespace-nowrap text-slate-500">{fmtDate(s.date)}</TableCell>
                           <TableCell className="font-medium">{s.invoiceNumber || "—"}</TableCell>
@@ -311,12 +334,12 @@ export default function ReportDetailTables({ sales = [], refunds = [], expenses 
                           </TableCell>
                           <TableCell>{s.agent}</TableCell>
                           <TableCell className="text-slate-500">{s.paymentMethod?.replace("_", " ")}</TableCell>
-                          <TableCell>
-                            <StatusBadge value={s.paymentStatus} />
-                          </TableCell>
-                          <TableCell>
-                            <StatusBadge value={s.status} />
-                          </TableCell>
+                          {hasTabbyRows && (
+                            <TableCell className="text-right tabular-nums text-fuchsia-700">
+                              {orderPrice != null ? money(orderPrice) : <span className="text-slate-300">—</span>}
+                            </TableCell>
+                          )}
+                          <TableCell className="text-right tabular-nums">{money(s.netPrice)}</TableCell>
                           <TableCell className="text-right tabular-nums">{money(s.sellPrice)}</TableCell>
                           <TableCell className="text-right tabular-nums text-slate-500">{money(s.vatTotal)}</TableCell>
                           <TableCell
@@ -324,8 +347,15 @@ export default function ReportDetailTables({ sales = [], refunds = [], expenses 
                           >
                             {money(s.profit)}
                           </TableCell>
+                          <TableCell>
+                            <StatusBadge value={s.paymentStatus} />
+                          </TableCell>
+                          <TableCell>
+                            <StatusBadge value={s.status} />
+                          </TableCell>
                         </TableRow>
-                      ))}
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>

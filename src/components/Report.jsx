@@ -226,7 +226,7 @@ export default function ReportPage() {
     filters: draftFilters,
   }));
 
-  const [filtersOpen, setFiltersOpen] = useState(true);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   // ── Reference lists, once ──
   useEffect(() => {
@@ -844,6 +844,7 @@ export default function ReportPage() {
         refunds={refunds}
         expenses={expenses}
         loading={loading}
+        customers={customers}
       />
 
       {/* Trend chart */}
