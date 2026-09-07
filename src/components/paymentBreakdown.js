@@ -11,13 +11,14 @@ const num = (v) => Number(v) || 0;
 // Forward: known Order Amount -> fee breakdown + Net Amount.
 function tabbyFromOrder(orderAmount) {
   const order = num(orderAmount);
-  const deducted = order * TABBY_FEE_RATE + TABBY_FIXED_FEE;
-  const vat = deducted * TABBY_VAT_RATE;
-  const totalDeduction = deducted + vat;
+  const deducted = order * TABBY_FEE_RATE + TABBY_FIXED_FEE; // "Fee (6.99% + 1.5 SAR)"
+  const vat = deducted * TABBY_VAT_RATE; // 15% VAT on that fee
+  const totalDeduction = deducted + vat; // total taken out of the order (fee + vat)
   return {
     orderAmount: order,
-    totalDeduction: round2(totalDeduction),
+    deducted: round2(deducted),
     vat: round2(vat),
+    totalDeduction: round2(totalDeduction),
     netAmount: round2(order - totalDeduction),
   };
 }
@@ -88,7 +89,7 @@ function legsForSale(sale) {
 
 /**
  * @returns {{ totals: {cash:number, bank:number, credit:number},
- *             tabbyRows: Array<{saleLabel, customerName, orderAmount, totalDeduction, vat, netAmount}> }}
+ *             tabbyRows: Array<{saleLabel, customerName, orderAmount, deducted, vat, totalDeduction, netAmount}> }}
  */
 export function computePaymentBreakdown(sales, customerOptions) {
   const totals = { cash: 0, bank: 0, credit: 0 };
@@ -106,6 +107,7 @@ export function computePaymentBreakdown(sales, customerOptions) {
             leg.orderAmount != null && leg.feeBreakdown
               ? {
                   orderAmount: num(leg.orderAmount),
+                  deducted: num(leg.feeBreakdown.deducted),
                   totalDeduction: num(leg.feeBreakdown.totalDeduction),
                   vat: num(leg.feeBreakdown.vat),
                   netAmount: num(leg.feeBreakdown.amount),

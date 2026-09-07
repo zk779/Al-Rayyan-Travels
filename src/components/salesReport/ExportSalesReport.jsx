@@ -123,9 +123,10 @@ const FIELD_GROUPS = [
     group: "Tabby / Tamara Details",
     fields: [
       { key: "tabbyOrderAmount", label: "Order Amount", get: (s, m) => tabbyValue(s, m, "orderAmount") },
-      { key: "tabbyTotalDeduction", label: "Fee + VAT Deducted", get: (s, m) => tabbyValue(s, m, "totalDeduction") },
-      { key: "tabbyVat", label: "VAT (15%)", get: (s, m) => tabbyValue(s, m, "vat") },
-      { key: "tabbyNetAmount", label: "Net Settlement Amount", get: (s, m) => tabbyValue(s, m, "netAmount") },
+      { key: "tabbyFee", label: "Fee (6.99% + 1.5 SAR)", get: (s, m) => tabbyValue(s, m, "deducted") },
+      { key: "tabbyVat", label: "VAT 15% (on fee)", get: (s, m) => tabbyValue(s, m, "vat") },
+      { key: "tabbyTotalDeduction", label: "Total Deducted", get: (s, m) => tabbyValue(s, m, "totalDeduction") },
+      { key: "tabbyNetAmount", label: "Sell Amount (after deduction)", get: (s, m) => tabbyValue(s, m, "netAmount") },
     ],
   },
 ];
