@@ -20,6 +20,7 @@ import {
   Wallet,
   Receipt,
   TrendingUp,
+  Filter,
 } from "lucide-react";
 
 import {
@@ -71,6 +72,7 @@ import { useNavigate } from "react-router-dom";
 import { appToast } from "../../../shadcn/components/ui/appToast";
 import { useAuth } from "../../context/AuthContext"; // ✅ ADD THIS — adjust relative path if needed
 import CopyableCell from "../copyAble"
+import ExportSalesReport from "./ExportSalesReport";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 const COLUMN_COUNT = 14;
@@ -136,8 +138,10 @@ export default function DetailedReportTab({
   searchQuery,
   searchBy,
   loading,
+  hasSearched = true,
   totalSales,
   totalProfit,
+  activeTab,
   page,
   pageSize,
   total,
@@ -311,6 +315,24 @@ export default function DetailedReportTab({
     );
   };
 
+  if (!hasSearched) {
+    return (
+      <Card className="border-dashed border-gray-200">
+        <CardContent className="py-16 flex flex-col items-center text-center gap-2">
+          <div className="p-3 rounded-full bg-indigo-50">
+            <Filter className="h-5 w-5 text-indigo-500" />
+          </div>
+          <p className="text-sm font-medium text-gray-700">
+            Pick a date range and hit Search to see sales transactions
+          </p>
+          <p className="text-xs text-gray-400 max-w-sm">
+            Or toggle "All time" if you want everything, regardless of date.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   if (loading) {
     return (
       <Card>
@@ -340,17 +362,26 @@ export default function DetailedReportTab({
               </span>
             )}
           </CardDescription>
-          {/* <div className="flex flex-wrap gap-3 pt-2">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-sm font-medium">
-              <Receipt className="h-4 w-4" /> {total ?? rows.length} Transactions
+          <div className="flex flex-wrap gap-3 pt-2 justify-between">
+          {rows.length > 0 && (
+            <div className="flex flex-wrap gap-3 pt-2">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-sm font-medium">
+                <Receipt className="h-4 w-4" /> {total ?? rows.length} Transactions
+              </div>
+              <div className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-purple-50 text-purple-700 text-sm font-medium">
+                <SaudiRiyal size={14} /> {Number(totalSales || 0).toFixed(2)} Total Sell
+              </div>
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-50 text-green-700 text-sm font-medium">
+                <TrendingUp className="h-4 w-4" /> {Number(totalProfit || 0).toFixed(2)} Total Profit
+              </div>
             </div>
-            <div className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-purple-50 text-purple-700 text-sm font-medium">
-              <SaudiRiyal size={14} /> {Number(totalSales || 0).toFixed(2)} Total Sell
-            </div>
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-50 text-green-700 text-sm font-medium">
-              <TrendingUp className="h-4 w-4" /> {Number(totalProfit || 0).toFixed(2)} Total Profit
-            </div>
-          </div> */}
+          )}
+          <ExportSalesReport
+            sales={salesData}
+            disabled={activeTab !== "detailed" || !salesData.length}
+            activeTab={activeTab} 
+          />
+          </div>
         </CardHeader>
         <CardContent>
           {rows.length === 0 ? (

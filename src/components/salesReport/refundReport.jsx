@@ -1,9 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
-import { Eye, Pencil, Trash2, SaudiRiyal, MoreVertical } from "lucide-react";
+import {
+  Eye,
+  Pencil,
+  Trash2,
+  SaudiRiyal,
+  MoreVertical,
+  Filter,
+  Undo2,
+  Receipt,
+} from "lucide-react";
 
 import {
   Card,
@@ -208,6 +217,7 @@ function ViewRefundDialog({ refund, onClose }) {
 export default function RefundsTab({
   refundData,
   loading,
+  hasSearched = true,
   searchQuery,
   searchBy,
 }) {
@@ -221,6 +231,33 @@ export default function RefundsTab({
   const [viewRefund, setViewRefund] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
+
+  const summary = useMemo(
+    () => ({
+      count: refundData.length,
+      netRefunded: refundData.reduce((s, r) => s + (r.netRefundToCustomer || 0), 0),
+      cancellationCharges: refundData.reduce((s, r) => s + (r.cancellationCharges || 0), 0),
+    }),
+    [refundData],
+  );
+
+  if (!hasSearched) {
+    return (
+      <Card className="border-dashed border-gray-200">
+        <CardContent className="py-16 flex flex-col items-center text-center gap-2">
+          <div className="p-3 rounded-full bg-indigo-50">
+            <Filter className="h-5 w-5 text-indigo-500" />
+          </div>
+          <p className="text-sm font-medium text-gray-700">
+            Pick a date range and hit Search to see refund transactions
+          </p>
+          <p className="text-xs text-gray-400 max-w-sm">
+            Or toggle "All time" if you want everything, regardless of date.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   /* ========================= DELETE ========================= */
   const handleDelete = async () => {
@@ -267,6 +304,19 @@ export default function RefundsTab({
               </span>
             )}
           </CardDescription>
+          {summary.count > 0 && (
+            <div className="flex flex-wrap gap-3 pt-2">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-sm font-medium">
+                <Receipt className="h-4 w-4" /> {summary.count} Refunds
+              </div>
+              <div className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-50 text-amber-700 text-sm font-medium">
+                <SaudiRiyal size={14} /> {summary.netRefunded.toFixed(2)} Refunded to Customers
+              </div>
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-50 text-green-700 text-sm font-medium">
+                <Undo2 className="h-4 w-4" /> {summary.cancellationCharges.toFixed(2)} Cancellation Charges
+              </div>
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">

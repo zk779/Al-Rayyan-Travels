@@ -213,7 +213,7 @@ async function downloadWorkbook(wb, filename) {
   URL.revokeObjectURL(a.href);
 }
 
-export default function ExportSalesReport({ sales = [], disabled }) {
+export default function ExportSalesReport({ sales = [], disabled, activeTab }) {
   const [open, setOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [selected, setSelected] = useState(new Set(DEFAULT_KEYS));
@@ -271,7 +271,7 @@ export default function ExportSalesReport({ sales = [], disabled }) {
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl! max-h-[85vh] overflow-y-auto scrollbar-none">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileSpreadsheet className="h-4 w-4" /> Export Sales Report

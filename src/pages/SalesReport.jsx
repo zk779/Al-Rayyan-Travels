@@ -1,13 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
-import { CalendarIcon, Filter, Search, X } from "lucide-react";
-import {
-  format,
-  subDays,
-  startOfMonth,
-  endOfMonth,
-  startOfYear,
-  endOfYear,
-} from "date-fns";
+import { format } from "date-fns";
+import { Filter, Search, X, RefreshCw, Check, ChevronUp } from "lucide-react";
 
 import { Button } from "../../shadcn/components/ui/button";
 import {
@@ -18,6 +11,7 @@ import {
 } from "../../shadcn/components/ui/card";
 import { Input } from "../../shadcn/components/ui/input";
 import { Label } from "../../shadcn/components/ui/label";
+import { Badge } from "../../shadcn/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -31,12 +25,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "../../shadcn/components/ui/tabs";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "../../shadcn/components/ui/popover";
-import RangeCalendar from "../components/DragCalendar";
+import DateRangeInputs from "../components/DateRangeInputs";
 
 import DetailedReportTab from "../components/salesReport/detailedReport";
 import RefundsTab from "../components/salesReport/refundReport";
@@ -49,25 +38,15 @@ const authHeaders = () => ({
   Authorization: `Bearer ${localStorage.getItem("token")}`,
 });
 
-const DATE_PRESETS = [
-  ["today", "Today"],
-  ["yesterday", "Yesterday"],
-  ["last7days", "Last 7 days"],
-  ["last30days", "Last 30 days"],
-  ["thisMonth", "This month"],
-  ["thisYear", "This year"],
-];
-
 const DEFAULT_PAGINATION = { total: 0, pages: 1 };
 const DEFAULT_SUMMARY = { totalSell: 0, totalProfit: 0 };
 
-// Everything a "search" submits. No date range by default — an unfiltered
-// fetch just returns the latest entries (server-side default sort/limit);
-// a range only kicks in once the user actually picks one.
+// Start date is left blank on purpose — nothing loads until the user picks
+// one (or toggles "All time") and hits Search. End date defaults to today.
+const defaultDateRange = () => ({ from: new Date() , to: new Date() });
 const defaultFilters = () => ({
   search: "",
   searchBy: "all",
-  dateRange: null,
   agent: "all",
   branch: "all",
   order: "desc", // desc = newest first
@@ -86,14 +65,27 @@ export default function SalesReport() {
     canViewSales ? "detailed" : canViewRefunds ? "refunds" : null,
   );
 
-  // `draft` is what the filter controls are bound to (edited freely, no
+  // `draft*` is what the filter controls are bound to (edited freely, no
   // network effect). `applied` is the last submitted snapshot — every
-  // fetch, and everything the table renders (highlighting, result counts),
-  // is derived from `applied` only. They start out equal so the first
-  // load uses sane defaults.
-  const [draft, setDraft] = useState(defaultFilters);
-  const [applied, setApplied] = useState(draft);
-  const setField = (key, value) => setDraft((d) => ({ ...d, [key]: value }));
+  // fetch, and everything the tables render (highlighting, result counts),
+  // is derived from `applied` only.
+  const [draftAllTime, setDraftAllTime] = useState(false);
+  const [draftDateRange, setDraftDateRange] = useState(defaultDateRange);
+  const [draftFilters, setDraftFilters] = useState(defaultFilters);
+  const setField = (key, value) =>
+    setDraftFilters((f) => ({ ...f, [key]: value }));
+
+  const [applied, setApplied] = useState(() => ({
+    allTime: draftAllTime,
+    dateRange: draftDateRange,
+    filters: draftFilters,
+  }));
+
+  // Nothing has been searched yet — no start date was ever chosen (or "All
+  // time" toggled) and Search hasn't been pressed, so both tabs stay empty
+  // rather than auto-loading a default range.
+  const [hasSearched, setHasSearched] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const [users, setUsers] = useState([]);
   const [branches, setBranches] = useState([]);
@@ -104,38 +96,8 @@ export default function SalesReport() {
   const [salesPage, setSalesPage] = useState(1);
   const [salesPageSize, setSalesPageSize] = useState(10);
   const [loading, setLoading] = useState(false);
-// Add this alongside your other useState declarations
-  const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [refundData, setRefundData] = useState([]);
   const [refundLoading, setRefundLoading] = useState(false);
-
-  const handleDatePreset = (preset) => {
-    const now = new Date();
-    switch (preset) {
-      case "today":
-        setField("dateRange", { from: now, to: now });
-        break;
-      case "yesterday": {
-        const y = subDays(now, 1);
-        setField("dateRange", { from: y, to: y });
-        break;
-      }
-      case "last7days":
-        setField("dateRange", { from: subDays(now, 6), to: now });
-        break;
-      case "last30days":
-        setField("dateRange", { from: subDays(now, 29), to: now });
-        break;
-      case "thisMonth":
-        setField("dateRange", { from: startOfMonth(now), to: endOfMonth(now) });
-        break;
-      case "thisYear":
-        setField("dateRange", { from: startOfYear(now), to: endOfYear(now) });
-        break;
-      default:
-        break;
-    }
-  };
 
   /* ── Agent list, once, for the Agent dropdown ── */
   useEffect(() => {
@@ -162,18 +124,20 @@ export default function SalesReport() {
   /* ── Shared query-string builder, driven ONLY by `applied` ── */
   const buildParams = useCallback(
     ({ fromKey, toKey, agentKey, orderKey }) => {
-      const { search, dateRange, agent, branch, order } = applied;
+      const { filters, dateRange, allTime } = applied;
       const params = new URLSearchParams();
-      if (search.trim()) params.set("search", search.trim());
-      if (dateRange?.from)
+      if (filters.search.trim()) params.set("search", filters.search.trim());
+      if (!allTime && dateRange?.from)
         params.set(fromKey, format(dateRange.from, "yyyy-MM-dd"));
-      if (dateRange?.to) params.set(toKey, format(dateRange.to, "yyyy-MM-dd"));
+      if (!allTime && dateRange?.to)
+        params.set(toKey, format(dateRange.to, "yyyy-MM-dd"));
       // Only ever sent for users who can filter by agent/branch — everyone
       // else has no such dropdown (and no non-"all" value) to send.
-      if (canFilterByAgent && agent !== "all") params.set(agentKey, agent);
-      if (canViewAllBranches && branch !== "all")
-        params.set("branchId", branch);
-      params.set(orderKey, order);
+      if (canFilterByAgent && filters.agent !== "all")
+        params.set(agentKey, filters.agent);
+      if (canViewAllBranches && filters.branch !== "all")
+        params.set("branchId", filters.branch);
+      params.set(orderKey, filters.order);
       params.set("tz", Intl.DateTimeFormat().resolvedOptions().timeZone);
       return params.toString();
     },
@@ -267,37 +231,62 @@ export default function SalesReport() {
     }
   }, [buildParams]);
 
-  /* ── Lazy, tab-aware fetching. Fires on mount, on tab switch, on
-     page/pageSize change, and whenever `applied` changes (Search/Clear) —
-     all via the `fetchSales`/`fetchRefunds` identity changing. ── */
+  /* ── Lazy, tab-aware fetching. Fires on tab switch, page/pageSize change,
+     and whenever `applied` changes (Search) — all via the fetchSales/
+     fetchRefunds identity changing. Gated on `hasSearched` so nothing loads
+     before the user's first Search. ── */
   useEffect(() => {
-    if (activeTab === "detailed" && canViewSales) fetchSales();
-  }, [activeTab, fetchSales, canViewSales]);
+    if (activeTab === "detailed" && canViewSales && hasSearched) fetchSales();
+  }, [activeTab, fetchSales, canViewSales, hasSearched]);
 
   useEffect(() => {
-    if (activeTab === "refunds" && canViewRefunds) fetchRefunds();
-  }, [activeTab, fetchRefunds, canViewRefunds]);
+    if (activeTab === "refunds" && canViewRefunds && hasSearched)
+      fetchRefunds();
+  }, [activeTab, fetchRefunds, canViewRefunds, hasSearched]);
+
+  // A start date (or "All time") is required — nothing to search otherwise.
+  const canApply = draftAllTime || !!draftDateRange.from;
 
   // Submits the draft filters — the only point where a filter change
   // actually reaches the API.
   const runSearch = () => {
-    setApplied(draft);
+    if (!canApply) return;
+    setApplied({
+      allTime: draftAllTime,
+      dateRange: draftDateRange,
+      filters: draftFilters,
+    });
     setSalesPage(1);
+    setHasSearched(true);
   };
 
-  const clearFilters = () => {
-    const f = defaultFilters();
-    setDraft(f);
-    setApplied(f);
-    setSalesPage(1);
-  };
+  // Draft differs from what's actually been fetched — the Search button
+  // highlights this so it's obvious there are unapplied changes.
+  const isDirty =
+    draftAllTime !== applied.allTime ||
+    draftDateRange.from?.getTime() !== applied.dateRange.from?.getTime() ||
+    draftDateRange.to?.getTime() !== applied.dateRange.to?.getTime() ||
+    Object.entries(draftFilters).some(([k, v]) => applied.filters[k] !== v);
 
+  // Scoped to just the Advanced Filters panel — Search/Date/Branch/Agent
+  // live in the header and aren't touched by this "Clear all".
   const hasActiveFilters =
-    draft.search ||
-    draft.dateRange ||
-    draft.agent !== "all" ||
-    draft.branch !== "all" ||
-    draft.order !== "desc";
+    draftFilters.searchBy !== "all" || draftFilters.order !== "desc";
+  const clearFilters = () => {
+    const next = { ...draftFilters, searchBy: "all", order: "desc" };
+    setDraftFilters(next);
+    setApplied((a) => ({ ...a, filters: next }));
+    setSalesPage(1);
+  };
+  const advancedActiveCount =
+    (applied.filters.searchBy !== "all" ? 1 : 0) +
+    (applied.filters.order !== "desc" ? 1 : 0);
+
+  const activeLoading = activeTab === "detailed" ? loading : refundLoading;
+  const handleRefresh = () => {
+    if (activeTab === "detailed") fetchSales();
+    else if (activeTab === "refunds") fetchRefunds();
+  };
 
   // RBAC — if user has neither permission, show a simple empty state
   if (!canViewSales && !canViewRefunds) {
@@ -313,202 +302,250 @@ export default function SalesReport() {
   }
 
   return (
-    <div className="w-full mx-auto p-6 space-y-6">
+    <div className="w-full mx-auto p-6 space-y-5">
       {/* Header */}
-      <div className="flex justify-between">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4">
         <div>
           <h1 className="text-3xl font-bold">Sales Report</h1>
           <p className="text-gray-600">
-            Comprehensive sales analytics and performance metrics
+            Comprehensive sales analytics.
           </p>
         </div>
-        <ExportSalesReport
-          sales={salesData}
-          disabled={activeTab !== "detailed" || !salesData.length}
-        />
-      </div>
 
-      {/* Filters */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Filter className="h-5 w-5" />
-            Filters & Search
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {/* Auto-fit: each filter claims a 180px+ column and wraps to as
-              many rows as needed — no breakpoint/column-count bookkeeping. */}
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-4">
-            <div className="space-y-2">
-              <Label>Search By</Label>
-              <Select
-                value={draft.searchBy}
-                onValueChange={(v) => setField("searchBy", v)}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Fields</SelectItem>
-                  <SelectItem value="invoiceNumber">Invoice Number</SelectItem>
-                  <SelectItem value="documentNumber">
-                    Document Number
-                  </SelectItem>
-                  <SelectItem value="remarks">Remarks</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Search Query</Label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
-                <Input
-                  placeholder={
-                    draft.searchBy === "invoiceNumber"
-                      ? "Search by invoice number..."
-                      : draft.searchBy === "documentNumber"
-                        ? "Search by document number..."
-                        : draft.searchBy === "remarks"
-                          ? "Search by remarks..."
-                          : "Search across all fields..."
-                  }
-                  value={draft.search}
-                  onChange={(e) => setField("search", e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && runSearch()}
-                  className="pl-10 w-full"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Date Range</Label>
-              <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="w-full min-w-0 justify-start text-left font-normal"
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
-                    <span className="truncate">
-                      {draft.dateRange?.from
-                        ? draft.dateRange.to
-                          ? `${format(draft.dateRange.from, "dd MMM yy")} - ${format(draft.dateRange.to, "dd MMM yy")}`
-                          : format(draft.dateRange.from, "dd MMM yy")
-                        : "Pick a date range"}
-                    </span>
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <div className="p-3 border-b grid grid-cols-2 gap-2">
-                    {DATE_PRESETS.map(([key, label]) => (
-                      <Button
-                        key={key}
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDatePreset(key)}
-                      >
-                        {label}
-                      </Button>
-                    ))}
-                  </div>
-                  <RangeCalendar
-                    defaultMonth={draft.dateRange?.from}
-                    selected={draft.dateRange}
-                    onSelect={(range) => setField("dateRange", range)}
-                    numberOfMonths={2}
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            {canFilterByAgent && (
-              <div className="space-y-2">
-                <Label>Agent</Label>
-                <Select
-                  value={draft.agent}
-                  onValueChange={(v) => setField("agent", v)}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Agents</SelectItem>
-                    {users.map((u) => (
-                      <SelectItem key={u.id} value={u.id}>
-                        {u.fullName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {canViewAllBranches && (
-              <div className="space-y-2">
-                <Label>Branch</Label>
-                <Select
-                  value={draft.branch}
-                  onValueChange={(v) => setField("branch", v)}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Branches</SelectItem>
-                    {branches.map((b) => (
-                      <SelectItem key={b.id} value={b.id}>
-                        {b.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label>Sort</Label>
-              <Select
-                value={draft.order}
-                onValueChange={(v) => setField("order", v)}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="desc">Newest first</SelectItem>
-                  <SelectItem value="asc">Oldest first</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Apply</Label>
-
-              <div className="flex items-center gap-2">
-                <Button
-                  onClick={runSearch}
-                  className="bg-gradient-primary min-w-[140px] h-8"
-                >
-                  <Search className="h-4 w-4 mr-2" />
-                  Search
-                </Button>
-
-                {hasActiveFilters && (
-                  <Button
-                    variant="outline"
-                    onClick={clearFilters}
-                    className="h-8 border-destructive/30 text-destructive hover:bg-destructive hover:text-destructive-foreground transition-all"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
+        {/* Main filters — the ones adjusted most often live right in the
+            header. Search By / Sort are one hover away in Advanced Filters. */}
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="space-y-1 w-[170px] focus-within:w-[250px] transition-[width] duration-200 focus:*:ring-1 focus:*:ring-offset-1">
+            <Label className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">
+              Search
+            </Label>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 h-3.5 w-3.5" />
+              <Input
+                value={draftFilters.search}
+                onChange={(e) => setField("search", e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && runSearch()}
+                placeholder="Invoice, doc # or remarks"
+                className="pl-8 h-8 text-sm w-full"
+              />
             </div>
           </div>
-        </CardContent>
-      </Card>
+
+          <DateRangeInputs
+            from={draftDateRange.from}
+            to={draftDateRange.to}
+            onChange={(range) => {
+              setDraftAllTime(false);
+              setDraftDateRange(range);
+            }}
+            disabled={draftAllTime}
+            compact
+          />
+          <button
+            type="button"
+            onClick={() => setDraftAllTime((v) => !v)}
+            title="Show every record, ignoring the date range"
+            className={`h-8 px-2 rounded-md text-xs font-medium border transition-colors ${
+              draftAllTime
+                ? "bg-indigo-50 border-indigo-200 text-indigo-700"
+                : "border-slate-200 text-slate-500 hover:bg-slate-50"
+            }`}
+          >
+            All time
+          </button>
+
+          {canFilterByAgent && (
+            <Select
+              value={draftFilters.agent}
+              onValueChange={(v) => setField("agent", v)}
+            >
+              <SelectTrigger size="sm" className="w-[130px]">
+                <SelectValue placeholder="All Agents" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Agents</SelectItem>
+                {users.map((u) => (
+                  <SelectItem key={u.id} value={u.id}>
+                    {u.fullName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          {canViewAllBranches && (
+            <Select
+              value={draftFilters.branch}
+              onValueChange={(v) => setField("branch", v)}
+            >
+              <SelectTrigger size="sm" className="w-[130px]">
+                <SelectValue placeholder="All Branches" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Branches</SelectItem>
+                {branches.map((b) => (
+                  <SelectItem key={b.id} value={b.id}>
+                    {b.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          <Button
+            size="sm"
+            onClick={runSearch}
+            disabled={!canApply}
+            title={canApply ? undefined : "Pick a date range(or All time) first"}
+            className="relative gap-1.5 bg-gradient-primary"
+          >
+            <Search className="h-3.5 w-3.5" /> Search
+            {isDirty && canApply && (
+              <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-white animate-pulse" />
+            )}
+          </Button>
+
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={handleRefresh}
+            disabled={!hasSearched || activeLoading}
+            title="Refresh"
+            className="h-8 w-8"
+          >
+            <RefreshCw
+              className={`h-3.5 w-3.5 ${activeLoading ? "animate-spin" : ""}`}
+            />
+          </Button>
+
+          {/* Advanced Filters — icon-only, expands to show its label on
+              hover; click toggles the panel below. */}
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((o) => !o)}
+            title="Advance Filters"
+            className={`group flex items-center h-8 gap-1.5 px-2 rounded-md border text-sm transition-colors ${
+              filtersOpen
+                ? "bg-indigo-50 border-indigo-200 text-indigo-700"
+                : "border-slate-200 text-slate-500 hover:bg-slate-50"
+            }`}
+          >
+            <Filter className="h-3.5 w-3.5 shrink-0" />
+            <span className="max-w-0 group-hover:max-w-[110px] opacity-0 group-hover:opacity-100 overflow-hidden whitespace-nowrap transition-all duration-200 font-medium">
+              Advance Filters
+            </span>
+            {advancedActiveCount > 0 && (
+              <Badge
+                variant="secondary"
+                className="h-4 px-1 text-[10px] font-semibold"
+              >
+                {advancedActiveCount}
+              </Badge>
+            )}
+          </button>
+          {/* <ExportSalesReport
+            sales={salesData}
+            disabled={activeTab !== "detailed" || !salesData.length}
+            activeTab={activeTab}
+          /> */}
+
+        </div>
+      </div>
+
+      {/* Advanced Filters — opened via the header's hover icon, not a modal;
+          fully hidden when closed so it costs no space. Shares the same
+          draft/Search flow as the header's main filters. */}
+      {filtersOpen && (
+        <Card className="border-slate-200 gap-0! py-4">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <Filter className="h-3.5 w-3.5" /> Advanced Filters
+              </CardTitle>
+              <button
+                type="button"
+                onClick={() => setFiltersOpen(false)}
+                className="flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-700"
+              >
+                Hide <ChevronUp className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </CardHeader>
+
+          <CardContent className="space-y-3 pt-1">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-slate-500">
+                  Search By
+                </Label>
+                <Select
+                  value={draftFilters.searchBy}
+                  onValueChange={(v) => setField("searchBy", v)}
+                >
+                  <SelectTrigger size="sm" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Fields</SelectItem>
+                    <SelectItem value="invoiceNumber">
+                      Invoice Number
+                    </SelectItem>
+                    <SelectItem value="documentNumber">
+                      Document Number
+                    </SelectItem>
+                    <SelectItem value="remarks">Remarks</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-slate-500">
+                  Sort
+                </Label>
+                <Select
+                  value={draftFilters.order}
+                  onValueChange={(v) => setField("order", v)}
+                >
+                  <SelectTrigger size="sm" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="desc">Newest first</SelectItem>
+                    <SelectItem value="asc">Oldest first</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
+              {hasActiveFilters ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearFilters}
+                  className="text-slate-500 h-7"
+                >
+                  <X className="h-3.5 w-3.5 mr-1" /> Clear all
+                </Button>
+              ) : (
+                <span />
+              )}
+
+              <Button
+                size="sm"
+                onClick={runSearch}
+                disabled={!canApply}
+                className="relative gap-1.5 bg-gradient-primary"
+              >
+                <Check className="h-3.5 w-3.5" /> Search
+                {isDirty && canApply && (
+                  <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-white animate-pulse" />
+                )}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Tabs */}
       {canViewSales && canViewRefunds ? (
@@ -522,11 +559,13 @@ export default function SalesReport() {
             <DetailedReportTab
               salesData={salesData}
               loading={loading}
-              searchQuery={applied.search}
-              searchBy={applied.searchBy}
+              hasSearched={hasSearched}
+              searchQuery={applied.filters.search}
+              searchBy={applied.filters.searchBy}
               totalSales={salesSummary.totalSell}
               totalProfit={salesSummary.totalProfit}
               page={salesPage}
+              activeTab={activeTab}
               pageSize={salesPageSize}
               total={salesPagination.total}
               totalPages={salesPagination.pages}
@@ -539,8 +578,9 @@ export default function SalesReport() {
             <RefundsTab
               refundData={refundData}
               loading={refundLoading}
-              searchQuery={applied.search}
-              searchBy={applied.searchBy}
+              hasSearched={hasSearched}
+              searchQuery={applied.filters.search}
+              searchBy={applied.filters.searchBy}
             />
           </TabsContent>
         </Tabs>
@@ -548,8 +588,9 @@ export default function SalesReport() {
         <DetailedReportTab
           salesData={salesData}
           loading={loading}
-          searchQuery={applied.search}
-          searchBy={applied.searchBy}
+          hasSearched={hasSearched}
+          searchQuery={applied.filters.search}
+          searchBy={applied.filters.searchBy}
           totalSales={salesSummary.totalSell}
           totalProfit={salesSummary.totalProfit}
           page={salesPage}
@@ -563,8 +604,9 @@ export default function SalesReport() {
         <RefundsTab
           refundData={refundData}
           loading={refundLoading}
-          searchQuery={applied.search}
-          searchBy={applied.searchBy}
+          hasSearched={hasSearched}
+          searchQuery={applied.filters.search}
+          searchBy={applied.filters.searchBy}
         />
       )}
     </div>
