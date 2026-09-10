@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { format } from "date-fns";
-import { Search, Download, Receipt, Undo2, TrendingUp, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, Download, Receipt, Undo2, TrendingUp, ChevronLeft, ChevronRight, Info } from "lucide-react";
 
 import { Button } from "../../shadcn/components/ui/button";
 import {
@@ -22,6 +22,11 @@ import {
   TableHeader,
   TableRow,
 } from "../../shadcn/components/ui/table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "../../shadcn/components/ui/tooltip";
 import { money, downloadCsv } from "../utils/reportUtils";
 import { tabbyFromNet } from "./paymentBreakdown";
 
@@ -131,12 +136,15 @@ export default function ReportDetailTables({ sales = [], refunds = [], expenses 
     () => new Map(customers.map((c) => [c.id, c.customerType])),
     [customers],
   );
-  const tabbyOrderPrice = (sale) => {
+  // Returns the full { orderAmount, deducted, vat, totalDeduction, netAmount }
+  // breakdown (or null when the row isn't a Tabby/Tamara credit sale) — the
+  // order amount is shown in the cell, the rest surfaces in its info tooltip.
+  const tabbyBreakdown = (sale) => {
     if (String(sale.paymentMethod).toUpperCase() !== "CREDIT") return null;
     if (customerTypeById.get(sale.customerId) !== "TABBY_OR_TAMARA") return null;
-    return tabbyFromNet(sale.sellPrice).orderAmount;
+    return tabbyFromNet(sale.sellPrice);
   };
-  const hasTabbyRows = sales.some((s) => tabbyOrderPrice(s) != null);
+  const hasTabbyRows = sales.some((s) => tabbyBreakdown(s) != null);
 
   const salesSearch = usePagedSearch(sales, [
     "invoiceNumber",
@@ -168,7 +176,7 @@ export default function ReportDetailTables({ sales = [], refunds = [], expenses 
           s.airline,
           s.vendor,
           s.customer || "Walk-in",
-          tabbyOrderPrice(s)?.toFixed(2) || "",
+          tabbyBreakdown(s)?.orderAmount?.toFixed(2) || "",
           s.agent,
           s.paymentMethod,
           s.paymentStatus,
@@ -323,7 +331,7 @@ export default function ReportDetailTables({ sales = [], refunds = [], expenses 
                     </TableHeader>
                     <TableBody>
                       {salesSearch.paged.map((s) => {
-                        const orderPrice = tabbyOrderPrice(s);
+                        const tb = tabbyBreakdown(s);
                         return (
                         <TableRow key={s.id}>
                           <TableCell className="whitespace-nowrap text-slate-500">{fmtDate(s.date)}</TableCell>
@@ -338,7 +346,42 @@ export default function ReportDetailTables({ sales = [], refunds = [], expenses 
                           <TableCell className="text-slate-500">{s.paymentMethod?.replace("_", " ")}</TableCell>
                           {hasTabbyRows && (
                             <TableCell className="text-right tabular-nums text-fuchsia-700">
-                              {orderPrice != null ? money(orderPrice) : <span className="text-slate-300">—</span>}
+                              {tb ? (
+                                <span className="inline-flex items-center justify-end gap-1">
+                                  {money(tb.orderAmount)}
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Info className="h-3 w-3 text-fuchsia-400 hover:text-fuchsia-600 cursor-help shrink-0" />
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top">
+                                      <div className="space-y-1 min-w-[170px]">
+                                        <div className="flex justify-between gap-4">
+                                          <span className="opacity-80">Order Amount</span>
+                                          <span className="font-semibold">{money(tb.orderAmount)}</span>
+                                        </div>
+                                        <div className="flex justify-between gap-4">
+                                          <span className="opacity-80">Fee (6.99% + 1.5 SAR)</span>
+                                          <span className="font-semibold">{money(tb.deducted)}</span>
+                                        </div>
+                                        <div className="flex justify-between gap-4">
+                                          <span className="opacity-80">VAT 15%</span>
+                                          <span className="font-semibold">{money(tb.vat)}</span>
+                                        </div>
+                                        <div className="flex justify-between gap-4 border-t border-white/20 pt-1">
+                                          <span className="opacity-80">Total Deducted</span>
+                                          <span className="font-semibold">{money(tb.totalDeduction)}</span>
+                                        </div>
+                                        <div className="flex justify-between gap-4">
+                                          <span className="opacity-80">Sell Amount</span>
+                                          <span className="font-semibold">{money(tb.netAmount)}</span>
+                                        </div>
+                                      </div>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </span>
+                              ) : (
+                                <span className="text-slate-300">—</span>
+                              )}
                             </TableCell>
                           )}
                           <TableCell className="text-right tabular-nums">{money(s.netPrice)}</TableCell>

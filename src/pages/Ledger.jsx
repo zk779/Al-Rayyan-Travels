@@ -66,8 +66,9 @@ import {
 	PopoverTrigger,
 } from "../../shadcn/components/ui/popover";
 import { cn } from "../../shadcn/lib/utils";
-import RangeCalendar from "../components/DragCalendar";
+import DateRangeInputs from "../components/DateRangeInputs";
 import { appToast } from "../../shadcn/components/ui/appToast";
+import { tabbyFromNet } from "../components/paymentBreakdown";
 
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
@@ -153,6 +154,39 @@ const refundStatusColor = {
 };
 
 /* ======================= DETAIL PANELS ======================= */
+
+// Tabby/Tamara sales are stored net-of-fees (paidAmount zeroed, sellPrice
+// holding the net settlement amount) — reverse that here for a precise
+// breakdown, using the exact same math as the Sales Report / Reports pages.
+const isTabbyOrTamaraSale = (sale) =>
+	String(sale?.paymentType).toUpperCase() === "CREDIT" &&
+	sale?.customer?.customerType === "TABBY_OR_TAMARA";
+
+function TabbyBreakdownPanel({ sale }) {
+	const tb = tabbyFromNet(sale.sellPrice);
+	const fields = [
+		{ label: "Order Amount", value: tb.orderAmount, color: "text-gray-800" },
+		{ label: "Fee (6.99% + 1.5 SAR)", value: tb.deducted, color: "text-gray-800" },
+		{ label: "VAT 15%", value: tb.vat, color: "text-gray-800" },
+		{ label: "Total Deducted", value: tb.totalDeduction, color: "text-rose-700" },
+		{ label: "Sell Amount", value: tb.netAmount, color: "text-fuchsia-700" },
+	];
+	return (
+		<div className="col-span-2 md:col-span-4 rounded-lg border border-fuchsia-200 bg-fuchsia-50/60 p-3">
+			<p className="text-[10px] font-bold text-fuchsia-600 uppercase tracking-widest mb-2">
+				Tabby / Tamara Breakdown
+			</p>
+			<div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+				{fields.map(({ label, value, color }) => (
+					<div key={label}>
+						<p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">{label}</p>
+						<p className={cn("text-xs font-semibold", color)}><Money value={value} /></p>
+					</div>
+				))}
+			</div>
+		</div>
+	);
+}
 
 function SaleDetail({ sale }) {
 	if (!sale) return null;
@@ -272,6 +306,7 @@ function SaleDetail({ sale }) {
 					</div>
 				</div>
 			)}
+			{isTabbyOrTamaraSale(sale) && <TabbyBreakdownPanel sale={sale} />}
 		</div>
 	);
 }
@@ -768,25 +803,30 @@ export default function LedgerComponent() {
 	const [vendors, setVendors]           = useState([]);
 	const [customers, setCustomers]       = useState([]);
 
-	const [accountType, setAccountType] = useState("SELECT"); // was "VENDOR"
-	// was: const [entryType, setEntryType] = useState("ALL");
-	const [entryTypes, setEntryTypes] = useState([]); // [] = All Entries
+	// `draft` is what the filter controls are bound to (edited freely, no
+	// network effect). `applied` is the last submitted snapshot — fetchLedger
+	// and every summary/calculation below reads from `applied` only. Nothing
+	// refetches until "Apply Filters" is pressed.
+	const defaultDraftFilters = () => ({
+		accountType: "SELECT",
+		entryTypes: [], // [] = All Entries
+		vendorId: "all",
+		customerId: "all",
+		dateRange: { from: null, to: null },
+	});
+	const [draft, setDraft] = useState(defaultDraftFilters);
+	const [applied, setApplied] = useState(draft);
+	const setDraftField = (key, value) => setDraft((d) => ({ ...d, [key]: value }));
+
 	const [entryTypeOpen, setEntryTypeOpen] = useState(false);
-
 	const toggleEntryType = (val) => {
-		setEntryTypes((prev) =>
-			prev.includes(val) ? prev.filter((v) => v !== val) : [...prev, val]
-		);
-		setPage(1);
+		setDraft((d) => ({
+			...d,
+			entryTypes: d.entryTypes.includes(val)
+				? d.entryTypes.filter((v) => v !== val)
+				: [...d.entryTypes, val],
+		}));
 	};
-	const [selectedVendorId, setSelectedVendorId]       = useState("all");
-	const [selectedCustomerId, setSelectedCustomerId]   = useState("all");
-	// Add this alongside your other useState declarations
-	const [datePickerOpen, setDatePickerOpen] = useState(false);
-
-	// No default range — an unfiltered fetch just returns the latest entries
-	// (server already sorts newest-first); a range only kicks in once picked.
-	const [dateRange, setDateRange] = useState(null);
 
 	const [page, setPage]       = useState(1);
 	const [limit, setLimit]     = useState(50); // page size — user-adjustable via dropdown
@@ -804,35 +844,35 @@ export default function LedgerComponent() {
 		apiRequest("/api/customers").then((r) => setCustomers(r.data || [])).catch(console.error);
 	}, []);
 
-	/* ---------- Fetch ledger ---------- */
+	/* ---------- Fetch ledger — driven entirely by `applied` ---------- */
 	const fetchLedger = useCallback(async () => {
-			if (accountType === "SELECT") {
+			if (applied.accountType === "SELECT") {
 				setEntries([]);
 				setTotal(0);
 				setTotalPages(1);
 				setSummary(null);
 				return;
 			}
-		
+
 			setIsLoading(true);
 			try {
 			const params = new URLSearchParams();
-			params.set("accountType", accountType);
+			params.set("accountType", applied.accountType);
 			params.set("page", page);
 			params.set("limit", limit);
 			params.set("includeDetails", "true");
 			params.set("includeSummary", "true");
 
-			if (entryTypes.length > 0) params.set("entryType", entryTypes.join(","));
-			if (accountType === "VENDOR"   && selectedVendorId   !== "all") params.set("vendorId", selectedVendorId);
-			if (accountType === "CUSTOMER" && selectedCustomerId !== "all") params.set("customerId", selectedCustomerId);
+			if (applied.entryTypes.length > 0) params.set("entryType", applied.entryTypes.join(","));
+			if (applied.accountType === "VENDOR"   && applied.vendorId   !== "all") params.set("vendorId", applied.vendorId);
+			if (applied.accountType === "CUSTOMER" && applied.customerId !== "all") params.set("customerId", applied.customerId);
 
 			// Send plain local calendar dates (no time/Z) — the backend's
 			// localDayRangeToUtc converts these using the timezone below,
 			// so we must NOT pre-convert to ISO/UTC here ourselves.
-			if (dateRange?.from) params.set("from", format(dateRange.from, "yyyy-MM-dd"));
-			if (dateRange?.to)   params.set("to",   format(dateRange.to,   "yyyy-MM-dd"));
-			if (dateRange?.from || dateRange?.to) {
+			if (applied.dateRange?.from) params.set("from", format(applied.dateRange.from, "yyyy-MM-dd"));
+			if (applied.dateRange?.to)   params.set("to",   format(applied.dateRange.to,   "yyyy-MM-dd"));
+			if (applied.dateRange?.from || applied.dateRange?.to) {
 				params.set("timezone", Intl.DateTimeFormat().resolvedOptions().timeZone);
 			}
 
@@ -847,7 +887,7 @@ export default function LedgerComponent() {
 		} finally {
 			setIsLoading(false);
 		}
-	}, [accountType, entryTypes, selectedVendorId, selectedCustomerId, dateRange, page, limit]);
+	}, [applied, page, limit]);
 
 	useEffect(() => { fetchLedger(); }, [fetchLedger]);
 
@@ -872,10 +912,11 @@ export default function LedgerComponent() {
 	const isPositive = netBalance >= 0;
 
 	// When a specific vendor/customer is selected, pull that single account's
-	// totals + live balance out of summary.byAccount.
+	// totals + live balance out of summary.byAccount. Reads from `applied`
+	// since that's what the summary was actually computed against.
 	const selectedReferenceId =
-		accountType === "VENDOR"   && selectedVendorId   !== "all" ? selectedVendorId :
-		accountType === "CUSTOMER" && selectedCustomerId !== "all" ? selectedCustomerId :
+		applied.accountType === "VENDOR"   && applied.vendorId   !== "all" ? applied.vendorId :
+		applied.accountType === "CUSTOMER" && applied.customerId !== "all" ? applied.customerId :
 		null;
 
 	const singleAccountSummary = selectedReferenceId
@@ -883,14 +924,24 @@ export default function LedgerComponent() {
 		: null;
 
 	/* ---------- Filters ---------- */
-	const clearFilters = () => {
-	setAccountType("SELECT");  setEntryTypes([]);
-	setSelectedVendorId("all"); setSelectedCustomerId("all");
-	setDateRange(null);
-	setPage(1);
-};
+	const isDirty = JSON.stringify(draft) !== JSON.stringify(applied);
 
-	const hasActiveFilters = accountType !== "SELECT" || entryTypes.length > 0 || selectedVendorId !== "all" || selectedCustomerId !== "all" || !!dateRange;
+	const applyFilters = () => {
+		setApplied(draft);
+		setPage(1);
+	};
+
+	const clearFilters = () => {
+		const f = defaultDraftFilters();
+		setDraft(f);
+		setApplied(f);
+		setPage(1);
+	};
+
+	const hasActiveFilters =
+		draft.accountType !== "SELECT" || draft.entryTypes.length > 0 ||
+		draft.vendorId !== "all" || draft.customerId !== "all" ||
+		!!draft.dateRange?.from || !!draft.dateRange?.to;
 
 	/* ---------- Export ---------- */
 	const exportCSV = () => {
@@ -1014,10 +1065,11 @@ export default function LedgerComponent() {
 				</div>
 			)}
 
-			{/* ── Filters ── */}
-			<Card className="shadow-sm mb-6 border-gray-200 py-0!">
-				<CardContent className="p-4">
-					<div className="flex items-center justify-between mb-3">
+			{/* ── Filters — draft/applied split, same as Sales Report & Reports:
+			    nothing refetches until "Apply Filters" is pressed. ── */}
+			<Card className="shadow-sm mb-6 border-gray-200 py-4">
+				<CardContent className="space-y-3">
+					<div className="flex items-center justify-between">
 						<div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
 							<Filter className="w-4 h-4 text-gray-500" />
 							Filters
@@ -1029,12 +1081,15 @@ export default function LedgerComponent() {
 						)}
 					</div>
 
-					<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+					<div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
 						{/* Account Type */}
 						<div className="space-y-1">
-							<label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Account Type</label>
-							<Select value={accountType} onValueChange={(v) => { setAccountType(v); setSelectedVendorId("all"); setSelectedCustomerId("all"); setPage(1); }}>
-								<SelectTrigger className="h-9 text-sm w-full"><SelectValue /></SelectTrigger>
+							<label className="text-xs font-medium text-gray-500">Account Type</label>
+							<Select
+								value={draft.accountType}
+								onValueChange={(v) => setDraft((d) => ({ ...d, accountType: v, vendorId: "all", customerId: "all" }))}
+							>
+								<SelectTrigger size="sm" className="w-full"><SelectValue /></SelectTrigger>
 								<SelectContent>
 									{[["SELECT","Select Account",Pointer],["VENDOR","Vendor",Building2],["CUSTOMER","Customer",Users],["EXPENSE","Expense",CreditCard],["CASH","Cash",Wallet],["BANK","Bank",Building2]].map(([val, label, Icon]) => (
 										<SelectItem key={val} value={val}>
@@ -1047,16 +1102,16 @@ export default function LedgerComponent() {
 
 						{/* Entry Type */}
 						<div className="space-y-1">
-							<label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Entry Type</label>
+							<label className="text-xs font-medium text-gray-500">Entry Type</label>
 							<Popover open={entryTypeOpen} onOpenChange={setEntryTypeOpen}>
 								<PopoverTrigger asChild>
-									<Button variant="outline" className="w-full justify-between h-9 text-sm font-normal">
+									<Button variant="outline" size="sm" className="w-full justify-between font-normal">
 										<span className="truncate">
-											{entryTypes.length === 0
+											{draft.entryTypes.length === 0
 												? "All Entries"
-												: entryTypes.length === 1
-												? ENTRY_TYPE_OPTIONS.find((o) => o.value === entryTypes[0])?.label
-												: `${entryTypes.length} selected`}
+												: draft.entryTypes.length === 1
+												? ENTRY_TYPE_OPTIONS.find((o) => o.value === draft.entryTypes[0])?.label
+												: `${draft.entryTypes.length} selected`}
 										</span>
 										<ChevronDown className="h-3.5 w-3.5 text-gray-400 shrink-0" />
 									</Button>
@@ -1064,9 +1119,9 @@ export default function LedgerComponent() {
 								<PopoverContent className="w-56 p-2" align="start">
 									<div
 										className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer text-sm"
-										onClick={() => { setEntryTypes([]); setPage(1); }}
+										onClick={() => setDraftField("entryTypes", [])}
 									>
-										<Checkbox checked={entryTypes.length === 0} className="pointer-events-none" />
+										<Checkbox checked={draft.entryTypes.length === 0} className="pointer-events-none" />
 										<span className="font-medium">All Entries</span>
 									</div>
 									<div className="h-px bg-gray-100 my-1" />
@@ -1076,7 +1131,7 @@ export default function LedgerComponent() {
 											className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer text-sm"
 											onClick={() => toggleEntryType(opt.value)}
 										>
-											<Checkbox checked={entryTypes.includes(opt.value)} className="pointer-events-none" />
+											<Checkbox checked={draft.entryTypes.includes(opt.value)} className="pointer-events-none" />
 											<span>{opt.label}</span>
 										</div>
 									))}
@@ -1085,11 +1140,11 @@ export default function LedgerComponent() {
 						</div>
 
 						{/* Vendor */}
-						{accountType === "VENDOR" && (
+						{draft.accountType === "VENDOR" && (
 							<div className="space-y-1">
-								<label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Vendor</label>
-								<Select value={selectedVendorId} onValueChange={(v) => { setSelectedVendorId(v); setPage(1); }}>
-									<SelectTrigger className="h-9 text-sm w-full"><SelectValue placeholder="All Vendors" /></SelectTrigger>
+								<label className="text-xs font-medium text-gray-500">Vendor</label>
+								<Select value={draft.vendorId} onValueChange={(v) => setDraftField("vendorId", v)}>
+									<SelectTrigger size="sm" className="w-full"><SelectValue placeholder="All Vendors" /></SelectTrigger>
 									<SelectContent>
 										<SelectItem value="all">All Vendors</SelectItem>
 										{vendors.map((v) => <SelectItem key={v.id} value={v.id}>{v.vendorName}</SelectItem>)}
@@ -1099,11 +1154,11 @@ export default function LedgerComponent() {
 						)}
 
 						{/* Customer */}
-						{accountType === "CUSTOMER" && (
+						{draft.accountType === "CUSTOMER" && (
 							<div className="space-y-1">
-								<label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Customer</label>
-								<Select value={selectedCustomerId} onValueChange={(v) => { setSelectedCustomerId(v); setPage(1); }}>
-									<SelectTrigger className="h-9 text-sm w-full"><SelectValue placeholder="All Customers" /></SelectTrigger>
+								<label className="text-xs font-medium text-gray-500">Customer</label>
+								<Select value={draft.customerId} onValueChange={(v) => setDraftField("customerId", v)}>
+									<SelectTrigger size="sm" className="w-full"><SelectValue placeholder="All Customers" /></SelectTrigger>
 									<SelectContent>
 										<SelectItem value="all">All Customers</SelectItem>
 										{customers.map((c) => <SelectItem key={c.id} value={c.id}>{c.customerName}</SelectItem>)}
@@ -1112,30 +1167,27 @@ export default function LedgerComponent() {
 							</div>
 						)}
 
-						<div className={cn("space-y-1", (accountType === "VENDOR" || accountType === "CUSTOMER") ? "lg:col-span-2" : "lg:col-span-3")}>
-						<label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Date Range</label>
-							<Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
-								<PopoverTrigger asChild>
-									<Button variant="outline" className="w-full justify-start h-9 text-sm 						font-normal">
-										<CalendarIcon className="mr-2 h-3.5 w-3.5 text-gray-400" />
-										{dateRange?.from && dateRange?.to
-											? <>{format(dateRange.from, "dd MMM yyyy")} — {format(dateRange.to, 						"dd MMM yyyy")}</>
-											: <span className="text-gray-400">Pick range…</span>}
-									</Button>
-								</PopoverTrigger>
-								<PopoverContent className="w-auto p-0" align="start">
-									{/* Click-to-select range: 1st click = start date, hover
-									    previews the range line, 2nd click = end date. */}
-									<RangeCalendar
-										defaultMonth={dateRange?.from}
-										selected={dateRange}
-										onSelect={setDateRange}
-										onRangeComplete={() => setDatePickerOpen(false)}
-										numberOfMonths={2}
-									/>
-								</PopoverContent>
-							</Popover>
-</div>
+						{/* Date Range — same two-input component as Sales Report / Reports */}
+						<div className="space-y-1 sm:col-span-2">
+							<DateRangeInputs
+								from={draft.dateRange?.from}
+								to={draft.dateRange?.to}
+								onChange={(range) => setDraftField("dateRange", range)}
+							/>
+						</div>
+					</div>
+
+					<div className="flex items-center justify-end pt-2 border-t border-gray-100">
+						<Button
+							size="sm"
+							onClick={applyFilters}
+							className="relative gap-1.5 bg-slate-800 hover:bg-slate-700 text-white"
+						>
+							<Filter className="h-3.5 w-3.5" /> Apply Filters
+							{isDirty && (
+								<span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-white animate-pulse" />
+							)}
+						</Button>
 					</div>
 				</CardContent>
 			</Card>
@@ -1229,10 +1281,10 @@ export default function LedgerComponent() {
 											<div className="flex flex-col items-center gap-2">
 												<BookOpen className="w-10 h-10 text-gray-200" />
 												<p className="text-gray-500 font-medium">
-													{accountType === "SELECT" ? "Select an account to view its ledger" : "No entries found"}
+													{applied.accountType === "SELECT" ? "Select an account and hit Apply to view its ledger" : "No entries found"}
 												</p>
 												<p className="text-gray-400 text-sm">
-													{accountType === "SELECT" ? "Choose an Account Type above to get started" : "Try adjusting your filters or date range"}
+													{applied.accountType === "SELECT" ? "Choose an Account Type above, then Apply Filters" : "Try adjusting your filters or date range"}
 												</p>
 											</div>
 										</TableCell>

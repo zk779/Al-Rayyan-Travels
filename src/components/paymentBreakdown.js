@@ -25,11 +25,28 @@ function tabbyFromOrder(orderAmount) {
 
 // Reverse: only the Net Amount survives on the saved Sale (sellPrice, with
 // paidAmount zeroed) — reconstruct the Order Amount that would produce it.
+//
+// The fixed +1.5 SAR fee term makes this formula sign-asymmetric: plugging a
+// *negative* net amount (a refund's negative mirror sale) straight in does
+// NOT yield the exact negation of the original positive-side breakdown — it
+// comes out visibly smaller in magnitude. A refund is the same transaction
+// reversed, not a different one, so it must reverse-calculate from the
+// magnitude and have the sign re-applied to every field afterward.
 const ORDER_MULTIPLIER = 1 - TABBY_FEE_RATE * (1 + TABBY_VAT_RATE);
 const ORDER_CONSTANT = TABBY_FIXED_FEE * (1 + TABBY_VAT_RATE);
 function tabbyFromNet(netAmount) {
-  const orderAmount = round2((num(netAmount) + ORDER_CONSTANT) / ORDER_MULTIPLIER);
-  return tabbyFromOrder(orderAmount);
+  const net = num(netAmount);
+  const sign = net < 0 ? -1 : 1;
+  const orderAmount = round2((Math.abs(net) + ORDER_CONSTANT) / ORDER_MULTIPLIER);
+  const breakdown = tabbyFromOrder(orderAmount);
+  if (sign === 1) return breakdown;
+  return {
+    orderAmount: -breakdown.orderAmount,
+    deducted: -breakdown.deducted,
+    vat: -breakdown.vat,
+    totalDeduction: -breakdown.totalDeduction,
+    netAmount: -breakdown.netAmount,
+  };
 }
 
 // Exported for ExportSalesReport, which reconstructs the same breakdown
