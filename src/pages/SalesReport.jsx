@@ -216,10 +216,14 @@ export default function SalesReport() {
         remarks: refund.remarks || "",
         vendor: refund.sale?.vendor?.vendorName || "-",
         customer: refund.sale?.customer?.customerName || "-",
+        customerType: refund.sale?.customer?.customerType || null,
         invoiceNumber: refund.sale?.invoice?.invoiceNo || "-",
         netPrice: Number(refund.sale?.netPrice || 0),
         sellPrice: Number(refund.sale?.sellPrice || 0),
         agent: refund.processedBy?.fullName || "-",
+        // Who/what actually absorbed the refund payout.
+        refundType: refund.refundType || "CUSTOMER_LEDGER",
+        bankName: refund.bank?.bankName || null,
       }));
 
       setRefundData(flattened);

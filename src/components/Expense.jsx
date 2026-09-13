@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   DollarSign,
   Plus,
@@ -13,12 +13,16 @@ import {
   Landmark,
   Banknote,
   User as UserIcon,
+  UserCog,
   Building2,
   Wallet,
   FileText,
   CheckCircle2,
   XCircle,
   SaudiRiyal,
+  ChevronLeft,
+  ChevronRight,
+  Layers,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -114,6 +118,10 @@ const STATUSES = [
 const catLabel = (v) => CATEGORIES.find((c) => c.value === v)?.label ?? v;
 const statusColor = (s) => (s === "APPROVED" ? "default" : "destructive");
 
+const PAGE_SIZE_OPTIONS = [10, 20, 30, 50, 100];
+const DEFAULT_PAGINATION = { page: 1, limit: 20, total: 0, pages: 1 };
+const DEFAULT_SUMMARY = { count: 0, totalAmount: 0, byBranch: null };
+
 const emptyForm = {
   expenseDate: new Date(),
   category: "",
@@ -146,6 +154,12 @@ export default function ExpensePage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [branchFilter, setBranchFilter] = useState("all");
+
+  const [pagination, setPagination] = useState(DEFAULT_PAGINATION);
+  const [summary, setSummary] = useState(DEFAULT_SUMMARY);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const [formOpen, setFormOpen] = useState(false);
   const [viewing, setViewing] = useState(null);
@@ -156,19 +170,28 @@ export default function ExpensePage() {
   const [formError, setFormError] = useState("");
 
   // ── Load data ──────────────────────────────────────────────────────────
-  const loadExpenses = async () => {
+  const loadExpenses = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch(EXPENSES_URL, { headers: authHeaders() });
+      const params = new URLSearchParams({ page: String(page), limit: String(pageSize) });
+      if (branchFilter !== "all") params.set("branchId", branchFilter);
+      if (categoryFilter !== "all") params.set("category", categoryFilter);
+      if (statusFilter !== "all") params.set("status", statusFilter);
+
+      const res = await fetch(`${EXPENSES_URL}?${params}`, { headers: authHeaders() });
       const json = await res.json();
-      if (json.success) setExpenses(json.data || []);
-      else setError(json.error || "Failed to load expenses");
+      if (json.success) {
+        setExpenses(json.data || []);
+        setPagination(json.pagination || DEFAULT_PAGINATION);
+        setSummary(json.summary || DEFAULT_SUMMARY);
+        setError("");
+      } else setError(json.error || "Failed to load expenses");
     } catch {
       setError("Failed to load expenses");
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, pageSize, branchFilter, categoryFilter, statusFilter]);
 
   // Users are only ever needed for SALARY expenses — fetch lazily, once.
   // NOTE: assumes each user record includes a `branchId` field so we can
@@ -191,7 +214,6 @@ export default function ExpensePage() {
   };
 
   useEffect(() => {
-    loadExpenses();
     fetch(BRANCHES_URL, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => j.success && setBranches(j.data || []))
@@ -201,6 +223,15 @@ export default function ExpensePage() {
       .then((j) => j.success && setBanks(j.data || []))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    loadExpenses();
+  }, [loadExpenses]);
+
+  // Any filter change (other than the page itself) should snap back to page 1
+  useEffect(() => {
+    setPage(1);
+  }, [branchFilter, categoryFilter, statusFilter, pageSize]);
 
   // Fetch users the moment the form's category becomes SALARY
   useEffect(() => {
@@ -214,32 +245,33 @@ export default function ExpensePage() {
   }, [users, form.branchId]);
 
   // ── Derived data ──────────────────────────────────────────────────────
+  // Text search only refines what's already on the current page — status,
+  // category and branch are all filtered server-side (they affect pagination
+  // totals), so a client-side search across pages would show a mismatched count.
   const filtered = useMemo(() => {
-    return expenses.filter((e) => {
-      const matchesStatus = statusFilter === "all" || e.status === statusFilter;
-      const matchesCategory =
-        categoryFilter === "all" || e.category === categoryFilter;
-      const q = search.toLowerCase();
-      const matchesSearch =
-        !q ||
+    const q = search.trim().toLowerCase();
+    if (!q) return expenses;
+    return expenses.filter(
+      (e) =>
         e.description?.toLowerCase().includes(q) ||
         catLabel(e.category).toLowerCase().includes(q) ||
         e.branch?.name?.toLowerCase().includes(q) ||
-        e.user?.fullName?.toLowerCase().includes(q);
-      return matchesStatus && matchesCategory && matchesSearch;
-    });
-  }, [expenses, search, statusFilter, categoryFilter]);
+        e.user?.fullName?.toLowerCase().includes(q) ||
+        e.createdBy?.fullName?.toLowerCase().includes(q)
+    );
+  }, [expenses, search]);
 
-  const totals = useMemo(() => {
-    const total = expenses.reduce((s, e) => s + e.amount, 0);
-    const approved = expenses
-      .filter((e) => e.status === "APPROVED")
-      .reduce((s, e) => s + e.amount, 0);
-    const rejected = expenses
-      .filter((e) => e.status === "REJECTED")
-      .reduce((s, e) => s + e.amount, 0);
-    return { total, approved, rejected };
-  }, [expenses]);
+  const branchTotalCards = useMemo(() => {
+    if (branchFilter !== "all") {
+      const branch = branches.find((b) => b.id === branchFilter);
+      return [{ id: branchFilter, name: branch?.name ?? "Selected branch", totalAmount: summary.totalAmount }];
+    }
+    return Array.isArray(summary.byBranch)
+      ? [...summary.byBranch]
+          .sort((a, b) => b.totalAmount - a.totalAmount)
+          .map((g) => ({ id: g.branch.id, name: g.branch.name ?? "Unknown", totalAmount: g.totalAmount }))
+      : [];
+  }, [summary, branchFilter, branches]);
 
   // ── Form helpers ──────────────────────────────────────────────────────
   const openAdd = () => {
@@ -339,8 +371,7 @@ export default function ExpensePage() {
         headers: authHeaders(),
       });
       const json = await res.json();
-      if (json.success)
-        setExpenses((prev) => prev.filter((e) => e.id !== deleteId));
+      if (json.success) loadExpenses();
     } finally {
       setDeleteId(null);
     }
@@ -387,28 +418,32 @@ export default function ExpensePage() {
         <Card className="border-slate-200">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-slate-500">
-              Total Expenses
+              {branchFilter === "all" ? "Total Expenses" : "Branch Total"}
             </CardTitle>
             <DollarSign className="h-4 w-4 text-slate-400" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-slate-900 inline-flex items-center gap-1">
-              <SaudiRiyal /> {totals.total.toFixed(2)}
+              <SaudiRiyal /> {summary.totalAmount.toFixed(2)}
             </div>
             <p className="text-xs text-slate-400">
-              {expenses.length} total records
+              {summary.count} total record{summary.count === 1 ? "" : "s"}
             </p>
           </CardContent>
         </Card>
         <Card className="border-emerald-100 bg-emerald-50/40">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-emerald-700">
-              Approved
+              Approved (this page)
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-emerald-700 inline-flex items-center gap-1">
-              <SaudiRiyal /> {totals.approved.toFixed(2)}
+              <SaudiRiyal />{" "}
+              {expenses
+                .filter((e) => e.status === "APPROVED")
+                .reduce((s, e) => s + e.amount, 0)
+                .toFixed(2)}
             </div>
             <p className="text-xs text-emerald-600/70">
               {expenses.filter((e) => e.status === "APPROVED").length} approved
@@ -418,12 +453,16 @@ export default function ExpensePage() {
         <Card className="border-red-100 bg-red-50/40">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-red-700">
-              Rejected
+              Rejected (this page)
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-700 inline-flex items-center gap-1">
-              <SaudiRiyal /> {totals.rejected.toFixed(2)}
+              <SaudiRiyal />{" "}
+              {expenses
+                .filter((e) => e.status === "REJECTED")
+                .reduce((s, e) => s + e.amount, 0)
+                .toFixed(2)}
             </div>
             <p className="text-xs text-red-600/70">
               {expenses.filter((e) => e.status === "REJECTED").length} rejected
@@ -432,11 +471,43 @@ export default function ExpensePage() {
         </Card>
       </div>
 
+      {/* Total expense by branch */}
+      {branchTotalCards.length > 0 && (
+        <Card className="border-slate-200">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium text-slate-600 flex items-center gap-2">
+              <Layers className="h-4 w-4 text-indigo-500" />
+              Total Expense by Branch
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="flex flex-wrap gap-3">
+              {branchTotalCards.map((b) => (
+                <div
+                  key={b.id}
+                  className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-2.5 min-w-[180px]"
+                >
+                  <div className="h-8 w-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+                    <Building2 className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 leading-tight">{b.name}</p>
+                    <p className="text-sm font-semibold text-slate-900 inline-flex items-center gap-1">
+                      <SaudiRiyal className="h-3.5 w-3.5" /> {b.totalAmount.toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Filters */}
       <Card className="border-slate-200">
-        <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+        <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-5 gap-4">
           <div className="space-y-2">
-            <Label>Search</Label>
+            <Label>Search (this page)</Label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 h-4 w-4" />
               <Input
@@ -446,6 +517,22 @@ export default function ExpensePage() {
                 className="pl-9"
               />
             </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Branch</Label>
+            <Select value={branchFilter} onValueChange={setBranchFilter}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Branches</SelectItem>
+                {branches.map((b) => (
+                  <SelectItem key={b.id} value={b.id}>
+                    {b.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-2">
             <Label>Status</Label>
@@ -488,6 +575,7 @@ export default function ExpensePage() {
                 setSearch("");
                 setStatusFilter("all");
                 setCategoryFilter("all");
+                setBranchFilter("all");
               }}
             >
               Clear Filters
@@ -509,6 +597,7 @@ export default function ExpensePage() {
                 <TableHead>Category</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
                 <TableHead>Branch</TableHead>
+                <TableHead>Created By</TableHead>
                 <TableHead>Payment</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-16">Actions</TableHead>
@@ -518,7 +607,7 @@ export default function ExpensePage() {
               {loading ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={8}
                     className="text-center py-8 text-slate-400"
                   >
                     Loading...
@@ -527,7 +616,7 @@ export default function ExpensePage() {
               ) : filtered.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={8}
                     className="text-center py-8 text-slate-400"
                   >
                     No expenses found
@@ -552,7 +641,22 @@ export default function ExpensePage() {
                     <TableCell className="text-right font-medium">
                       ${e.amount.toFixed(2)}
                     </TableCell>
-                    <TableCell>{e.branch?.name ?? "-"}</TableCell>
+                    <TableCell>
+                      <span className="inline-flex items-center gap-1.5 text-sm">
+                        <Building2 className="h-3.5 w-3.5 text-slate-400" />
+                        {e.branch?.name ?? "-"}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      {e.createdBy?.fullName ? (
+                        <span className="inline-flex items-center gap-1.5 text-sm text-slate-600">
+                          <UserCog className="h-3.5 w-3.5 text-slate-400" />
+                          {e.createdBy.fullName}
+                        </span>
+                      ) : (
+                        <span className="text-slate-300">-</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <span className="flex items-center gap-1.5 text-sm text-slate-600">
                         {e.paymentMode === "BANK_TRANSFER" ? (
@@ -608,6 +712,55 @@ export default function ExpensePage() {
               )}
             </TableBody>
           </Table>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-100 mt-2">
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <span>Rows per page</span>
+              <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
+                <SelectTrigger className="w-[80px] h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PAGE_SIZE_OPTIONS.map((n) => (
+                    <SelectItem key={n} value={String(n)}>
+                      {n}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="text-sm text-slate-500">
+              {pagination.total === 0
+                ? "No results"
+                : `Showing ${(pagination.page - 1) * pagination.limit + 1}-${Math.min(
+                    pagination.page * pagination.limit,
+                    pagination.total
+                  )} of ${pagination.total}`}
+            </div>
+
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.max(p - 1, 1))}
+                disabled={page <= 1}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="text-sm px-2 whitespace-nowrap text-slate-600">
+                Page {pagination.page} of {pagination.pages || 1}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.min(p + 1, pagination.pages || 1))}
+                disabled={page >= (pagination.pages || 1)}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -953,6 +1106,10 @@ export default function ExpensePage() {
                     {viewing.status}
                   </Badge>
                 </div>
+              </div>
+              <div>
+                <Label className="text-xs text-slate-400">Created By</Label>
+                <p>{viewing.createdBy?.fullName ?? "-"}</p>
               </div>
               <div>
                 <Label className="text-xs text-slate-400">Payment</Label>

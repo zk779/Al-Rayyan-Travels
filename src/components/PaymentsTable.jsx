@@ -1,6 +1,5 @@
 "use client";
 
-import { useMemo } from "react";
 import { Button } from "../../shadcn/components/ui/button";
 import { Input } from "../../shadcn/components/ui/input";
 import {
@@ -11,6 +10,13 @@ import {
   TableHeader,
   TableRow,
 } from "../../shadcn/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../shadcn/components/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,8 +39,12 @@ import {
   Split,
   Hash,
   Building,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "../../shadcn/lib/utils";
+
+const PAGE_SIZE_OPTIONS = [10, 20, 30, 50, 100];
 
 // ─── Badges & small presentational helpers ────────────────────────────────
 // Exported (not just local) because PaymentPage's detail drawer also needs
@@ -142,6 +152,57 @@ function TableSkeleton({ cols }) {
 // voucher#, party, [category|bank], amount, date, method, attachment, remarks, actions
 const COL_COUNT = 9;
 
+// ─── Pagination bar — server-side paging, same shape as the Sales Report /
+// Reports pagination controls (rows-per-page + Showing X-Y of Z + Prev/Next).
+function PaginationBar({ page, pageSize, total, totalPages, onPageChange, onPageSizeChange }) {
+  const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, total);
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 pt-3">
+      <div className="flex items-center gap-2 text-sm text-slate-500">
+        <span>Rows per page</span>
+        <Select value={String(pageSize)} onValueChange={(v) => onPageSizeChange(Number(v))}>
+          <SelectTrigger className="w-[80px] h-8">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PAGE_SIZE_OPTIONS.map((n) => (
+              <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="text-sm text-slate-500">
+        {total === 0 ? "No results" : `Showing ${from}-${to} of ${total}`}
+      </div>
+
+      <div className="flex items-center gap-1">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(page - 1)}
+          disabled={page <= 1}
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <span className="text-sm px-2 whitespace-nowrap text-slate-600">
+          Page {page} of {totalPages || 1}
+        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(page + 1)}
+          disabled={page >= totalPages}
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Payments Table ────────────────────────────────────────────────────────
 export default function PaymentsTable({
   partyType,
@@ -154,6 +215,12 @@ export default function PaymentsTable({
   onEdit,
   onDelete,
   onPreview,
+  page,
+  pageSize,
+  total,
+  totalPages,
+  onPageChange,
+  onPageSizeChange,
 }) {
   const isVendor = partyType === "VENDOR";
 
@@ -164,32 +231,6 @@ export default function PaymentsTable({
   const canEdit = typeof onEdit === "function";
   const canDelete = typeof onDelete === "function";
   const hasAnyRowAction = canEdit || canDelete;
-
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase();
-    return payments.filter((p) => {
-      const walkIn = !isVendor && isWalkInPayment(p);
-      const name = walkIn
-        ? "walk-in customer"
-        : (p.vendor?.vendorName ?? p.customer?.customerName ?? "");
-      const invoiceNo = p.sale?.invoice?.invoiceNo ?? "";
-      const documentNo = p.sale?.documentNo ?? "";
-
-      return (
-        name.toLowerCase().includes(q) ||
-        p.method.toLowerCase().includes(q) ||
-        String(p.amount).includes(q) ||
-        (p.remarks ?? "").toLowerCase().includes(q) ||
-        (p.pvNo ?? "").toLowerCase().includes(q) ||
-        (p.bankSlipNo ?? "").toLowerCase().includes(q) ||
-        (p.branch?.name ?? "").toLowerCase().includes(q) ||
-        (p.branch?.code ?? "").toLowerCase().includes(q) ||
-        (p.createdBy?.fullName ?? "").toLowerCase().includes(q) ||
-        invoiceNo.toLowerCase().includes(q) ||
-        documentNo.toLowerCase().includes(q)
-      );
-    });
-  }, [payments, search, isVendor]);
 
   return (
     <div className="space-y-4">
@@ -274,7 +315,7 @@ export default function PaymentsTable({
             {loading && <TableSkeleton cols={COL_COUNT} />}
 
             {!loading &&
-              filtered.map((p) => {
+              payments.map((p) => {
                 const walkIn = !isVendor && isWalkInPayment(p);
                 const saleCount = !isVendor ? distinctSaleCount(p.ledgerEntries) : 0;
                 const isMultiInvoice = !isVendor && !walkIn && saleCount >= 2;
@@ -458,7 +499,7 @@ export default function PaymentsTable({
                 );
               })}
 
-            {!loading && filtered.length === 0 && (
+            {!loading && payments.length === 0 && (
               <TableRow>
                 <TableCell colSpan={COL_COUNT} className="text-center py-16">
                   <div className="flex flex-col items-center gap-3 text-slate-400">
@@ -489,10 +530,15 @@ export default function PaymentsTable({
         </Table>
       </div>
 
-      {!loading && filtered.length > 0 && (
-        <p className="text-xs text-slate-400 text-right">
-          Showing {filtered.length} of {payments.length} payments
-        </p>
+      {!loading && payments.length > 0 && typeof total === "number" && (
+        <PaginationBar
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          totalPages={totalPages}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+        />
       )}
     </div>
   );

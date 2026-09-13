@@ -6,18 +6,34 @@ import { Input } from "../../shadcn/components/ui/input";
 import { Label } from "../../shadcn/components/ui/label";
 import { Separator } from "../../shadcn/components/ui/separator";
 import { Textarea } from "../../shadcn/components/ui/textarea";
-import { Loader2, Send, X, Calendar as CalendarIcon, SaudiRiyal } from "lucide-react";
+import { Loader2, Send, X, Calendar as CalendarIcon, SaudiRiyal, AlertTriangle } from "lucide-react";
 import { Calendar } from "../../shadcn/components/ui/calendar";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "../../shadcn/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../shadcn/components/ui/select";
 import { format } from "date-fns";
 import { appToast } from "../../shadcn/components/ui/appToast";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 const DEBOUNCE_DELAY = 400;
+
+// Mirrors the backend's inferDefaultRefundType() so the picker starts on
+// whatever the API would choose anyway if refundType were omitted.
+function inferDefaultRefundType(sale) {
+  if (sale.customerType === "TABBY_OR_TAMARA") return "CASH";
+  const pt = String(sale.paymentType || "").toUpperCase();
+  if ((pt === "CREDIT" || pt === "PARTIAL") && sale.customerId) return "CUSTOMER_LEDGER";
+  return pt === "BANK_TRANSFER" ? "BANK_TRANSFER" : "CASH";
+}
 
 export default function RefundTabComponent() {
   const token = localStorage.getItem("token");
@@ -46,6 +62,27 @@ export default function RefundTabComponent() {
 
   const [refundVendor, setRefundVendor] = useState("0.00");
   const [refundPax, setRefundPax] = useState("0.00");
+
+  // Payout method — who/what actually gets netRefundToCustomer.
+  const [selectedSale, setSelectedSale] = useState(null); // raw sale from search, for customerType/bankId context
+  const [refundType, setRefundType] = useState("CASH");
+  const [bankId, setBankId] = useState("");
+  const [banks, setBanks] = useState([]);
+
+  const isTabbyTamara = selectedSale?.customerType === "TABBY_OR_TAMARA";
+  const hasCreditCustomer =
+    !!selectedSale?.customerId &&
+    ["CREDIT", "PARTIAL"].includes(String(selectedSale?.paymentType || "").toUpperCase());
+
+  /* ========================= BANKS (for BANK_TRANSFER payout) ========================= */
+  useEffect(() => {
+    fetch(`${API_BASE}/api/banks?isActive=true`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((j) => setBanks(j.data || []))
+      .catch(() => {});
+  }, [token]);
 
   /* ========================= LIVE SEARCH ========================= */
   useEffect(() => {
@@ -99,6 +136,10 @@ export default function RefundTabComponent() {
 
     setRefundVendor("0.00");
     setRefundPax("0.00");
+
+    setSelectedSale(sale);
+    setRefundType(inferDefaultRefundType(sale));
+    setBankId(sale.bankId || "");
   };
 
   /* ========================= CALCULATIONS ========================= */
@@ -135,6 +176,12 @@ export default function RefundTabComponent() {
       return;
     }
 
+    if (refundType === "BANK_TRANSFER" && !bankId) {
+      appToast.warning("Please select which bank account this refund is paid from.");
+      setError("Please select which bank account this refund is paid from.");
+      return;
+    }
+
     const payload = {
       saleId: refundForm.saleId,
       refundDate: refundDate.toISOString(),
@@ -146,6 +193,8 @@ export default function RefundTabComponent() {
       originalSaleAmount: Number(refundForm.sellPrice) || 0,
       vendorRefundAmount: Number(refundVendor) || 0,
       refundableAmount: Number(refundPax) || 0,
+      refundType,
+      bankId: refundType === "BANK_TRANSFER" ? bankId : null,
     };
 
     try {
@@ -204,6 +253,9 @@ export default function RefundTabComponent() {
     setRefundPax("0.00");
     setError("");
     setRefundDate(new Date());
+    setSelectedSale(null);
+    setRefundType("CASH");
+    setBankId("");
   };
 
   /* ========================= UI ========================= */
@@ -376,6 +428,52 @@ export default function RefundTabComponent() {
 
           <Separator />
 
+          {/* Refund Payout Method — who/what actually receives the money */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Refund Payout Method</Label>
+            <Select value={refundType} onValueChange={setRefundType}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="CUSTOMER_LEDGER" disabled={!hasCreditCustomer || isTabbyTamara}>
+                  Credit to Customer Ledger
+                </SelectItem>
+                <SelectItem value="CASH">Cash</SelectItem>
+                <SelectItem value="BANK_TRANSFER">Bank Transfer</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {isTabbyTamara && (
+              <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md p-2">
+                <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                <span>
+                  This ticket was booked through <strong>{selectedSale?.customerName}</strong> —
+                  refunds must be paid out as Cash or Bank Transfer directly to the traveler.
+                  Crediting {selectedSale?.customerName}'s ledger would incorrectly reduce what
+                  they still owe you.
+                </span>
+              </div>
+            )}
+
+            {refundType === "BANK_TRANSFER" && (
+              <Select value={bankId} onValueChange={setBankId}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select bank account" />
+                </SelectTrigger>
+                <SelectContent>
+                  {banks.map((b) => (
+                    <SelectItem key={b.id} value={b.id}>
+                      {b.bankName} — {b.accountNumber}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+
+          <Separator />
+
           {/* Calculation Summary */}
           <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-lg space-y-2">
             <h4 className="font-semibold text-sm text-blue-900 mb-2">
@@ -421,7 +519,13 @@ export default function RefundTabComponent() {
             <Separator />
 
             <div className="flex justify-between text-sm font-semibold">
-              <span className="text-blue-700">Refund to Customer</span>
+              <span className="text-blue-700">
+                {refundType === "CUSTOMER_LEDGER"
+                  ? "Credit to Customer Ledger"
+                  : refundType === "BANK_TRANSFER"
+                    ? "Refund Payout (Bank Transfer)"
+                    : "Refund Payout (Cash)"}
+              </span>
               <span className="text-blue-700 flex items-center gap-0.5">
                 <SaudiRiyal size={13} />
                 {refundPax}

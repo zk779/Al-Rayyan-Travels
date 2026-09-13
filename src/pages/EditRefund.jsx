@@ -64,6 +64,10 @@ export default function EditRefundTab() {
   const [refundVendor, setRefundVendor] = useState("0.00");
   const [refundPax, setRefundPax] = useState("0.00");
 
+  // Read-only — the payout method (who/what received the refund) is fixed
+  // at creation and can't be changed here; see refunds.js PUT route.
+  const [payoutLabel, setPayoutLabel] = useState("");
+
   /* =========================
       1. INITIALIZE TOKEN
   ========================= */
@@ -112,6 +116,19 @@ export default function EditRefundTab() {
 
         if (data.refundDate) {
           setRefundDate(new Date(data.refundDate));
+        }
+
+        const payoutType = data.refundType || "CUSTOMER_LEDGER";
+        if (payoutType === "CASH") {
+          setPayoutLabel("Cash");
+        } else if (payoutType === "BANK_TRANSFER") {
+          setPayoutLabel(data.bank?.bankName ? `Bank Transfer — ${data.bank.bankName}` : "Bank Transfer");
+        } else {
+          setPayoutLabel(
+            sale.customer?.customerName
+              ? `Customer Ledger — ${sale.customer.customerName}`
+              : "Customer Ledger",
+          );
         }
       } catch (err) {
         console.error(err);
@@ -264,6 +281,13 @@ export default function EditRefundTab() {
                       Sale information (Document, Prices, Vendor) is locked. You
                       are only modifying the refund parameters.
                     </p>
+                    {payoutLabel && (
+                      <p className="text-xs text-blue-700 mt-1">
+                        <span className="font-semibold">Payout Method:</span>{" "}
+                        {payoutLabel} — fixed at creation and can't be changed here.
+                        Delete and recreate the refund to pay it out a different way.
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -420,7 +444,7 @@ export default function EditRefundTab() {
 
                       <div className="flex justify-between text-sm font-semibold">
                         <span className="text-blue-700">
-                          Refund to Customer
+                          {payoutLabel || "Refund to Customer"}
                         </span>
                         <span className="text-blue-700">${refundPax}</span>
                       </div>

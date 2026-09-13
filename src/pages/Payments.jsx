@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Button } from "../../shadcn/components/ui/button";
 import { Card, CardContent } from "../../shadcn/components/ui/card";
 import { Input } from "../../shadcn/components/ui/input";
@@ -97,13 +97,30 @@ function partyDisplayName(p) {
 }
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
-async function fetchAllPayments() {
-  const res = await fetch(`${API_BASE}/api/payments/vendor-customer`, {
+const DEFAULT_PAGINATION = { page: 1, limit: 20, total: 0, pages: 1 };
+const DEFAULT_PAY_SUMMARY = { count: 0, totalAmount: 0 };
+
+// Server-side paginated + searched — { data, pagination, summary }.
+async function fetchPayments({ partyType, page, limit, search }) {
+  const params = new URLSearchParams({ partyType, page: String(page), limit: String(limit) });
+  if (search?.trim()) params.set("search", search.trim());
+  const res = await fetch(`${API_BASE}/api/payments/vendor-customer?${params}`, {
     headers: authHeaders(),
   });
   const json = await res.json();
   if (!json.success) throw new Error(json.error ?? "Failed to load payments");
-  return json.data;
+  return json;
+}
+
+// Delays updating the returned value until `value` stops changing for
+// `delay`ms — keeps the search input snappy while pacing server requests.
+function useDebouncedValue(value, delay = 400) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return debounced;
 }
 
 async function fetchPaymentById(id) {
@@ -711,11 +728,28 @@ export default function PaymentPage() {
   const canEdit = hasPermission("PAYMENT_EDIT");
   const canDelete = hasPermission("PAYMENT_DELETE");
 
-  const [payments, setPayments] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // Vendor and Customer tabs are fetched, searched and paginated
+  // independently — each is its own server-side query, same pattern as the
+  // Sales Report page's Detailed/Refunds tabs.
+  const [vendorPayments, setVendorPayments] = useState([]);
+  const [vendorPagination, setVendorPagination] = useState(DEFAULT_PAGINATION);
+  const [vendorSummary, setVendorSummary] = useState(DEFAULT_PAY_SUMMARY);
+  const [vendorPage, setVendorPage] = useState(1);
+  const [vendorPageSize, setVendorPageSize] = useState(20);
+  const [vendorLoading, setVendorLoading] = useState(true);
+
+  const [customerPayments, setCustomerPayments] = useState([]);
+  const [customerPagination, setCustomerPagination] = useState(DEFAULT_PAGINATION);
+  const [customerSummary, setCustomerSummary] = useState(DEFAULT_PAY_SUMMARY);
+  const [customerPage, setCustomerPage] = useState(1);
+  const [customerPageSize, setCustomerPageSize] = useState(20);
+  const [customerLoading, setCustomerLoading] = useState(true);
+
   const [error, setError] = useState(null);
   const [searchVendor, setSearchVendor] = useState("");
   const [searchCustomer, setSearchCustomer] = useState("");
+  const debouncedSearchVendor = useDebouncedValue(searchVendor);
+  const debouncedSearchCustomer = useDebouncedValue(searchCustomer);
   const [editTarget, setEditTarget] = useState(null); // full payment object | null
   const [drawerPaymentId, setDrawerPaymentId] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -727,22 +761,62 @@ export default function PaymentPage() {
   const [addPartyType, setAddPartyType] = useState(null);
   const addDialogOpen = addPartyType !== null;
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  // A search change invalidates the current page — jump back to page 1.
+  useEffect(() => { setVendorPage(1); }, [debouncedSearchVendor, vendorPageSize]);
+  useEffect(() => { setCustomerPage(1); }, [debouncedSearchCustomer, customerPageSize]);
+
+  const loadVendor = useCallback(async () => {
+    setVendorLoading(true);
     setError(null);
     try {
-      const data = await fetchAllPayments();
-      setPayments(data);
+      const json = await fetchPayments({
+        partyType: "VENDOR",
+        page: vendorPage,
+        limit: vendorPageSize,
+        search: debouncedSearchVendor,
+      });
+      setVendorPayments(json.data);
+      setVendorPagination(json.pagination || DEFAULT_PAGINATION);
+      setVendorSummary(json.summary || DEFAULT_PAY_SUMMARY);
     } catch (e) {
       setError(e.message);
     } finally {
-      setLoading(false);
+      setVendorLoading(false);
     }
-  }, []);
+  }, [vendorPage, vendorPageSize, debouncedSearchVendor]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const loadCustomer = useCallback(async () => {
+    setCustomerLoading(true);
+    setError(null);
+    try {
+      const json = await fetchPayments({
+        partyType: "CUSTOMER",
+        page: customerPage,
+        limit: customerPageSize,
+        search: debouncedSearchCustomer,
+      });
+      setCustomerPayments(json.data);
+      setCustomerPagination(json.pagination || DEFAULT_PAGINATION);
+      setCustomerSummary(json.summary || DEFAULT_PAY_SUMMARY);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setCustomerLoading(false);
+    }
+  }, [customerPage, customerPageSize, debouncedSearchCustomer]);
+
+  useEffect(() => { loadVendor(); }, [loadVendor]);
+  useEffect(() => { loadCustomer(); }, [loadCustomer]);
+
+  // Refreshes both tabs — used by the header Refresh button and after any
+  // add/edit/delete, since we don't always know which tab the affected
+  // payment belongs to (and refetching both is cheap).
+  const load = useCallback(() => {
+    loadVendor();
+    loadCustomer();
+  }, [loadVendor, loadCustomer]);
+
+  const loading = vendorLoading || customerLoading;
 
   // ── Fix: Radix Dialog/Sheet overlays can leave `pointer-events: none`
   // stuck on <body> when they close. Re-running this after every overlay-
@@ -757,22 +831,8 @@ export default function PaymentPage() {
     return () => clearTimeout(timer);
   }, [anyOverlayOpen]);
 
-  const vendorPayments = useMemo(
-    () => payments.filter((p) => p.partyType === "VENDOR"),
-    [payments],
-  );
-  const customerPayments = useMemo(
-    () => payments.filter((p) => p.partyType === "CUSTOMER"),
-    [payments],
-  );
-  const totalVendor = useMemo(
-    () => vendorPayments.reduce((s, p) => s + p.amount, 0),
-    [vendorPayments],
-  );
-  const totalCustomer = useMemo(
-    () => customerPayments.reduce((s, p) => s + p.amount, 0),
-    [customerPayments],
-  );
+  const totalVendor = vendorSummary.totalAmount;
+  const totalCustomer = customerSummary.totalAmount;
 
   const handleView = (p) => {
     setDrawerPaymentId(p.id);
@@ -802,7 +862,9 @@ export default function PaymentPage() {
     setDeleteLoading(true);
     try {
       await deletePayment(deleteTarget.id);
-      setPayments((prev) => prev.filter((p) => p.id !== deleteTarget.id));
+      // Refetch rather than optimistically splice — pagination/totals are
+      // server-computed now, so a client-side removal would leave them stale.
+      load();
       setDeleteTarget(null);
     } catch (e) {
       alert(e.message);
@@ -887,7 +949,7 @@ export default function PaymentPage() {
                 })}
               </span>
             }
-            sub={`${vendorPayments.length} transaction${vendorPayments.length !== 1 ? "s" : ""}`}
+            sub={`${vendorSummary.count} transaction${vendorSummary.count !== 1 ? "s" : ""}`}
             icon={TrendingDown}
             trend="down"
           />
@@ -902,7 +964,7 @@ export default function PaymentPage() {
                 })}
               </span>
             }
-            sub={`${customerPayments.length} transaction${customerPayments.length !== 1 ? "s" : ""}`}
+            sub={`${customerSummary.count} transaction${customerSummary.count !== 1 ? "s" : ""}`}
             icon={TrendingUp}
             trend="up"
           />
@@ -931,9 +993,9 @@ export default function PaymentPage() {
             >
               <Building2 className="h-4 w-4" />
               Vendor Payments
-              {!loading && (
+              {!vendorLoading && (
                 <span className="ml-1 text-xs bg-white/20 px-1.5 py-0.5 rounded-full">
-                  {vendorPayments.length}
+                  {vendorPagination.total}
                 </span>
               )}
             </TabsTrigger>
@@ -944,9 +1006,9 @@ export default function PaymentPage() {
             >
               <User className="h-4 w-4" />
               Customer Payments
-              {!loading && (
+              {!customerLoading && (
                 <span className="ml-1 text-xs bg-white/20 px-1.5 py-0.5 rounded-full">
-                  {customerPayments.length}
+                  {customerPagination.total}
                 </span>
               )}
             </TabsTrigger>
@@ -956,7 +1018,7 @@ export default function PaymentPage() {
             <PaymentsTable
               partyType="VENDOR"
               payments={vendorPayments}
-              loading={loading}
+              loading={vendorLoading}
               search={searchVendor}
               onSearch={setSearchVendor}
               // ✅ RBAC — only pass the handler if permitted, so PaymentsTable
@@ -966,6 +1028,12 @@ export default function PaymentPage() {
               onEdit={canEdit ? handleEditRequest : undefined}
               onDelete={canDelete ? handleDeleteRequest : undefined}
               onPreview={setPreviewUrl}
+              page={vendorPage}
+              pageSize={vendorPageSize}
+              total={vendorPagination.total}
+              totalPages={vendorPagination.pages}
+              onPageChange={setVendorPage}
+              onPageSizeChange={setVendorPageSize}
             />
           </TabsContent>
 
@@ -973,7 +1041,7 @@ export default function PaymentPage() {
             <PaymentsTable
               partyType="CUSTOMER"
               payments={customerPayments}
-              loading={loading}
+              loading={customerLoading}
               search={searchCustomer}
               onSearch={setSearchCustomer}
               onAdd={canCreate ? () => handleAddRequest("CUSTOMER") : undefined}
@@ -981,6 +1049,12 @@ export default function PaymentPage() {
               onEdit={canEdit ? handleEditRequest : undefined}
               onDelete={canDelete ? handleDeleteRequest : undefined}
               onPreview={setPreviewUrl}
+              page={customerPage}
+              pageSize={customerPageSize}
+              total={customerPagination.total}
+              totalPages={customerPagination.pages}
+              onPageChange={setCustomerPage}
+              onPageSizeChange={setCustomerPageSize}
             />
           </TabsContent>
         </Tabs>

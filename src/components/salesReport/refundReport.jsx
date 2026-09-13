@@ -73,6 +73,26 @@ const statusVariant = (status) => {
   }
 };
 
+/* ========================= PAYOUT METHOD BADGE ========================= */
+const payoutLabel = (refund) => {
+  switch (refund.refundType) {
+    case "CASH":
+      return "Cash";
+    case "BANK_TRANSFER":
+      return refund.bankName ? `Bank - ${refund.bankName}` : "Bank Transfer";
+    default:
+      return refund.customer && refund.customer !== "-"
+        ? `Ledger - ${refund.customer}`
+        : "Customer Ledger";
+  }
+};
+
+const payoutBadgeClass = (refund) => {
+  if (refund.refundType === "CASH") return "bg-emerald-50 text-emerald-700 border-emerald-200";
+  if (refund.refundType === "BANK_TRANSFER") return "bg-blue-50 text-blue-700 border-blue-200";
+  return "bg-violet-50 text-violet-700 border-violet-200";
+};
+
 /* ========================= HIGHLIGHT ========================= */
 const highlightText = (text, query, field, searchBy) => {
   if (!query || !text) return text;
@@ -109,6 +129,14 @@ function ViewRefundDialog({ refund, onClose }) {
       ),
     },
     { label: "Customer", value: refund.customer || "-" },
+    {
+      label: "Payout Method",
+      value: (
+        <Badge variant="outline" className={payoutBadgeClass(refund)}>
+          {payoutLabel(refund)}
+        </Badge>
+      ),
+    },
     { label: "Vendor", value: refund.vendor || "-" },
     { label: "Agent", value: refund.agent || "-" },
     { label: "Refund Reason", value: refund.refundReason || "-" },
@@ -332,6 +360,7 @@ export default function RefundsTab({
                   <TableHead className="text-right">Original Amt</TableHead>
                   <TableHead className="text-right">Vend. Refund</TableHead>
                   <TableHead className="text-right">Cust. Refund</TableHead>
+                  <TableHead>Payout</TableHead>
                   <TableHead className="text-right">Refund Fee</TableHead>
                   <TableHead className="text-right">Service Charges</TableHead>
                   <TableHead>Reason</TableHead>
@@ -405,6 +434,11 @@ export default function RefundsTab({
                           <SaudiRiyal size={12} />
                           {Number(refund.netRefundToCustomer).toFixed(2)}
                         </span>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={`text-xs ${payoutBadgeClass(refund)}`}>
+                          {payoutLabel(refund)}
+                        </Badge>
                       </TableCell>
                       <TableCell className="text-right text-orange-600">
                         <span className="flex items-center justify-end gap-0.5">
