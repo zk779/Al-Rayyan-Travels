@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { format } from "date-fns";
 import { Filter, Search, X, RefreshCw, Check, ChevronUp } from "lucide-react";
 
@@ -38,7 +38,6 @@ const authHeaders = () => ({
   Authorization: `Bearer ${localStorage.getItem("token")}`,
 });
 
-const DEFAULT_PAGINATION = { total: 0, pages: 1 };
 const DEFAULT_SUMMARY = { totalSell: 0, totalProfit: 0 };
 
 // Start date is left blank on purpose — nothing loads until the user picks
@@ -90,9 +89,11 @@ export default function SalesReport() {
   const [users, setUsers] = useState([]);
   const [branches, setBranches] = useState([]);
 
+  // Full result set for the currently applied filters — fetched once per
+  // search (dateRange/search/agent/branch/order), never per page. Paging
+  // below is purely a client-side slice of this array.
   const [salesData, setSalesData] = useState([]);
   const [salesSummary, setSalesSummary] = useState(DEFAULT_SUMMARY);
-  const [salesPagination, setSalesPagination] = useState(DEFAULT_PAGINATION);
   const [salesPage, setSalesPage] = useState(1);
   const [salesPageSize, setSalesPageSize] = useState(10);
   const [loading, setLoading] = useState(false);
@@ -154,7 +155,8 @@ export default function SalesReport() {
     setSalesPage(1);
   }, [salesPageSize]);
 
-  /* ── Fetch sales — filtered & paginated server-side ── */
+  /* ── Fetch sales — filtered server-side, NOT paginated server-side.
+     One request per search; page changes below never refetch. ── */
   const fetchSales = useCallback(async () => {
     setLoading(true);
     try {
@@ -164,10 +166,9 @@ export default function SalesReport() {
         agentKey: "createdById",
         orderKey: "order",
       });
-      const res = await fetch(
-        `${API_BASE}/api/sales?${qs}&page=${salesPage}&limit=${salesPageSize}`,
-        { headers: authHeaders() },
-      );
+      const res = await fetch(`${API_BASE}/api/sales?${qs}`, {
+        headers: authHeaders(),
+      });
       const json = await res.json();
       if (!res.ok || !json.success)
         throw new Error(json.error || "Failed to fetch sales");
@@ -177,7 +178,6 @@ export default function SalesReport() {
           date: s.saleDate ? new Date(s.saleDate) : null,
         })),
       );
-      setSalesPagination(json.pagination || DEFAULT_PAGINATION);
       setSalesSummary(json.summary || DEFAULT_SUMMARY);
     } catch (err) {
       console.error("Failed to fetch sales", err);
@@ -185,7 +185,15 @@ export default function SalesReport() {
     } finally {
       setLoading(false);
     }
-  }, [buildParams, salesPage, salesPageSize]);
+  }, [buildParams]);
+
+  // Client-side page slice of the already-fetched full result set.
+  const salesTotal = salesData.length;
+  const salesTotalPages = Math.max(Math.ceil(salesTotal / salesPageSize), 1);
+  const pagedSalesData = useMemo(() => {
+    const start = (salesPage - 1) * salesPageSize;
+    return salesData.slice(start, start + salesPageSize);
+  }, [salesData, salesPage, salesPageSize]);
 
   /* ── Fetch refunds — filtered server-side ── */
   const fetchRefunds = useCallback(async () => {
@@ -239,10 +247,11 @@ export default function SalesReport() {
     }
   }, [buildParams]);
 
-  /* ── Lazy, tab-aware fetching. Fires on tab switch, page/pageSize change,
-     and whenever `applied` changes (Search) — all via the fetchSales/
-     fetchRefunds identity changing. Gated on `hasSearched` so nothing loads
-     before the user's first Search. ── */
+  /* ── Lazy, tab-aware fetching. Fires on tab switch and whenever `applied`
+     changes (Search) — via the fetchSales/fetchRefunds identity changing.
+     Page/pageSize changes do NOT refetch — they just re-slice the already-
+     fetched data (see pagedSalesData). Gated on `hasSearched` so nothing
+     loads before the user's first Search. ── */
   useEffect(() => {
     if (activeTab === "detailed" && canViewSales && hasSearched) fetchSales();
   }, [activeTab, fetchSales, canViewSales, hasSearched]);
@@ -326,6 +335,11 @@ export default function SalesReport() {
             header. Search By / Sort are one hover away in Advanced Filters. */}
         <div className="flex flex-wrap items-end gap-2">
           <div className="space-y-1 w-[170px] focus-within:w-[250px] transition-[width] duration-200 focus:*:ring-1 focus:*:ring-offset-1">
+              {hasSearchTerm && (
+                <span className="text-[10px] text-indigo-500">
+                  Searches across all dates
+                </span>
+              )}
             <Label className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">
               Search
             </Label>
@@ -339,11 +353,6 @@ export default function SalesReport() {
                 className="pl-8 h-8 text-sm w-full"
               />
             </div>
-            {hasSearchTerm && (
-              <span className="text-[10px] text-indigo-500">
-                Searches across all dates
-              </span>
-            )}
           </div>
 
           <DateRangeInputs
@@ -577,7 +586,7 @@ export default function SalesReport() {
 
           <TabsContent value="detailed">
             <DetailedReportTab
-              salesData={salesData}
+              salesData={pagedSalesData}
               loading={loading}
               hasSearched={hasSearched}
               searchQuery={applied.filters.search}
@@ -587,8 +596,8 @@ export default function SalesReport() {
               page={salesPage}
               activeTab={activeTab}
               pageSize={salesPageSize}
-              total={salesPagination.total}
-              totalPages={salesPagination.pages}
+              total={salesTotal}
+              totalPages={salesTotalPages}
               onPageChange={setSalesPage}
               onPageSizeChange={setSalesPageSize}
             />
@@ -606,7 +615,7 @@ export default function SalesReport() {
         </Tabs>
       ) : canViewSales ? (
         <DetailedReportTab
-          salesData={salesData}
+          salesData={pagedSalesData}
           loading={loading}
           hasSearched={hasSearched}
           searchQuery={applied.filters.search}
@@ -615,8 +624,8 @@ export default function SalesReport() {
           totalProfit={salesSummary.totalProfit}
           page={salesPage}
           pageSize={salesPageSize}
-          total={salesPagination.total}
-          totalPages={salesPagination.pages}
+          total={salesTotal}
+          totalPages={salesTotalPages}
           onPageChange={setSalesPage}
           onPageSizeChange={setSalesPageSize}
         />
