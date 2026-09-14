@@ -191,6 +191,13 @@ export default function DetailedReportTab({
   const handleEdit = (invoiceId) => {
     if (!canEditSale) return; // ✅ RBAC guard
     if (!invoiceId) return;
+    // Remembered by SalesReport.jsx so coming back (Back button / browser
+    // back) lands at the same scroll position, not the top of the page.
+    try {
+      sessionStorage.setItem("salesReport:scrollY", String(window.scrollY));
+    } catch {
+      // sessionStorage unavailable — scroll just won't be restored
+    }
     navigate(`/edit-services/${invoiceId}`);
   };
 

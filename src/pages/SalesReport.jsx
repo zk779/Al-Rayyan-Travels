@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { format } from "date-fns";
 import { Filter, Search, X, RefreshCw, Check, ChevronUp } from "lucide-react";
 
@@ -51,6 +51,31 @@ const defaultFilters = () => ({
   order: "desc", // desc = newest first
 });
 
+// Lets a visit to Edit Sale (via the row actions dropdown) come right back
+// to this exact search — same filters, tab, and page — instead of resetting.
+// sessionStorage (not localStorage) so it's scoped to this tab and clears
+// itself once the tab closes. Written by detailedReport.jsx's Edit Invoice
+// click and read back once here on mount.
+const STORAGE_KEY = "salesReport:state";
+const SCROLL_STORAGE_KEY = "salesReport:scrollY";
+
+function loadSavedState() {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return {
+      ...parsed,
+      dateRange: {
+        from: parsed.dateRange?.from ? new Date(parsed.dateRange.from) : null,
+        to: parsed.dateRange?.to ? new Date(parsed.dateRange.to) : null,
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
 export default function SalesReport() {
   const { hasPermission } = useAuth();
   const canViewSales = hasPermission("SALE_READ");
@@ -59,18 +84,22 @@ export default function SalesReport() {
   const canFilterByAgent =
     hasPermission("SALE_VIEW_BRANCH") || hasPermission("SALE_VIEW_ALL");
 
+  // Computed once, on first render only — the snapshot (if any) left behind
+  // before navigating away to edit a sale.
+  const [saved] = useState(loadSavedState);
+
   // Default to whichever tab the user actually has access to
   const [activeTab, setActiveTab] = useState(
-    canViewSales ? "detailed" : canViewRefunds ? "refunds" : null,
+    saved?.activeTab ?? (canViewSales ? "detailed" : canViewRefunds ? "refunds" : null),
   );
 
   // `draft*` is what the filter controls are bound to (edited freely, no
   // network effect). `applied` is the last submitted snapshot — every
   // fetch, and everything the tables render (highlighting, result counts),
   // is derived from `applied` only.
-  const [draftAllTime, setDraftAllTime] = useState(false);
-  const [draftDateRange, setDraftDateRange] = useState(defaultDateRange);
-  const [draftFilters, setDraftFilters] = useState(defaultFilters);
+  const [draftAllTime, setDraftAllTime] = useState(saved?.allTime ?? false);
+  const [draftDateRange, setDraftDateRange] = useState(saved?.dateRange ?? defaultDateRange);
+  const [draftFilters, setDraftFilters] = useState(saved?.filters ?? defaultFilters);
   const setField = (key, value) =>
     setDraftFilters((f) => ({ ...f, [key]: value }));
 
@@ -83,7 +112,7 @@ export default function SalesReport() {
   // Nothing has been searched yet — no start date was ever chosen (or "All
   // time" toggled) and Search hasn't been pressed, so both tabs stay empty
   // rather than auto-loading a default range.
-  const [hasSearched, setHasSearched] = useState(false);
+  const [hasSearched, setHasSearched] = useState(saved?.hasSearched ?? false);
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   const [users, setUsers] = useState([]);
@@ -94,9 +123,12 @@ export default function SalesReport() {
   // below is purely a client-side slice of this array.
   const [salesData, setSalesData] = useState([]);
   const [salesSummary, setSalesSummary] = useState(DEFAULT_SUMMARY);
-  const [salesPage, setSalesPage] = useState(1);
-  const [salesPageSize, setSalesPageSize] = useState(10);
+  const [salesPage, setSalesPage] = useState(saved?.salesPage ?? 1);
+  const [salesPageSize, setSalesPageSize] = useState(saved?.salesPageSize ?? 10);
   const [loading, setLoading] = useState(false);
+  // Flips true after the first fetch (success or fail) completes — gates
+  // the scroll-restore below so it doesn't fire before data has rendered.
+  const [salesFetchedOnce, setSalesFetchedOnce] = useState(false);
   const [refundData, setRefundData] = useState([]);
   const [refundLoading, setRefundLoading] = useState(false);
 
@@ -150,8 +182,15 @@ export default function SalesReport() {
   );
 
   // Page size is a display control, not a submitted filter — reset to
-  // page 1 immediately rather than waiting on Search.
+  // page 1 immediately rather than waiting on Search. Skips the very first
+  // run so restoring a saved page (see `saved` above) isn't immediately
+  // clobbered back to 1 on mount.
+  const skipNextPageReset = useRef(true);
   useEffect(() => {
+    if (skipNextPageReset.current) {
+      skipNextPageReset.current = false;
+      return;
+    }
     setSalesPage(1);
   }, [salesPageSize]);
 
@@ -184,6 +223,7 @@ export default function SalesReport() {
       alert(err.message);
     } finally {
       setLoading(false);
+      setSalesFetchedOnce(true);
     }
   }, [buildParams]);
 
@@ -260,6 +300,43 @@ export default function SalesReport() {
     if (activeTab === "refunds" && canViewRefunds && hasSearched)
       fetchRefunds();
   }, [activeTab, fetchRefunds, canViewRefunds, hasSearched]);
+
+  // Keeps the snapshot used by `loadSavedState` above up to date, so
+  // whenever the user navigates away (e.g. to edit a sale) and comes back,
+  // this search is restored instead of resetting.
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          activeTab,
+          allTime: applied.allTime,
+          dateRange: {
+            from: applied.dateRange?.from ? applied.dateRange.from.toISOString() : null,
+            to: applied.dateRange?.to ? applied.dateRange.to.toISOString() : null,
+          },
+          filters: applied.filters,
+          hasSearched,
+          salesPage,
+          salesPageSize,
+        }),
+      );
+    } catch {
+      // sessionStorage unavailable (private browsing, etc.) — the search
+      // just won't be restored on return; nothing else depends on this.
+    }
+  }, [activeTab, applied, hasSearched, salesPage, salesPageSize]);
+
+  // Once the restored search's first fetch has landed, jump back to
+  // whatever scroll position was saved right before navigating to Edit
+  // Sale (see detailedReport.jsx's handleEdit) — one-shot, then forgotten.
+  useEffect(() => {
+    if (!salesFetchedOnce) return;
+    const y = sessionStorage.getItem(SCROLL_STORAGE_KEY);
+    if (y == null) return;
+    sessionStorage.removeItem(SCROLL_STORAGE_KEY);
+    requestAnimationFrame(() => window.scrollTo(0, Number(y) || 0));
+  }, [salesFetchedOnce]);
 
   // A text search stands on its own (it always spans every date — see
   // buildParams) — otherwise a start date (or "All time") is required.
@@ -460,9 +537,9 @@ export default function SalesReport() {
             }`}
           >
             <Filter className="h-3.5 w-3.5 shrink-0" />
-            <span className="max-w-0 group-hover:max-w-[110px] opacity-0 group-hover:opacity-100 overflow-hidden whitespace-nowrap transition-all duration-200 font-medium">
+            {/* <span className="max-w-0 group-hover:max-w-[110px] opacity-0 group-hover:opacity-100 overflow-hidden whitespace-nowrap transition-all duration-200 font-medium">
               Advance Filters
-            </span>
+            </span> */}
             {advancedActiveCount > 0 && (
               <Badge
                 variant="secondary"
