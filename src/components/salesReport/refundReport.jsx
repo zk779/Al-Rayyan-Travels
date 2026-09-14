@@ -315,6 +315,13 @@ export default function RefundsTab({
 
   const handleEditClick = (refundId) => {
     if (!canEditRefund) return; // ✅ RBAC guard
+    // Remembered by SalesReport.jsx so coming back (Back button / browser
+    // back) lands at the same scroll position, not the top of the page.
+    try {
+      sessionStorage.setItem("salesReport:scrollY", String(window.scrollY));
+    } catch {
+      // sessionStorage unavailable — scroll just won't be restored
+    }
     navigate(`/edit-refund/${refundId}`);
   };
 

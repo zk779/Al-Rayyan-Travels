@@ -12,6 +12,7 @@ import {
   X,
   Calendar as CalendarIcon,
   AlertCircle,
+  ArrowLeft,
 } from "lucide-react";
 import { Calendar } from "../../shadcn/components/ui/calendar";
 import {
@@ -20,7 +21,7 @@ import {
   PopoverTrigger,
 } from "../../shadcn/components/ui/popover";
 import { format } from "date-fns";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import {
   Tabs,
   TabsContent,
@@ -40,6 +41,7 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL; // Ensure this matches your 
 export default function EditRefundTab() {
   // 1. Initialize token safely
   const { refundId } = useParams();
+  const navigate = useNavigate();
   const [token, setToken] = useState(null);
 
   const [fetching, setFetching] = useState(true);
@@ -223,10 +225,24 @@ export default function EditRefundTab() {
     <div className="w-full">
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl">Edit Services</CardTitle>
-          <CardDescription>
-            Update existing sales transactions or modify processed refunds
-          </CardDescription>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-2xl">Edit Services</CardTitle>
+              <CardDescription>
+                Update existing sales transactions or modify processed refunds
+              </CardDescription>
+            </div>
+            {/* Returns to wherever this was opened from (e.g. Sales Report's
+                Refunds tab, with its search/filters/page intact). */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate(-1)}
+              className="gap-1.5 shrink-0"
+            >
+              <ArrowLeft className="h-4 w-4" /> Go Back
+            </Button>
+          </div>
         </CardHeader>
 
         <CardContent>

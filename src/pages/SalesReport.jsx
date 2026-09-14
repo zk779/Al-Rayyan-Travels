@@ -109,6 +109,12 @@ export default function SalesReport() {
     filters: draftFilters,
   }));
 
+  // Identifies "this exact set of applied filters" so each tab can tell
+  // whether its already-loaded data is still current — see the per-tab
+  // fetch-cache refs and effects below. Date objects stringify to ISO via
+  // their own toJSON, so this is stable across renders for equal filters.
+  const appliedSignature = useMemo(() => JSON.stringify(applied), [applied]);
+
   // Nothing has been searched yet — no start date was ever chosen (or "All
   // time" toggled) and Search hasn't been pressed, so both tabs stay empty
   // rather than auto-loading a default range.
@@ -126,9 +132,11 @@ export default function SalesReport() {
   const [salesPage, setSalesPage] = useState(saved?.salesPage ?? 1);
   const [salesPageSize, setSalesPageSize] = useState(saved?.salesPageSize ?? 10);
   const [loading, setLoading] = useState(false);
-  // Flips true after the first fetch (success or fail) completes — gates
-  // the scroll-restore below so it doesn't fire before data has rendered.
+  // Flips true after each tab's first fetch (success or fail) completes —
+  // gates the scroll-restore below so it doesn't fire before data has
+  // rendered, for whichever tab actually ends up restored.
   const [salesFetchedOnce, setSalesFetchedOnce] = useState(false);
+  const [refundsFetchedOnce, setRefundsFetchedOnce] = useState(false);
   const [refundData, setRefundData] = useState([]);
   const [refundLoading, setRefundLoading] = useState(false);
 
@@ -284,6 +292,7 @@ export default function SalesReport() {
       alert(err.message);
     } finally {
       setRefundLoading(false);
+      setRefundsFetchedOnce(true);
     }
   }, [buildParams]);
 
@@ -327,16 +336,19 @@ export default function SalesReport() {
     }
   }, [activeTab, applied, hasSearched, salesPage, salesPageSize]);
 
-  // Once the restored search's first fetch has landed, jump back to
-  // whatever scroll position was saved right before navigating to Edit
-  // Sale (see detailedReport.jsx's handleEdit) — one-shot, then forgotten.
+  // Once the restored tab's first fetch has landed, jump back to whatever
+  // scroll position was saved right before navigating to Edit Sale /
+  // Edit Refund (see detailedReport.jsx's handleEdit and refundReport.jsx's
+  // handleEditClick) — one-shot, then forgotten. Gated on whichever tab is
+  // actually active, since only that one's data will have rendered.
   useEffect(() => {
-    if (!salesFetchedOnce) return;
+    const tabReady = activeTab === "refunds" ? refundsFetchedOnce : salesFetchedOnce;
+    if (!tabReady) return;
     const y = sessionStorage.getItem(SCROLL_STORAGE_KEY);
     if (y == null) return;
     sessionStorage.removeItem(SCROLL_STORAGE_KEY);
     requestAnimationFrame(() => window.scrollTo(0, Number(y) || 0));
-  }, [salesFetchedOnce]);
+  }, [activeTab, salesFetchedOnce, refundsFetchedOnce]);
 
   // A text search stands on its own (it always spans every date — see
   // buildParams) — otherwise a start date (or "All time") is required.
