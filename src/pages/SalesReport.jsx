@@ -125,11 +125,15 @@ export default function SalesReport() {
   const buildParams = useCallback(
     ({ fromKey, toKey, agentKey, orderKey }) => {
       const { filters, dateRange, allTime } = applied;
+      const isSearching = !!filters.search.trim();
       const params = new URLSearchParams();
-      if (filters.search.trim()) params.set("search", filters.search.trim());
-      if (!allTime && dateRange?.from)
+      if (isSearching) params.set("search", filters.search.trim());
+      // A text search looks across every date — the API ignores dateFrom/
+      // dateTo whenever `search` is set, so there's no point sending a
+      // range that won't be applied.
+      if (!isSearching && !allTime && dateRange?.from)
         params.set(fromKey, format(dateRange.from, "yyyy-MM-dd"));
-      if (!allTime && dateRange?.to)
+      if (!isSearching && !allTime && dateRange?.to)
         params.set(toKey, format(dateRange.to, "yyyy-MM-dd"));
       // Only ever sent for users who can filter by agent/branch — everyone
       // else has no such dropdown (and no non-"all" value) to send.
@@ -248,8 +252,10 @@ export default function SalesReport() {
       fetchRefunds();
   }, [activeTab, fetchRefunds, canViewRefunds, hasSearched]);
 
-  // A start date (or "All time") is required — nothing to search otherwise.
-  const canApply = draftAllTime || !!draftDateRange.from;
+  // A text search stands on its own (it always spans every date — see
+  // buildParams) — otherwise a start date (or "All time") is required.
+  const hasSearchTerm = !!draftFilters.search.trim();
+  const canApply = hasSearchTerm || draftAllTime || !!draftDateRange.from;
 
   // Submits the draft filters — the only point where a filter change
   // actually reaches the API.
@@ -333,6 +339,11 @@ export default function SalesReport() {
                 className="pl-8 h-8 text-sm w-full"
               />
             </div>
+            {hasSearchTerm && (
+              <span className="text-[10px] text-indigo-500">
+                Searches across all dates
+              </span>
+            )}
           </div>
 
           <DateRangeInputs
@@ -342,14 +353,19 @@ export default function SalesReport() {
               setDraftAllTime(false);
               setDraftDateRange(range);
             }}
-            disabled={draftAllTime}
+            disabled={draftAllTime || hasSearchTerm}
             compact
           />
           <button
             type="button"
             onClick={() => setDraftAllTime((v) => !v)}
-            title="Show every record, ignoring the date range"
-            className={`h-8 px-2 rounded-md text-xs font-medium border transition-colors ${
+            disabled={hasSearchTerm}
+            title={
+              hasSearchTerm
+                ? "Not needed — a text search already spans every date"
+                : "Show every record, ignoring the date range"
+            }
+            className={`h-8 px-2 rounded-md text-xs font-medium border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
               draftAllTime
                 ? "bg-indigo-50 border-indigo-200 text-indigo-700"
                 : "border-slate-200 text-slate-500 hover:bg-slate-50"
@@ -400,7 +416,7 @@ export default function SalesReport() {
             size="sm"
             onClick={runSearch}
             disabled={!canApply}
-            title={canApply ? undefined : "Pick a date range(or All time) first"}
+            title={canApply ? undefined : "Enter a search term, or pick a date range (or All time)"}
             className="relative gap-1.5 bg-gradient-primary"
           >
             <Search className="h-3.5 w-3.5" /> Search

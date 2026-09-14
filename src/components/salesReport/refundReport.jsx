@@ -280,7 +280,9 @@ export default function RefundsTab({
             Pick a date range and hit Search to see refund transactions
           </p>
           <p className="text-xs text-gray-400 max-w-sm">
-            Or toggle "All time" if you want everything, regardless of date.
+            Or toggle "All time" for everything regardless of date — or just
+            type an invoice, document number, or remark to search across all
+            dates directly.
           </p>
         </CardContent>
       </Card>
