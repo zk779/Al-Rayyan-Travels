@@ -189,6 +189,13 @@ export default function SalesReport() {
     [applied, canFilterByAgent, canViewAllBranches],
   );
 
+  // Per-tab fetch cache — remembers which `appliedSignature` each tab's
+  // data was last loaded for, so switching tabs (or switching back) skips
+  // the refetch/loading-spinner entirely when nothing has actually changed.
+  // Refs, not state: purely bookkeeping, never rendered.
+  const salesFetchedForRef = useRef(null);
+  const refundsFetchedForRef = useRef(null);
+
   // Page size is a display control, not a submitted filter — reset to
   // page 1 immediately rather than waiting on Search. Skips the very first
   // run so restoring a saved page (see `saved` above) isn't immediately
@@ -232,8 +239,11 @@ export default function SalesReport() {
     } finally {
       setLoading(false);
       setSalesFetchedOnce(true);
+      // Mark this exact filter set as loaded — a same-filters tab switch
+      // won't refetch until something actually changes.
+      salesFetchedForRef.current = appliedSignature;
     }
-  }, [buildParams]);
+  }, [buildParams, appliedSignature]);
 
   // Client-side page slice of the already-fetched full result set.
   const salesTotal = salesData.length;
@@ -293,22 +303,40 @@ export default function SalesReport() {
     } finally {
       setRefundLoading(false);
       setRefundsFetchedOnce(true);
+      // Mark this exact filter set as loaded — a same-filters tab switch
+      // won't refetch until something actually changes.
+      refundsFetchedForRef.current = appliedSignature;
     }
-  }, [buildParams]);
+  }, [buildParams, appliedSignature]);
 
-  /* ── Lazy, tab-aware fetching. Fires on tab switch and whenever `applied`
-     changes (Search) — via the fetchSales/fetchRefunds identity changing.
-     Page/pageSize changes do NOT refetch — they just re-slice the already-
-     fetched data (see pagedSalesData). Gated on `hasSearched` so nothing
-     loads before the user's first Search. ── */
+  /* ── Lazy, tab-aware, per-tab-cached fetching. Fires on tab switch, but
+     only actually refetches if that tab's data isn't already loaded for
+     the current `appliedSignature` (see the *FetchedForRef checks) — so
+     flipping between tabs after a Search is instant, no repeat loading
+     spinner, while a genuinely new Search (or the Refresh button, which
+     calls fetch*() directly) still fetches fresh data. Page/pageSize
+     changes don't refetch either — they just re-slice the already-fetched
+     data (see pagedSalesData). Gated on `hasSearched` so nothing loads
+     before the user's first Search. ── */
   useEffect(() => {
-    if (activeTab === "detailed" && canViewSales && hasSearched) fetchSales();
-  }, [activeTab, fetchSales, canViewSales, hasSearched]);
+    if (
+      activeTab === "detailed" &&
+      canViewSales &&
+      hasSearched &&
+      salesFetchedForRef.current !== appliedSignature
+    )
+      fetchSales();
+  }, [activeTab, fetchSales, canViewSales, hasSearched, appliedSignature]);
 
   useEffect(() => {
-    if (activeTab === "refunds" && canViewRefunds && hasSearched)
+    if (
+      activeTab === "refunds" &&
+      canViewRefunds &&
+      hasSearched &&
+      refundsFetchedForRef.current !== appliedSignature
+    )
       fetchRefunds();
-  }, [activeTab, fetchRefunds, canViewRefunds, hasSearched]);
+  }, [activeTab, fetchRefunds, canViewRefunds, hasSearched, appliedSignature]);
 
   // Keeps the snapshot used by `loadSavedState` above up to date, so
   // whenever the user navigates away (e.g. to edit a sale) and comes back,
