@@ -12,6 +12,8 @@ import {
   Filter,
   Undo2,
   Receipt,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 import {
@@ -31,6 +33,13 @@ import {
 } from "../../../shadcn/components/ui/table";
 import { Badge } from "../../../shadcn/components/ui/badge";
 import { Button } from "../../../shadcn/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../../shadcn/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -92,6 +101,58 @@ const payoutBadgeClass = (refund) => {
   if (refund.refundType === "BANK_TRANSFER") return "bg-blue-50 text-blue-700 border-blue-200";
   return "bg-violet-50 text-violet-700 border-violet-200";
 };
+
+/* ========================= PAGINATION ========================= */
+const PAGE_SIZE_OPTIONS = [10, 20, 30, 50, 100];
+
+function PaginationBar({ page, pageSize, total, totalPages, onPageChange, onPageSizeChange }) {
+  const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, total);
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t mt-4">
+      <div className="flex items-center gap-2 text-sm text-gray-600">
+        <span>Rows per page</span>
+        <Select value={String(pageSize)} onValueChange={(v) => onPageSizeChange(Number(v))}>
+          <SelectTrigger className="w-[80px] h-8">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PAGE_SIZE_OPTIONS.map((n) => (
+              <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="text-sm text-gray-600">
+        {total === 0 ? "No results" : `Showing ${from}-${to} of ${total}`}
+      </div>
+
+      <div className="flex items-center gap-1">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(page - 1)}
+          disabled={page <= 1}
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <span className="text-sm px-2 whitespace-nowrap">
+          Page {page} of {totalPages || 1}
+        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(page + 1)}
+          disabled={page >= totalPages}
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 /* ========================= HIGHLIGHT ========================= */
 const highlightText = (text, query, field, searchBy) => {
@@ -248,6 +309,10 @@ export default function RefundsTab({
   hasSearched = true,
   searchQuery,
   searchBy,
+  page = 1,
+  pageSize = 10,
+  onPageChange,
+  onPageSizeChange,
 }) {
   // ✅ RBAC — permission flags
   const { hasPermission } = useAuth();
@@ -260,6 +325,9 @@ export default function RefundsTab({
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
+  // Summary tiles always reflect the WHOLE filtered set (server already
+  // returns everything matching the search — see refunds.js) — computed
+  // from the full array, not the page slice below.
   const summary = useMemo(
     () => ({
       count: refundData.length,
@@ -268,6 +336,15 @@ export default function RefundsTab({
     }),
     [refundData],
   );
+
+  // Client-side page slice — SalesReport.jsx fetches the whole filtered set
+  // once per search; changing page/pageSize here never triggers a refetch.
+  const total = refundData.length;
+  const totalPages = Math.max(Math.ceil(total / pageSize), 1);
+  const pagedRefunds = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return refundData.slice(start, start + pageSize);
+  }, [refundData, page, pageSize]);
 
   if (!hasSearched) {
     return (
@@ -398,7 +475,7 @@ export default function RefundsTab({
                     </TableCell>
                   </TableRow>
                 ) : (
-                  refundData.map((refund) => (
+                  pagedRefunds.map((refund) => (
                     <TableRow key={refund.id}>
                       <TableCell className="whitespace-nowrap">
                         {refund.date
@@ -530,6 +607,17 @@ export default function RefundsTab({
               </TableBody>
             </Table>
           </div>
+
+          {onPageChange && onPageSizeChange && (
+            <PaginationBar
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              totalPages={totalPages}
+              onPageChange={onPageChange}
+              onPageSizeChange={onPageSizeChange}
+            />
+          )}
         </CardContent>
       </Card>
 

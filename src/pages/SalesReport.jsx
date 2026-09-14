@@ -137,7 +137,12 @@ export default function SalesReport() {
   // rendered, for whichever tab actually ends up restored.
   const [salesFetchedOnce, setSalesFetchedOnce] = useState(false);
   const [refundsFetchedOnce, setRefundsFetchedOnce] = useState(false);
+  // Same deal as sales — full result set fetched once per search, paged
+  // client-side. RefundsTab does its own slicing (it also needs the full
+  // array for its summary tiles), so only page/pageSize are tracked here.
   const [refundData, setRefundData] = useState([]);
+  const [refundPage, setRefundPage] = useState(saved?.refundPage ?? 1);
+  const [refundPageSize, setRefundPageSize] = useState(saved?.refundPageSize ?? 10);
   const [refundLoading, setRefundLoading] = useState(false);
 
   /* ── Agent list, once, for the Agent dropdown ── */
@@ -208,6 +213,15 @@ export default function SalesReport() {
     }
     setSalesPage(1);
   }, [salesPageSize]);
+
+  const skipNextRefundPageReset = useRef(true);
+  useEffect(() => {
+    if (skipNextRefundPageReset.current) {
+      skipNextRefundPageReset.current = false;
+      return;
+    }
+    setRefundPage(1);
+  }, [refundPageSize]);
 
   /* ── Fetch sales — filtered server-side, NOT paginated server-side.
      One request per search; page changes below never refetch. ── */
@@ -356,13 +370,15 @@ export default function SalesReport() {
           hasSearched,
           salesPage,
           salesPageSize,
+          refundPage,
+          refundPageSize,
         }),
       );
     } catch {
       // sessionStorage unavailable (private browsing, etc.) — the search
       // just won't be restored on return; nothing else depends on this.
     }
-  }, [activeTab, applied, hasSearched, salesPage, salesPageSize]);
+  }, [activeTab, applied, hasSearched, salesPage, salesPageSize, refundPage, refundPageSize]);
 
   // Once the restored tab's first fetch has landed, jump back to whatever
   // scroll position was saved right before navigating to Edit Sale /
@@ -393,6 +409,7 @@ export default function SalesReport() {
       filters: draftFilters,
     });
     setSalesPage(1);
+    setRefundPage(1);
     setHasSearched(true);
   };
 
@@ -413,6 +430,7 @@ export default function SalesReport() {
     setDraftFilters(next);
     setApplied((a) => ({ ...a, filters: next }));
     setSalesPage(1);
+    setRefundPage(1);
   };
   const advancedActiveCount =
     (applied.filters.searchBy !== "all" ? 1 : 0) +
@@ -727,6 +745,10 @@ export default function SalesReport() {
               hasSearched={hasSearched}
               searchQuery={applied.filters.search}
               searchBy={applied.filters.searchBy}
+              page={refundPage}
+              pageSize={refundPageSize}
+              onPageChange={setRefundPage}
+              onPageSizeChange={setRefundPageSize}
             />
           </TabsContent>
         </Tabs>
@@ -753,6 +775,10 @@ export default function SalesReport() {
           hasSearched={hasSearched}
           searchQuery={applied.filters.search}
           searchBy={applied.filters.searchBy}
+          page={refundPage}
+          pageSize={refundPageSize}
+          onPageChange={setRefundPage}
+          onPageSizeChange={setRefundPageSize}
         />
       )}
     </div>

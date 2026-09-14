@@ -828,10 +828,13 @@ export default function LedgerComponent() {
 		}));
 	};
 
+	// `entries` holds the WHOLE filtered set — the API returns everything
+	// matching `applied` in one go (no server-side pagination); `page`/
+	// `limit` below are purely a client-side slice, so changing them never
+	// triggers a refetch. Same approach as Sales Report / Refunds.
 	const [page, setPage]       = useState(1);
 	const [limit, setLimit]     = useState(50); // page size — user-adjustable via dropdown
 	const [total, setTotal]     = useState(0);
-	const [totalPages, setTotalPages] = useState(1);
 	const [isLoading, setIsLoading]   = useState(false);
 
 	// Server-computed totals for the FULL filtered set (all pages), from
@@ -844,12 +847,14 @@ export default function LedgerComponent() {
 		apiRequest("/api/customers").then((r) => setCustomers(r.data || [])).catch(console.error);
 	}, []);
 
-	/* ---------- Fetch ledger — driven entirely by `applied` ---------- */
+	/* ---------- Fetch ledger — driven entirely by `applied`.
+	   No page/limit sent — the whole filtered set comes back in one
+	   request; page/limit only affect the client-side slice below, so
+	   changing them never refetches. ---------- */
 	const fetchLedger = useCallback(async () => {
 			if (applied.accountType === "SELECT") {
 				setEntries([]);
 				setTotal(0);
-				setTotalPages(1);
 				setSummary(null);
 				return;
 			}
@@ -858,8 +863,6 @@ export default function LedgerComponent() {
 			try {
 			const params = new URLSearchParams();
 			params.set("accountType", applied.accountType);
-			params.set("page", page);
-			params.set("limit", limit);
 			params.set("includeDetails", "true");
 			params.set("includeSummary", "true");
 
@@ -879,7 +882,6 @@ export default function LedgerComponent() {
 			const res = await apiRequest(`/api/ledger?${params.toString()}`);
 			setEntries(res.data || []);
 			setTotal(res.meta?.total || 0);
-			setTotalPages(res.meta?.totalPages || 1);
 			setSummary(res.summary || null);
 		} catch (e) {
 			console.error(e);
@@ -887,20 +889,27 @@ export default function LedgerComponent() {
 		} finally {
 			setIsLoading(false);
 		}
-	}, [applied, page, limit]);
+	}, [applied]);
 
 	useEffect(() => { fetchLedger(); }, [fetchLedger]);
 
 	/* ---------- Calculations ---------- */
 
-	// Totals for entries loaded on the CURRENT page only.
+	// Client-side page slice of the already-fetched full result set.
+	const totalPages = Math.max(Math.ceil(total / limit), 1);
+	const pagedEntries = useMemo(() => {
+		const start = (page - 1) * limit;
+		return entries.slice(start, start + limit);
+	}, [entries, page, limit]);
+
+	// Totals for entries on the CURRENT page only.
 	const pageTotals = useMemo(() =>
-		entries.reduce((acc, e) => {
+		pagedEntries.reduce((acc, e) => {
 			acc.credit += Number(e.credit || 0);
 			acc.debit  += Number(e.debit  || 0);
 			return acc;
 		}, { credit: 0, debit: 0 }),
-	[entries]);
+	[pagedEntries]);
 	const pageNet = pageTotals.credit - pageTotals.debit;
 
 	// Totals across the ENTIRE filtered set (every page), from the server.
@@ -1199,7 +1208,7 @@ export default function LedgerComponent() {
 						<div>
 							<CardTitle className="text-base font-bold text-gray-800">Ledger Entries</CardTitle>
 							<CardDescription className="text-xs mt-0.5">
-								{isLoading ? "Loading…" : `Showing ${entries.length} of ${total} records • Page ${page} of ${totalPages}`}
+								{isLoading ? "Loading…" : `Showing ${pagedEntries.length} of ${total} records • Page ${page} of ${totalPages}`}
 							</CardDescription>
 						</div>
 						<div className="flex items-center gap-2">
@@ -1225,10 +1234,10 @@ export default function LedgerComponent() {
 					</div>
 
 					{/* Per-page totals — computed from the entries currently loaded (this page only) */}
-					{!isLoading && entries.length > 0 && (
+					{!isLoading && pagedEntries.length > 0 && (
 						<div className="flex flex-wrap gap-3 pt-3">
 							<div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-sm font-medium">
-								<Receipt className="h-4 w-4" /> {entries.length} Transactions (page)
+								<Receipt className="h-4 w-4" /> {pagedEntries.length} Transactions (page)
 							</div>
 							<div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-sm font-medium">
 								<TrendingUp className="h-4 w-4" /> <Money value={pageTotals.credit} /> Credit (page)
@@ -1290,7 +1299,7 @@ export default function LedgerComponent() {
 										</TableCell>
 									</TableRow>
 									) : (
-									entries.map((e) => <LedgerRow key={e.id} entry={e} />)
+									pagedEntries.map((e) => <LedgerRow key={e.id} entry={e} />)
 								)}
 							</TableBody>
 						</Table>
