@@ -9,6 +9,7 @@ import {
   Space,
   Select,
   DatePicker,
+  Tooltip,
 } from "antd";
 import dayjs from "dayjs";
 import {
@@ -21,6 +22,7 @@ import {
   CheckCircle,
   DollarSign,
   SaudiRiyal,
+  CreditCard,
 } from "lucide-react";
 import CustomAlertDialog from "../components/CustomAlertDialog";
 import { appToast } from "../../shadcn/components/ui/appToast";
@@ -50,12 +52,23 @@ const normalizeBank = (b) => ({
   id: b.id,
   bankName: b.bankName,
   accountNumber: b.accountNumber,
-  branchName: b.branchName || "",
+  branchId: b.branchId || b.branch?.id || null,
+  branchName: b.branch?.name || "",
   swiftCode: b.swiftCode || "",
   openingBalance: Number(b.openingBalance || 0),
   currentBalance: Number(b.account?.balance || 0),
   isActive: b.isActive,
   bankDate: b.bankDate,
+  posMachines: (b.posMachines || []).map((p) => ({
+    branchId: p.branchId || p.branch?.id || null,
+    branchName: p.branch?.name || "",
+    merchantId: p.merchantId || "",
+    terminalId: p.terminalId || "",
+    providerName: p.providerName || "",
+    commissionRate: p.commissionRate ?? null,
+    isActive: p.isActive,
+  })),
+  hasPos: (b.posMachines || []).length > 0,
 });
 
 /* ======================= PAGE ======================= */
@@ -68,6 +81,7 @@ const BankAccountsPage = () => {
   const hasAnyRowAction = canEdit || canDelete;
 
   const [banks, setBanks] = useState([]);
+  const [branches, setBranches] = useState([]);
   const [loadingList, setLoadingList] = useState(false);
   const [orderBy, setOrderBy] = useState("bankDate");
   const [orderDir, setOrderDir] = useState("desc");
@@ -77,11 +91,21 @@ const BankAccountsPage = () => {
   const [isEditModal, setIsEditModal] = useState(false);
   const [currentBank, setCurrentBank] = useState(null);
   const [saving, setSaving] = useState(false);
+  // Whether the POS fields section is shown — separate from the Form
+  // values since it's purely a UI toggle, not a field sent to the API.
+  const [hasPos, setHasPos] = useState(false);
 
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const [form] = Form.useForm();
+
+  /* ── Branches, once, for the Branch dropdown ── */
+  useEffect(() => {
+    apiRequest("/api/branches")
+      .then((res) => setBranches(res.data || []))
+      .catch(() => {});
+  }, []);
 
   /* ── Fetch ── */
   const refreshBanks = async () => {
@@ -136,18 +160,20 @@ const BankAccountsPage = () => {
     setIsModalOpen(true);
     setIsEditModal(!!bank);
     setCurrentBank(bank);
+    setHasPos(bank?.hasPos ?? false);
     form.setFieldsValue(
       bank
         ? {
             bankName: bank.bankName,
             accountNumber: bank.accountNumber,
-            branchName: bank.branchName,
+            branchId: bank.branchId || undefined,
             swiftCode: bank.swiftCode,
             openingBalance: bank.openingBalance,
             bankDate: bank.bankDate ? dayjs(bank.bankDate) : dayjs(),
             isActive: bank.isActive,
+            posMachines: bank.posMachines,
           }
-        : { openingBalance: 0, bankDate: dayjs(), isActive: true },
+        : { openingBalance: 0, bankDate: dayjs(), isActive: true, posMachines: [] },
     );
   };
 
@@ -155,6 +181,7 @@ const BankAccountsPage = () => {
     setIsModalOpen(false);
     setIsEditModal(false);
     setCurrentBank(null);
+    setHasPos(false);
     form.resetFields();
   };
 
@@ -169,11 +196,25 @@ const BankAccountsPage = () => {
       const payload = {
         bankName: values.bankName,
         accountNumber: values.accountNumber,
-        branchName: values.branchName || null,
+        branchId: values.branchId || null,
         swiftCode: values.swiftCode || null,
         openingBalance: Number(values.openingBalance || 0),
         bankDate: values.bankDate.toISOString(),
         isActive: values.isActive,
+        // Unchecking "Has POS machine" clears any previously saved terminals.
+        posMachines: hasPos
+          ? (values.posMachines || []).map((pos) => ({
+              branchId: pos.branchId || null,
+              merchantId: pos.merchantId || null,
+              terminalId: pos.terminalId || null,
+              providerName: pos.providerName || null,
+              commissionRate:
+                pos.commissionRate !== undefined && pos.commissionRate !== null && pos.commissionRate !== ""
+                  ? Number(pos.commissionRate)
+                  : null,
+              isActive: pos.isActive === undefined ? true : Boolean(pos.isActive),
+            }))
+          : [],
       };
 
       if (isEditModal) {
@@ -273,6 +314,38 @@ const BankAccountsPage = () => {
           </div>
         </div>
       ),
+    },
+    {
+      title: "POS",
+      key: "pos",
+      render: (_, r) => {
+        if (!r.hasPos) return <span className="text-gray-300 text-xs">—</span>;
+        const activeCount = r.posMachines.filter((p) => p.isActive).length;
+        return (
+          <Tooltip
+            title={
+              <div className="space-y-1.5">
+                {r.posMachines.map((p, i) => (
+                  <div key={i} className="text-xs">
+                    <span className={p.isActive ? "text-emerald-300" : "text-gray-400"}>
+                      ● {p.isActive ? "Active" : "Inactive"}
+                    </span>
+                    {" — "}
+                    {[p.providerName, p.merchantId && `MID: ${p.merchantId}`, p.terminalId && `TID: ${p.terminalId}`, p.branchName && `@ ${p.branchName}`]
+                      .filter(Boolean)
+                      .join(" · ") || "No details"}
+                  </div>
+                ))}
+              </div>
+            }
+          >
+            <div className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-2 py-1 cursor-default">
+              <CreditCard className="w-3.5 h-3.5" />
+              {r.posMachines.length} POS ({activeCount} active)
+            </div>
+          </Tooltip>
+        );
+      },
     },
     {
       title: "Opening Balance",
@@ -491,8 +564,14 @@ const BankAccountsPage = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Form.Item label="Branch Name" name="branchName">
-              <Input placeholder="e.g. Riyadh Main Branch" />
+            <Form.Item label="Branch" name="branchId">
+              <Select
+                placeholder="Select branch"
+                allowClear
+                showSearch
+                optionFilterProp="label"
+                options={branches.map((b) => ({ value: b.id, label: b.name }))}
+              />
             </Form.Item>
 
             <Form.Item label="SWIFT / IBAN Code" name="swiftCode">
@@ -521,6 +600,125 @@ const BankAccountsPage = () => {
           <Form.Item label="Status" name="isActive" valuePropName="checked">
             <Switch checkedChildren="Active" unCheckedChildren="Inactive" />
           </Form.Item>
+
+          {/* ── POS machine toggle — a bank account can have several terminals ── */}
+          <div className="border-t pt-4 mt-1">
+            <div className="flex items-center justify-between">
+              <span className="font-medium text-gray-700">
+                Do you have a POS machine?
+              </span>
+              <Switch
+                checked={hasPos}
+                onChange={(checked) => {
+                  setHasPos(checked);
+                  if (!checked) form.setFieldsValue({ posMachines: [] });
+                  else if (!form.getFieldValue("posMachines")?.length)
+                    form.setFieldsValue({ posMachines: [{ isActive: true }] });
+                }}
+                checkedChildren="Yes"
+                unCheckedChildren="No"
+              />
+            </div>
+
+            {hasPos && (
+              <Form.List name="posMachines">
+                {(fields, { add, remove }) => (
+                  <div className="mt-4 space-y-3">
+                    {fields.map(({ key, name, ...restField }) => (
+                      <div
+                        key={key}
+                        className="border rounded-lg p-3 bg-gray-50/50 relative"
+                      >
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <Form.Item
+                            {...restField}
+                            label="Merchant ID (MID)"
+                            name={[name, "merchantId"]}
+                            className="mb-2"
+                          >
+                            <Input placeholder="e.g. 123456789" className="font-mono" />
+                          </Form.Item>
+
+                          <Form.Item
+                            {...restField}
+                            label="Terminal ID (TID)"
+                            name={[name, "terminalId"]}
+                            className="mb-2"
+                          >
+                            <Input placeholder="e.g. 98765432" className="font-mono" />
+                          </Form.Item>
+
+                          <Form.Item
+                            {...restField}
+                            label="POS Provider / Bank"
+                            name={[name, "providerName"]}
+                            className="mb-2"
+                          >
+                            <Input placeholder="e.g. mada, Geidea, Network Intl." />
+                          </Form.Item>
+
+                          <Form.Item
+                            {...restField}
+                            label="Branch"
+                            name={[name, "branchId"]}
+                            className="mb-2"
+                          >
+                            <Select
+                              placeholder="Which branch has this terminal"
+                              allowClear
+                              showSearch
+                              optionFilterProp="label"
+                              options={branches.map((b) => ({ value: b.id, label: b.name }))}
+                            />
+                          </Form.Item>
+
+                          <Form.Item
+                            {...restField}
+                            label="Commission / MDR Rate (%)"
+                            name={[name, "commissionRate"]}
+                            className="mb-2"
+                          >
+                            <Input type="number" placeholder="e.g. 1.75" min={0} step="0.01" />
+                          </Form.Item>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <Form.Item
+                            {...restField}
+                            label="Status"
+                            name={[name, "isActive"]}
+                            valuePropName="checked"
+                            initialValue={true}
+                            className="mb-0"
+                          >
+                            <Switch checkedChildren="Active" unCheckedChildren="Inactive" />
+                          </Form.Item>
+                          <Button
+                            variant="link"
+                            color="danger"
+                            size="small"
+                            icon={<Trash className="w-4 h-4" />}
+                            onClick={() => remove(name)}
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+
+                    <Button
+                      type="dashed"
+                      block
+                      icon={<Plus className="w-4 h-4" />}
+                      onClick={() => add({ isActive: true })}
+                    >
+                      Add Another POS Machine
+                    </Button>
+                  </div>
+                )}
+              </Form.List>
+            )}
+          </div>
 
           <div className="flex justify-end gap-3 mt-4">
             <Button onClick={handleCancel}>Cancel</Button>
