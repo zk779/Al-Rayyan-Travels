@@ -65,7 +65,12 @@ const normalizeBank = (b) => ({
     merchantId: p.merchantId || "",
     terminalId: p.terminalId || "",
     providerName: p.providerName || "",
-    commissionRate: p.commissionRate ?? null,
+    // Different card networks on the same terminal can charge different
+    // rates — e.g. Visa 1.5%, Mada 1.0%.
+    commissionTypes: (p.commissionTypes || []).map((ct) => ({
+      cardType: ct.cardType || "",
+      commissionRate: ct.commissionRate ?? null,
+    })),
     isActive: p.isActive,
   })),
   hasPos: (b.posMachines || []).length > 0,
@@ -208,10 +213,15 @@ const BankAccountsPage = () => {
               merchantId: pos.merchantId || null,
               terminalId: pos.terminalId || null,
               providerName: pos.providerName || null,
-              commissionRate:
-                pos.commissionRate !== undefined && pos.commissionRate !== null && pos.commissionRate !== ""
-                  ? Number(pos.commissionRate)
-                  : null,
+              commissionTypes: (pos.commissionTypes || [])
+                .filter((ct) => ct?.cardType)
+                .map((ct) => ({
+                  cardType: ct.cardType,
+                  commissionRate:
+                    ct.commissionRate !== undefined && ct.commissionRate !== null && ct.commissionRate !== ""
+                      ? Number(ct.commissionRate)
+                      : null,
+                })),
               isActive: pos.isActive === undefined ? true : Boolean(pos.isActive),
             }))
           : [],
@@ -334,6 +344,13 @@ const BankAccountsPage = () => {
                     {[p.providerName, p.merchantId && `MID: ${p.merchantId}`, p.terminalId && `TID: ${p.terminalId}`, p.branchName && `@ ${p.branchName}`]
                       .filter(Boolean)
                       .join(" · ") || "No details"}
+                    {p.commissionTypes?.length > 0 && (
+                      <div className="text-gray-400 pl-3">
+                        {p.commissionTypes
+                          .map((ct) => `${ct.cardType}${ct.commissionRate != null ? ` ${ct.commissionRate}%` : ""}`)
+                          .join(", ")}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -672,14 +689,62 @@ const BankAccountsPage = () => {
                             />
                           </Form.Item>
 
-                          <Form.Item
-                            {...restField}
-                            label="Commission / MDR Rate (%)"
-                            name={[name, "commissionRate"]}
-                            className="mb-2"
-                          >
-                            <Input type="number" placeholder="e.g. 1.75" min={0} step="0.01" />
-                          </Form.Item>
+                        </div>
+
+                        {/* ── Commission Type — a terminal can charge a
+                            different rate per card network (Visa, Mada,
+                            etc). Shows existing ones if any, always offers
+                            "Add" for a new one — same for create and edit. ── */}
+                        <div className="mb-2">
+                          <div className="text-xs font-medium text-gray-600 mb-1.5">
+                            Commission Type
+                          </div>
+                          <Form.List name={[name, "commissionTypes"]}>
+                            {(ctFields, { add: addCt, remove: removeCt }) => (
+                              <div className="space-y-2">
+                                {ctFields.map(({ key: ctKey, name: ctName, ...ctRestField }) => (
+                                  <div key={ctKey} className="flex items-start gap-2">
+                                    <Form.Item
+                                      {...ctRestField}
+                                      name={[ctName, "cardType"]}
+                                      className="mb-0 flex-1"
+                                      rules={[{ required: true, message: "Card type required" }]}
+                                    >
+                                      <Input placeholder="e.g. Visa, Mada, Mastercard" size="small" />
+                                    </Form.Item>
+                                    <Form.Item
+                                      {...ctRestField}
+                                      name={[ctName, "commissionRate"]}
+                                      className="mb-0 flex-1"
+                                    >
+                                      <Input
+                                        type="number"
+                                        placeholder="Rate % e.g. 1.5"
+                                        min={0}
+                                        step="0.01"
+                                        size="small"
+                                      />
+                                    </Form.Item>
+                                    <Button
+                                      variant="link"
+                                      color="danger"
+                                      size="small"
+                                      icon={<Trash className="w-3.5 h-3.5" />}
+                                      onClick={() => removeCt(ctName)}
+                                    />
+                                  </div>
+                                ))}
+                                <Button
+                                  type="dashed"
+                                  size="small"
+                                  icon={<Plus className="w-3.5 h-3.5" />}
+                                  onClick={() => addCt()}
+                                >
+                                  Add Commission Type
+                                </Button>
+                              </div>
+                            )}
+                          </Form.List>
                         </div>
 
                         <div className="flex items-center justify-between">
