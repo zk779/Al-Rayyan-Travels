@@ -5,6 +5,7 @@ import {
   CreditCard,
   Banknote,
   Building2,
+  Terminal,
   SplitSquareHorizontal,
   Check,
   SaudiRiyal,
@@ -22,21 +23,43 @@ import {
 import Select from "react-select";
 
 /* ─── Constants ─────────────────────────────────────────── */
-const METHODS = [
-  { value: "CASH", label: "Cash", icon: Banknote, color: "emerald" },
-  {
+// METHOD_META covers every real paymentType plus the "BANK_ACCOUNT"
+// category (a UI-only grouping over BANK_TRANSFER / POS — never itself
+// submitted as a paymentType).
+const METHOD_META = {
+  CASH: { value: "CASH", label: "Cash", icon: Banknote, color: "emerald" },
+  BANK_ACCOUNT: {
+    value: "BANK_ACCOUNT",
+    label: "Bank Account",
+    icon: Building2,
+    color: "blue",
+  },
+  BANK_TRANSFER: {
     value: "BANK_TRANSFER",
     label: "Bank Transfer",
     icon: Building2,
     color: "blue",
   },
-  { value: "CREDIT", label: "Credit", icon: CreditCard, color: "violet" },
-  {
+  POS: {
+    value: "POS",
+    label: "POS Machine",
+    icon: Terminal,
+    color: "cyan",
+  },
+  CREDIT: { value: "CREDIT", label: "Credit", icon: CreditCard, color: "violet" },
+  PARTIAL: {
     value: "PARTIAL",
     label: "Partial / Split",
     icon: SplitSquareHorizontal,
     color: "amber",
   },
+};
+
+const METHODS = [
+  METHOD_META.CASH,
+  METHOD_META.BANK_ACCOUNT,
+  METHOD_META.CREDIT,
+  METHOD_META.PARTIAL,
 ];
 
 const PARTIAL_COMBOS = [
@@ -80,9 +103,13 @@ const colorMap = {
     text: "text-amber-700",
     ring: "ring-amber-400",
   },
+  cyan: {
+    bg: "bg-cyan-50",
+    border: "border-cyan-400",
+    text: "text-cyan-700",
+    ring: "ring-cyan-400",
+  },
 };
-
-const METHOD_META = Object.fromEntries(METHODS.map((m) => [m.value, m]));
 
 /* ─── Tabby / Tamara fee calculation ─────────────────────
    Fee            = 6.99% of Order Amount
@@ -111,6 +138,18 @@ function calculateTabbyNetAmount(orderAmount) {
     totalDeduction: round2(totalDeduction),
     amount: round2(amount),
   };
+}
+
+/* ─── POS commission calculation ─────────────────────────
+   Fee (commission) = commissionRate% of Order Amount
+   Net Amount        = Order Amount - Fee
+--------------------------------------------------------- */
+function calculatePosNetAmount(orderAmount, commissionRate) {
+  const order = Number(orderAmount) || 0;
+  const rate = Number(commissionRate) || 0;
+  const fee = round2(order * (rate / 100));
+  const amount = round2(order - fee);
+  return { fee, amount };
 }
 
 const getCustomerType = (id, customerOptions) =>
@@ -151,7 +190,7 @@ const emptyPartial = (combo = "") => ({
   bOrderAmount: "",
 });
 
-/* ─── Single payment slot ────────────────────────────────── */
+/* ─── Single payment slot (CASH / BANK_TRANSFER / CREDIT) ────── */
 function SlotFields({
   methodValue,
   amount,
@@ -319,12 +358,157 @@ function SlotFields({
   );
 }
 
+/* ─── POS payment slot: machine → card type → order amount ──── */
+function PosFields({
+  posId,
+  setPosId,
+  posCardType,
+  setPosCardType,
+  posCommissionRate,
+  setPosCommissionRate,
+  posOrderAmount,
+  setPosOrderAmount,
+  amount,
+  setAmount,
+  posOptions,
+}) {
+  const selectedPos = posOptions?.find((o) => o.value === posId) || null;
+  const cardTypeOptions = (selectedPos?.commissionTypes || []).map((c) => ({
+    value: c.cardType,
+    label:
+      c.commissionRate != null
+        ? `${c.cardType} (${c.commissionRate}%)`
+        : c.cardType,
+    commissionRate: c.commissionRate,
+  }));
+
+  const posCalc = useMemo(() => {
+    if (!posOrderAmount || posCommissionRate == null) return null;
+    return calculatePosNetAmount(posOrderAmount, posCommissionRate);
+  }, [posOrderAmount, posCommissionRate]);
+
+  useEffect(() => {
+    if (posCalc) setAmount(String(posCalc.amount));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [posCalc]);
+
+  return (
+    <div className="space-y-2 p-3 rounded-lg border bg-cyan-50 border-cyan-200">
+      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+        POS Machine
+      </p>
+
+      <div className="space-y-1">
+        <Label className="text-xs font-medium text-slate-600">
+          POS Machine *
+        </Label>
+        <Select
+          options={posOptions}
+          value={selectedPos}
+          onChange={(o) => {
+            setPosId(o?.value || "");
+            setPosCardType("");
+            setPosCommissionRate(null);
+            setPosOrderAmount("");
+            setAmount("");
+          }}
+          placeholder="Select POS machine"
+          menuPortalTarget={document.body}
+          menuPosition="fixed"
+          menuShouldBlockScroll={false}
+          closeMenuOnScroll={false}
+          styles={{
+            ...compact,
+            menuPortal: (base) => ({ ...base, zIndex: 999999 }),
+            menu: (base) => ({ ...base, zIndex: 999999, pointerEvents: "auto" }),
+          }}
+        />
+      </div>
+
+      {selectedPos && (
+        <div className="space-y-1">
+          <Label className="text-xs font-medium text-slate-600">
+            Card Type *
+          </Label>
+          <Select
+            options={cardTypeOptions}
+            value={cardTypeOptions.find((o) => o.value === posCardType) || null}
+            onChange={(o) => {
+              setPosCardType(o?.value || "");
+              setPosCommissionRate(o?.commissionRate ?? null);
+              setPosOrderAmount("");
+              setAmount("");
+            }}
+            placeholder="Select card type"
+            menuPortalTarget={document.body}
+            menuPosition="fixed"
+            menuShouldBlockScroll={false}
+            closeMenuOnScroll={false}
+            styles={{
+              ...compact,
+              menuPortal: (base) => ({ ...base, zIndex: 999999 }),
+              menu: (base) => ({ ...base, zIndex: 999999, pointerEvents: "auto" }),
+            }}
+          />
+        </div>
+      )}
+
+      {posCardType && (
+        <div className="space-y-1">
+          <Label className="text-xs font-medium text-slate-600">
+            Order Amount <SaudiRiyal size={11} className="inline" />
+          </Label>
+          <Input
+            type="tel"
+            value={posOrderAmount}
+            onChange={(e) => setPosOrderAmount(e.target.value)}
+            placeholder="e.g. 1000"
+            className="h-8 text-sm bg-white"
+            autoFocus
+          />
+        </div>
+      )}
+
+      {posCalc && (
+        <div className="text-xs text-slate-600 space-y-1 pt-2 border-t border-cyan-200">
+          <div className="flex justify-between">
+            <span>Commission ({posCommissionRate}%)</span>
+            <span className="font-medium">-{posCalc.fee.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between text-sm font-semibold text-cyan-700 pt-1 border-t border-cyan-200 mt-1">
+            <span>Sell Amount (after commission)</span>
+            <span>{posCalc.amount.toFixed(2)}</span>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-1">
+        <Label className="text-xs font-medium text-slate-600">
+          Amount <SaudiRiyal size={11} className="inline" />
+          <span className="ml-1 font-normal normal-case text-slate-400">
+            (auto-calculated)
+          </span>
+        </Label>
+        <Input
+          type="tel"
+          value={amount}
+          readOnly
+          disabled
+          placeholder="0.00"
+          className="h-8 text-sm bg-slate-100 cursor-not-allowed text-slate-500"
+        />
+      </div>
+    </div>
+  );
+}
+
 /* ─── Main Component ─────────────────────────────────────── */
 export default function PaymentDialog({
   sale,
   sellPrice,
   customerOptions = [],
   bankOptions = [],
+  posOptions = [],
   onConfirm,
 }) {
   const [open, setOpen] = useState(false);
@@ -333,20 +517,32 @@ export default function PaymentDialog({
   const [customerId, setCustomerId] = useState("");
   const [bankId, setBankId] = useState("");
   const [orderAmount, setOrderAmount] = useState("");
+  const [posId, setPosId] = useState("");
+  const [posCardType, setPosCardType] = useState("");
+  const [posCommissionRate, setPosCommissionRate] = useState(null);
+  const [posOrderAmount, setPosOrderAmount] = useState("");
   const [partial, setPartial] = useState(emptyPartial());
 
   const sell = Number(sellPrice) || 0;
+
+  const resetFields = () => {
+    setAmount("");
+    setCustomerId("");
+    setBankId("");
+    setOrderAmount("");
+    setPosId("");
+    setPosCardType("");
+    setPosCommissionRate(null);
+    setPosOrderAmount("");
+    setPartial(emptyPartial());
+  };
 
   useEffect(() => {
     if (!open) return;
     const meta = sale.paymentMeta;
     if (!meta) {
       setMode("");
-      setAmount("");
-      setCustomerId("");
-      setBankId("");
-      setOrderAmount("");
-      setPartial(emptyPartial());
+      resetFields();
       return;
     }
     setMode(meta.type);
@@ -355,6 +551,10 @@ export default function PaymentDialog({
       setCustomerId(sale.customerId || "");
       setBankId(meta.bankId || "");
       setOrderAmount(meta.orderAmount || "");
+      setPosId(meta.posId || "");
+      setPosCardType(meta.posCardType || "");
+      setPosCommissionRate(meta.posCommissionRate ?? null);
+      setPosOrderAmount(meta.posOrderAmount || "");
       setPartial(emptyPartial());
     } else {
       setOrderAmount("");
@@ -370,6 +570,7 @@ export default function PaymentDialog({
         bOrderAmount: meta.bOrderAmount ?? "",
       });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const selectedCombo = PARTIAL_COMBOS.find((c) => c.value === partial.combo);
@@ -396,11 +597,16 @@ export default function PaymentDialog({
 
   const isValid = () => {
     if (!mode) return false;
+    if (mode === "BANK_ACCOUNT") return false; // category screen only
     if (mode === "CREDIT" && !customerId) return false;
     if (mode === "CREDIT" && isTabbyOrTamara) {
       if (!orderAmount || Number(orderAmount) <= 0) return false;
     }
     if (mode === "BANK_TRANSFER" && !bankId) return false;
+    if (mode === "POS") {
+      if (!posId || !posCardType) return false;
+      if (!posOrderAmount || Number(posOrderAmount) <= 0) return false;
+    }
     if (mode === "PARTIAL") {
       if (!partial.combo || !partial.aAmount || !partial.bAmount) return false;
       if (selectedCombo?.a === "CREDIT" && !partial.aCustomerId) return false;
@@ -432,6 +638,18 @@ export default function PaymentDialog({
         paymentMeta: {
           type: mode,
           bankId: bankId || null,
+          posId: mode === "POS" ? posId || null : null,
+          posCardType: mode === "POS" ? posCardType || null : null,
+          posCommissionRate: mode === "POS" ? (posCommissionRate ?? null) : null,
+          ...(mode === "POS" && posOrderAmount
+            ? {
+                posOrderAmount,
+                posFeeBreakdown: calculatePosNetAmount(
+                  posOrderAmount,
+                  posCommissionRate,
+                ),
+              }
+            : {}),
           ...(isTabbyOrTamara
             ? {
                 orderAmount,
@@ -440,6 +658,9 @@ export default function PaymentDialog({
             : {}),
         },
         bankId: mode === "BANK_TRANSFER" ? bankId : null,
+        posId: mode === "POS" ? posId : null,
+        posCardType: mode === "POS" ? posCardType : null,
+        posCommissionRate: mode === "POS" ? posCommissionRate : null,
         customerId: mode === "CREDIT" ? customerId : "",
         paidAmount: amount || String(sell),
         paymentLegs: null,
@@ -540,17 +761,18 @@ export default function PaymentDialog({
           <div className="grid grid-cols-2 gap-2">
             {METHODS.map((m) => {
               const c = colorMap[m.color];
-              const active = mode === m.value;
+              const active =
+                m.value === "BANK_ACCOUNT"
+                  ? mode === "BANK_ACCOUNT" ||
+                    mode === "BANK_TRANSFER" ||
+                    mode === "POS"
+                  : mode === m.value;
               return (
                 <button
                   key={m.value}
                   onClick={() => {
                     setMode(m.value);
-                    setAmount("");
-                    setCustomerId("");
-                    setBankId("");
-                    setOrderAmount("");
-                    setPartial(emptyPartial());
+                    resetFields();
                   }}
                   className={`flex items-center gap-2 p-3 rounded-lg border-2 text-sm font-medium transition-all
                     ${active ? `${c.bg} ${c.border} ${c.text} ring-2 ${c.ring} ring-offset-1` : "bg-white border-gray-200 text-gray-600 hover:border-gray-300"}`}
@@ -571,15 +793,83 @@ export default function PaymentDialog({
             />
           )}
 
+          {mode === "BANK_ACCOUNT" && (
+            <div className="space-y-1">
+              <Label className="text-xs font-medium text-slate-600">
+                Choose Bank Payment Type
+              </Label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => {
+                    setMode("BANK_TRANSFER");
+                    resetFields();
+                  }}
+                  className="flex flex-col items-center justify-center gap-1.5 p-4 rounded-lg border-2 border-gray-200 bg-white text-sm font-medium text-gray-600 hover:border-blue-300 hover:bg-blue-50 transition-all aspect-square"
+                >
+                  <Building2 className="h-6 w-6" />
+                  Bank Transfer
+                </button>
+                <button
+                  onClick={() => {
+                    setMode("POS");
+                    resetFields();
+                  }}
+                  className="flex flex-col items-center justify-center gap-1.5 p-4 rounded-lg border-2 border-gray-200 bg-white text-sm font-medium text-gray-600 hover:border-cyan-300 hover:bg-cyan-50 transition-all aspect-square"
+                >
+                  <Terminal className="h-6 w-6" />
+                  POS Machine
+                </button>
+              </div>
+            </div>
+          )}
+
           {mode === "BANK_TRANSFER" && (
-            <SlotFields
-              methodValue="BANK_TRANSFER"
-              amount={amount}
-              setAmount={setAmount}
-              bankId={bankId}
-              setBankId={setBankId}
-              bankOptions={bankOptions}
-            />
+            <>
+              <button
+                onClick={() => {
+                  setMode("BANK_ACCOUNT");
+                  resetFields();
+                }}
+                className="text-xs text-blue-600 hover:underline"
+              >
+                ← Change bank payment type
+              </button>
+              <SlotFields
+                methodValue="BANK_TRANSFER"
+                amount={amount}
+                setAmount={setAmount}
+                bankId={bankId}
+                setBankId={setBankId}
+                bankOptions={bankOptions}
+              />
+            </>
+          )}
+
+          {mode === "POS" && (
+            <>
+              <button
+                onClick={() => {
+                  setMode("BANK_ACCOUNT");
+                  resetFields();
+                }}
+                className="text-xs text-cyan-600 hover:underline"
+              >
+                ← Change bank payment type
+              </button>
+              <PosFields
+                posId={posId}
+                setPosId={setPosId}
+                posCardType={posCardType}
+                setPosCardType={setPosCardType}
+                posCommissionRate={posCommissionRate}
+                setPosCommissionRate={setPosCommissionRate}
+                posOrderAmount={posOrderAmount}
+                setPosOrderAmount={setPosOrderAmount}
+                amount={amount}
+                setAmount={setAmount}
+                posOptions={posOptions}
+              />
+            </>
           )}
 
           {mode === "CREDIT" && (

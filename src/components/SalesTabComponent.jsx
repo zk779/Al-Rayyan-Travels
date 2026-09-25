@@ -15,6 +15,7 @@ import {
   Send,
   Banknote,
   Building2,
+  Terminal,
   CreditCard,
   Sparkles,
 } from "lucide-react";
@@ -222,6 +223,18 @@ export default function SalesTabComponent() {
     value: b.id,
     label: `${b.bankName} — ${b.accountNumber}`,
   }));
+
+  const posOptions = banks.flatMap((b) =>
+    (b.posMachines || [])
+      .filter((p) => p.isActive)
+      .map((p) => ({
+        value: p.id,
+        label: `${b.bankName} — ${p.terminalId || p.providerName || "POS"}`,
+        bankId: b.id,
+        bankName: b.bankName,
+        commissionTypes: p.commissionTypes || [],
+      })),
+  );
 
   /* ── Debounced duplicate Document No check ── */
   useEffect(() => {
@@ -520,6 +533,13 @@ export default function SalesTabComponent() {
         );
         return;
       }
+      if (String(s.paymentType).toUpperCase() === "POS" && !s.posId) {
+        appToast.warning(
+          "Incomplete Sale",
+          "Please select a POS machine and card type for POS payment",
+        );
+        return;
+      }
       if (
         String(s.paymentType).toUpperCase() === "PARTIAL" &&
         (!s.paymentLegs || s.paymentLegs.length === 0)
@@ -539,6 +559,9 @@ export default function SalesTabComponent() {
         vendorId: s.vendorId,
         customerId: s.customerId || null,
         bankId: s.bankId || null,
+        posId: s.posId || null,
+        posCardType: s.posCardType || null,
+        posCommissionRate: s.posCommissionRate ?? null,
         documentNo: s.documentNo,
         pnr: s.pnr || null,
         routeType: s.routeType || null,
@@ -892,6 +915,7 @@ export default function SalesTabComponent() {
                       sellPrice={item.sellPrice}
                       customerOptions={customerOptions}
                       bankOptions={bankOptions}
+                      posOptions={posOptions}
                       onConfirm={(result) =>
                         updateSale(item.id, "payment", result)
                       }
@@ -1101,7 +1125,7 @@ export default function SalesTabComponent() {
             <div className="text-sm font-semibold text-blue-800 mb-2">
               Payment Breakdown
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
               {[
                 {
                   label: "Total Cash",
@@ -1114,6 +1138,12 @@ export default function SalesTabComponent() {
                   value: paymentTotals.bank.toFixed(2),
                   color: "sky",
                   Icon: Building2,
+                },
+                {
+                  label: "Total POS",
+                  value: paymentTotals.pos.toFixed(2),
+                  color: "cyan",
+                  Icon: Terminal,
                 },
                 {
                   label: "Total Credit",

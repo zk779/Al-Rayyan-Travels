@@ -15,6 +15,7 @@ import {
   CalendarIcon,
   Banknote,
   Building2,
+  Terminal,
   CreditCard,
   Sparkles,
 } from "lucide-react";
@@ -224,6 +225,17 @@ export default function EditSalesTab({ saleId }) {
     value: b.id,
     label: `${b.bankName} — ${b.accountNumber}`,
   }));
+  const posOptions = banks.flatMap((b) =>
+    (b.posMachines || [])
+      .filter((p) => p.isActive)
+      .map((p) => ({
+        value: p.id,
+        label: `${b.bankName} — ${p.terminalId || p.providerName || "POS"}`,
+        bankId: b.id,
+        bankName: b.bankName,
+        commissionTypes: p.commissionTypes || [],
+      })),
+  );
 
   /* ── Update sale row ── */
   const updateSale = (id, field, value) => {
@@ -390,6 +402,13 @@ export default function EditSalesTab({ saleId }) {
         );
         return;
       }
+      if (String(s.paymentType).toUpperCase() === "POS" && !s.posId) {
+        appToast.error(
+          "POS Machine Required",
+          "Please select a POS machine and card type for POS payment",
+        );
+        return;
+      }
     }
 
     const payload = {
@@ -401,6 +420,9 @@ export default function EditSalesTab({ saleId }) {
         vendorId: s.vendorId,
         customerId: s.customerId || null,
         bankId: s.bankId || null,
+        posId: s.posId || null,
+        posCardType: s.posCardType || null,
+        posCommissionRate: s.posCommissionRate ?? null,
         documentNo: s.documentNo,
         pnr: s.pnr || null,
         routeType: s.routeType || null,
@@ -780,6 +802,7 @@ export default function EditSalesTab({ saleId }) {
                       sellPrice={item.sellPrice}
                       customerOptions={customerOptions}
                       bankOptions={bankOptions}
+                      posOptions={posOptions}
                       onConfirm={(result) =>
                         updateSale(item.id, "payment", result)
                       }
@@ -977,7 +1000,7 @@ export default function EditSalesTab({ saleId }) {
             <div className="text-sm font-semibold text-blue-800 mb-2">
               Payment Breakdown
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
               {[
                 {
                   label: "Total Cash",
@@ -990,6 +1013,12 @@ export default function EditSalesTab({ saleId }) {
                   value: paymentTotals.bank.toFixed(2),
                   color: "sky",
                   Icon: Building2,
+                },
+                {
+                  label: "Total POS",
+                  value: paymentTotals.pos.toFixed(2),
+                  color: "cyan",
+                  Icon: Terminal,
                 },
                 {
                   label: "Total Credit",

@@ -105,11 +105,11 @@ function legsForSale(sale) {
 }
 
 /**
- * @returns {{ totals: {cash:number, bank:number, credit:number},
+ * @returns {{ totals: {cash:number, bank:number, pos:number, credit:number},
  *             tabbyRows: Array<{saleLabel, customerName, orderAmount, deducted, vat, totalDeduction, netAmount}> }}
  */
 export function computePaymentBreakdown(sales, customerOptions) {
-  const totals = { cash: 0, bank: 0, credit: 0 };
+  const totals = { cash: 0, bank: 0, pos: 0, credit: 0 };
   const tabbyRows = [];
 
   (sales || []).forEach((sale, idx) => {
@@ -117,6 +117,7 @@ export function computePaymentBreakdown(sales, customerOptions) {
       const method = String(leg.method || "").toUpperCase();
       if (method === "CASH") totals.cash += leg.amount;
       else if (method === "BANK_TRANSFER") totals.bank += leg.amount;
+      else if (method === "POS") totals.pos += leg.amount;
       else if (method === "CREDIT") {
         totals.credit += leg.amount;
         if (isTabbyCustomer(leg.customerId, customerOptions)) {
