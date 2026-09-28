@@ -24,6 +24,7 @@ import NewPayments from "./pages/NewPayments";
 import EditSaleComponent from "./pages/EditServices";
 import PaymentPage from "./pages/Payments";
 import InvoicePrint from "./pages/InvoicePrint";
+import ViewInvoice from "./pages/ViewInvoice";
 import EditRefundComponent from "./pages/EditRefund";
 import BankAccountsPage from "./pages/BankAccounts";
 
@@ -100,6 +101,14 @@ function App() {
 										element={
 											<PermissionRoute permission="SALE_READ">
 												<InvoicePrint />
+											</PermissionRoute>
+										}
+									/>
+									<Route
+										path="view-invoice/:invoiceId"
+										element={
+											<PermissionRoute permission="SALE_READ">
+												<ViewInvoice />
 											</PermissionRoute>
 										}
 									/>

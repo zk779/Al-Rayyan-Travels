@@ -206,6 +206,11 @@ export default function DetailedReportTab({
     navigate(`/invoice-print/${id}`);
   };
 
+  const handleViewInvoice = (invoiceId) => {
+    if (!invoiceId) return;
+    window.open(`/view-invoice/${invoiceId}`, "_blank", "noopener,noreferrer");
+  };
+
   const handleConfirmDelete = async () => {
     if (!canDeleteSale) return; // ✅ RBAC guard
     if (!deleteTarget) return;
@@ -500,7 +505,7 @@ export default function DetailedReportTab({
                             prev === sale.id ? null : sale.id,
                           )
                         }
-                        renderRow={(expanded, toggle) => (
+                        renderRow={(expanded) => (
                           <>
                             <TableCell className="whitespace-nowrap">
                               {sale.date
@@ -610,10 +615,12 @@ export default function DetailedReportTab({
                                 <DropdownMenuContent align="end">
                                   <DropdownMenuLabel>Actions</DropdownMenuLabel>
                                   <DropdownMenuSeparator />
-                                  {/* ✅ View Details/History always visible — page access already implies SALE_READ */}
-                                  <DropdownMenuItem onClick={toggle}>
+                                  {/* ✅ View Invoice/History always visible — page access already implies SALE_READ */}
+                                  <DropdownMenuItem
+                                    onClick={() => handleViewInvoice(invoice.id)}
+                                  >
                                     <Eye className="mr-2 h-4 w-4" />
-                                    {expanded ? "Hide Details" : "View Details"}
+                                    View Invoice
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
                                     onClick={() => setHistoryTarget(sale.id)}
