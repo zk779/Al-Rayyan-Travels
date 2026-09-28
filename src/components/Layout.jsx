@@ -17,6 +17,7 @@ const hideSidebarAndHeader =
   location.pathname === "/login" ||
   location.pathname === "/403" ||
   location.pathname.startsWith("/invoice-print/") ||
+  location.pathname.startsWith("/customer-invoice/") ||
   location.pathname.startsWith("/view-invoice/");
 
   // Determine margin-left class based on sidebar state and current route
@@ -55,9 +56,11 @@ const hideSidebarAndHeader =
         </div>
 
         {/* Floating calculator — available everywhere except the "/" landing
-            route and bare document-style pages (invoice print / view invoice) */}
+            route and bare document-style pages (invoice print / customer
+            invoice / view invoice) */}
         {location.pathname !== "/" &&
           !location.pathname.startsWith("/invoice-print/") &&
+          !location.pathname.startsWith("/customer-invoice/") &&
           !location.pathname.startsWith("/view-invoice/") && <FloatingCalculator />}
       </div>
     </LanguageProvider>

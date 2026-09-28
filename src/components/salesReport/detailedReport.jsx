@@ -206,6 +206,11 @@ export default function DetailedReportTab({
     navigate(`/invoice-print/${id}`);
   };
 
+  const GenerateCustomerInvoice = (id) => {
+    if (!id) return;
+    navigate(`/customer-invoice/${id}`);
+  };
+
   const handleViewInvoice = (invoiceId) => {
     if (!invoiceId) return;
     window.open(`/view-invoice/${invoiceId}`, "_blank", "noopener,noreferrer");
@@ -673,6 +678,12 @@ export default function DetailedReportTab({
                                   >
                                     <Printer className="mr-2 h-4 w-4" />
                                     Generate Invoice
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => GenerateCustomerInvoice(sale.id)}
+                                  >
+                                    <Printer className="mr-2 h-4 w-4" />
+                                    Customer Invoice
                                   </DropdownMenuItem>
                                 </DropdownMenuContent>
                               </DropdownMenu>
