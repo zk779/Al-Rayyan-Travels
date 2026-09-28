@@ -12,6 +12,7 @@ import {
   X,
   Calendar as CalendarIcon,
   AlertCircle,
+  AlertTriangle,
   ArrowLeft,
 } from "lucide-react";
 import { Calendar } from "../../shadcn/components/ui/calendar";
@@ -20,6 +21,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "../../shadcn/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../shadcn/components/ui/select";
 import { format } from "date-fns";
 import { useParams, useNavigate } from "react-router-dom";
 import {
@@ -66,9 +74,18 @@ export default function EditRefundTab() {
   const [refundVendor, setRefundVendor] = useState("0.00");
   const [refundPax, setRefundPax] = useState("0.00");
 
-  // Read-only — the payout method (who/what received the refund) is fixed
-  // at creation and can't be changed here; see refunds.js PUT route.
-  const [payoutLabel, setPayoutLabel] = useState("");
+  // Payout method — who/what receives the refund. Editable: switching this
+  // reverses the old ledger entry/balance and applies a fresh one on the
+  // newly selected account (see refunds.js PUT route).
+  const [refundType, setRefundType] = useState("CASH");
+  const [bankId, setBankId] = useState("");
+  const [banks, setBanks] = useState([]);
+  const [saleContext, setSaleContext] = useState(null); // { paymentType, customerId, customerType, bankId }
+
+  const isTabbyTamara = saleContext?.customerType === "TABBY_OR_TAMARA";
+  const hasCreditCustomer =
+    !!saleContext?.customerId &&
+    ["CREDIT", "PARTIAL"].includes(String(saleContext?.paymentType || "").toUpperCase());
 
   /* =========================
       1. INITIALIZE TOKEN
@@ -78,6 +95,19 @@ export default function EditRefundTab() {
     const storedToken = localStorage.getItem("token");
     setToken(storedToken);
   }, []);
+
+  /* =========================
+      BANKS (for BANK_TRANSFER payout)
+  ========================= */
+  useEffect(() => {
+    if (!token) return;
+    fetch(`${API_BASE}/api/banks?isActive=true`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((j) => setBanks(j.data || []))
+      .catch(() => {});
+  }, [token]);
 
   /* =========================
       2. FETCH DATA (When token & id ready)
@@ -106,8 +136,8 @@ export default function EditRefundTab() {
         // Pre-fill form
         setRefundForm({
           documentNumber: sale.documentNo || "N/A",
-          airline: sale.airlineCode || sale.airlineName || "N/A",
-          vendorName: sale.vendor?.name || "N/A",
+          airline: sale.airline?.airlineCode || sale.airline?.airlineName || "N/A",
+          vendorName: sale.vendor?.vendorName || "N/A",
           netPrice: Number(sale.netPrice || 0).toFixed(2),
           sellPrice: Number(sale.sellPrice || 0).toFixed(2),
           refundFee: Number(data.refundFee || 0).toString(),
@@ -120,18 +150,14 @@ export default function EditRefundTab() {
           setRefundDate(new Date(data.refundDate));
         }
 
-        const payoutType = data.refundType || "CUSTOMER_LEDGER";
-        if (payoutType === "CASH") {
-          setPayoutLabel("Cash");
-        } else if (payoutType === "BANK_TRANSFER") {
-          setPayoutLabel(data.bank?.bankName ? `Bank Transfer — ${data.bank.bankName}` : "Bank Transfer");
-        } else {
-          setPayoutLabel(
-            sale.customer?.customerName
-              ? `Customer Ledger — ${sale.customer.customerName}`
-              : "Customer Ledger",
-          );
-        }
+        setRefundType(data.refundType || "CUSTOMER_LEDGER");
+        setBankId(data.bankId || sale.bankId || "");
+        setSaleContext({
+          paymentType: sale.paymentType,
+          customerId: sale.customerId,
+          customerType: sale.customer?.customerType,
+          customerName: sale.customer?.customerName,
+        });
       } catch (err) {
         console.error(err);
         setError(err.message);
@@ -173,12 +199,19 @@ export default function EditRefundTab() {
       return;
     }
 
+    if (refundType === "BANK_TRANSFER" && !bankId) {
+      setError("Please select which bank account this refund is paid from.");
+      return;
+    }
+
     const payload = {
       refundDate: refundDate.toISOString(),
       refundFee: fee,
       serviceCharges: service,
       refundReason: refundForm.refundReason || null,
       remarks: refundForm.remarks || null,
+      refundType,
+      bankId: refundType === "BANK_TRANSFER" ? bankId : null,
     };
 
     try {
@@ -201,7 +234,6 @@ export default function EditRefundTab() {
       }
 
       alert("Refund updated successfully!");
-      if (onUpdate) onUpdate(data.data);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -297,13 +329,6 @@ export default function EditRefundTab() {
                       Sale information (Document, Prices, Vendor) is locked. You
                       are only modifying the refund parameters.
                     </p>
-                    {payoutLabel && (
-                      <p className="text-xs text-blue-700 mt-1">
-                        <span className="font-semibold">Payout Method:</span>{" "}
-                        {payoutLabel} — fixed at creation and can't be changed here.
-                        Delete and recreate the refund to pay it out a different way.
-                      </p>
-                    )}
                   </div>
                 </div>
 
@@ -420,6 +445,52 @@ export default function EditRefundTab() {
 
                     <Separator />
 
+                    {/* Refund Payout Method — who/what actually receives the money.
+                        Switching this reverses the old ledger entry/balance and
+                        applies a fresh one on the newly selected account. */}
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Refund Payout Method</Label>
+                      <Select value={refundType} onValueChange={setRefundType}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="CUSTOMER_LEDGER" disabled={!hasCreditCustomer || isTabbyTamara}>
+                            Credit to Customer Ledger
+                          </SelectItem>
+                          <SelectItem value="CASH">Cash</SelectItem>
+                          <SelectItem value="BANK_TRANSFER">Bank Transfer</SelectItem>
+                        </SelectContent>
+                      </Select>
+
+                      {isTabbyTamara && (
+                        <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md p-2">
+                          <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                          <span>
+                            This ticket was booked through <strong>{saleContext?.customerName}</strong> —
+                            refunds must be paid out as Cash or Bank Transfer directly to the traveler.
+                          </span>
+                        </div>
+                      )}
+
+                      {refundType === "BANK_TRANSFER" && (
+                        <Select value={bankId} onValueChange={setBankId}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select bank account" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {banks.map((b) => (
+                              <SelectItem key={b.id} value={b.id}>
+                                {b.bankName} — {b.accountNumber}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
+
+                    <Separator />
+
                     {/* Calculation Summary */}
                     <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-lg space-y-2">
                       <h4 className="font-semibold text-sm text-blue-900 mb-2">
@@ -460,7 +531,11 @@ export default function EditRefundTab() {
 
                       <div className="flex justify-between text-sm font-semibold">
                         <span className="text-blue-700">
-                          {payoutLabel || "Refund to Customer"}
+                          {refundType === "CUSTOMER_LEDGER"
+                            ? "Credit to Customer Ledger"
+                            : refundType === "BANK_TRANSFER"
+                              ? "Refund Payout (Bank Transfer)"
+                              : "Refund Payout (Cash)"}
                         </span>
                         <span className="text-blue-700">${refundPax}</span>
                       </div>
