@@ -5,6 +5,7 @@ import { useSidebar } from "../context/SidebarContext";
 import { ThemeContext } from "../context/ThemeContext";
 import { LanguageProvider } from "../context/LanguageContext";
 import { useContext } from "react";
+import FloatingCalculator from "./FloatingCalculator";
 
 const Layout = () => {
   const { isCollapsed, sidebarHidden } = useSidebar();
@@ -51,6 +52,9 @@ const hideSidebarAndHeader =
             <Outlet />
           </div>
         </div>
+
+        {/* Floating calculator — available everywhere except the "/" landing route */}
+        {location.pathname !== "/" && <FloatingCalculator />}
       </div>
     </LanguageProvider>
   );

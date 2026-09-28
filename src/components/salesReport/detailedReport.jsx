@@ -311,6 +311,7 @@ export default function DetailedReportTab({
       CASH: "bg-green-50 text-green-700 border-green-200",
       CREDIT: "bg-blue-50 text-blue-700 border-blue-200",
       BANK_TRANSFER: "bg-purple-50 text-purple-700 border-purple-200",
+      POS: "bg-cyan-50 text-cyan-700 border-cyan-200",
     };
     const className =
       methodMap[method?.toUpperCase()] ||
@@ -318,6 +319,38 @@ export default function DetailedReportTab({
     return (
       <Badge variant="outline" className={className}>
         {method || "N/A"}
+      </Badge>
+    );
+  };
+
+  // How the refund itself was paid out — shown as a secondary badge under
+  // the Payment Type badge for any sale that has an associated refund
+  // (either the negative REFUNDED mirror row, or the original sale it was
+  // refunded from).
+  const getRefundPayoutBadge = (refund) => {
+    if (!refund?.refundType) return null;
+
+    const payoutMap = {
+      CASH: { label: "Cash", className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+      BANK_TRANSFER: {
+        label: refund.bank?.bankName ? `Bank - ${refund.bank.bankName}` : "Bank Transfer",
+        className: "bg-sky-50 text-sky-700 border-sky-200",
+      },
+      CUSTOMER_LEDGER: { label: "Customer Ledger", className: "bg-violet-50 text-violet-700 border-violet-200" },
+    };
+    const cfg = payoutMap[refund.refundType?.toUpperCase()] || {
+      label: refund.refundType,
+      className: "bg-gray-50 text-gray-700 border-gray-200",
+    };
+
+    return (
+      <Badge
+        variant="outline"
+        className={`text-[10px] flex items-center gap-1 w-fit ${cfg.className}`}
+        title="How the refund was paid out"
+      >
+        <Undo2 className="w-3 h-3" />
+        Refunded via {cfg.label}
       </Badge>
     );
   };
@@ -517,7 +550,10 @@ export default function DetailedReportTab({
                               {sale.createdByName}
                             </TableCell>
                             <TableCell>
-                              {getPaymentMethodBadge(sale.paymentType)}
+                              <div className="flex flex-col gap-1">
+                                {getPaymentMethodBadge(sale.paymentType)}
+                                {getRefundPayoutBadge(sale.refund)}
+                              </div>
                             </TableCell>
                             <TableCell>
                               {getPaymentStatusBadge(sale.paymentStatus)}
