@@ -51,18 +51,18 @@ const InvoicePrint = () => {
       mono: false,
     },
     {
-        label: "CR Number",
-        labelAr: "رقم السجل التجاري",
-        value: companyData.crNumber,
-        valueAr: companyData.crNumberArabic,
-        mono: true,
+      label: "CR Number",
+      labelAr: "رقم السجل التجاري",
+      value: companyData.crNumber,
+      valueAr: companyData.crNumberArabic,
+      mono: true,
     },
     {
-        label: "TRN",
-        labelAr: "الرقم الضريبي",
-        value: trnEn,
-        valueAr: trnAr,
-        mono: true,
+      label: "TRN",
+      labelAr: "الرقم الضريبي",
+      value: trnEn,
+      valueAr: trnAr,
+      mono: true,
     },
     {
       label: "Phone",
@@ -70,6 +70,12 @@ const InvoicePrint = () => {
       value: phoneEn,
       valueAr: phoneAr,
       mono: false,
+    },
+    {
+      label: "Email/Website  البريد/الموقع الإلكتروني",
+      // labelAr: "البريد الإلكتروني",
+      value: companyData.email + " | " + companyData.website,
+      // valueAr: companyData.website + " | " + companyData.email,
     },
   ];
 
@@ -253,14 +259,12 @@ const InvoicePrint = () => {
     );
   }
 
-  // VAT here is on the agency's margin (profit * 15%), not a flat 15% of
-  // the gross sell price — pull it straight from the API's own computed
-  // vatAmount instead of reverse-deriving it, so the printed figure always
-  // matches what was actually charged/recorded.
-  const grossAmount = Number(invoiceData.sellPrice || 0);
+  const grossAmount = Number(invoiceData.netPrice || 0);
   const vatAmount = Number(invoiceData.vatAmount || 0);
-  const baseFare = grossAmount - vatAmount;
-  const rowTotal = grossAmount;
+  const paxVat = Number(invoiceData.paxVat || 0);
+  const serviceCharges = Number(invoiceData.profit || 0);
+  const baseFare = grossAmount;
+  const rowTotal = grossAmount + serviceCharges;
 
   // Prepare ZATCA QR data
   const grandTotalforQR = parseFloat(rowTotal) || 0;
@@ -275,8 +279,6 @@ const InvoicePrint = () => {
 
   const zatcaInvoiceData = {
     sellerName: companyData.name,
-    // Just the plain numeric TRN — companyData.trn is now the combined
-    // "english/arabic-digits" display string, not a valid QR TLV value.
     vatNumber: trnEn,
     totalWithVat: grandTotalforQR,
     vatTotal: vatTotalforQR,
@@ -284,466 +286,520 @@ const InvoicePrint = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-100 to-slate-200 py-8 print:bg-white print:py-0">
-      <div
-        className="max-w-[210mm] mx-auto bg-white shadow-xl rounded-2xl overflow-hidden print:shadow-none print:rounded-none"
-        style={{ fontFamily: "Arial, sans-serif" }}
-      >
-        {/* Main Content Wrapper with Padding */}
-        <div className="p-8">
-          {/* Header Section */}
-          <div className="border-b-2 border-gray-900 pb-6 mb-3">
-            <div className="flex justify-between items-start gap-8">
-              {/* Company Info — bilingual throughout */}
-              <div className="flex-1">
-                <h1 className="text-xl font-bold text-gray-900 mb-0.5 uppercase tracking-wide">
-                  {companyData.name}
-                </h1>
-                <h2 className="text-lg font-bold text-gray-900 mb-4" dir="rtl">
-                  {companyData.nameArabic}
-                </h2>
-                <div className="mt-2 space-y-2">
-                  {companyDetailRows.map((row) => (
-                    <div key={row.label} className="flex gap-4 text-xs">
-                      <div>
-                        <div className="text-gray-500 font-medium uppercase tracking-wide text-[10px]">
-                          {row.label}
+    <>
+      <style>
+        {`
+          @media print {
+            body {
+              background: white !important;
+            }
+
+            .invoice-container {
+              background: white !important;
+              padding-top: 0 !important;
+              padding-bottom: 0 !important;
+            }
+          }
+        `}
+      </style>
+      <div className="invoice-container min-h-screen bg-linear-to-b from-slate-100 to-slate-200 py-8">
+        <div
+          className="max-w-[210mm] mx-auto bg-white shadow-xl rounded-2xl overflow-hidden print:shadow-none print:rounded-none"
+          style={{ fontFamily: "Arial, sans-serif" }}
+        >
+          {/* Main Content Wrapper with Padding */}
+          <div className="p-8 print:p-0">
+            {/* Header Section */}
+            <div className=" mb-1">
+              <div className="flex justify-between items-start gap-8">
+                {/* Company Info — bilingual throughout */}
+                <div className="flex-1">
+                  <div className="flex items-center justify-between gap-4 mb-3">
+                    <div className="text-xl font-bold text-gray-900 mb-0.5 uppercase tracking-wide justify-around">
+                      <div>{companyData.name}</div>
+                      <div>{companyData.nameArabic}</div>
+                    </div>
+                    <div className="text-xs space-y-1 bg-gray-50 p-4 border-1 border-gray-300 rounded">
+                      <div className="space-y-2">
+                        <div className="flex justify-between gap-4">
+                          <span className="text-gray-600">
+                            Invoice No. / رقم الفاتورة:
+                          </span>
+                          <span className="font-bold text-gray-900">
+                            {invoiceData.invoice?.invoiceNo || "N/A"}
+                          </span>
                         </div>
-                        <div
-                          className={`text-gray-900 ${row.mono ? "font-mono" : ""}`}
-                        >
-                          {row.value || "—"}
+                        <div className="flex justify-between gap-4">
+                          <span className="text-gray-600">Date / تاريخ:</span>
+                          <span className="font-semibold text-gray-900">
+                            {formatDate(invoiceData.invoice?.saleDate)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between gap-4">
+                          <span className="text-gray-600">
+                            Ref. No. / رقم المرجع:
+                          </span>
+                          <span className="font-semibold text-gray-900">
+                            {invoiceData.documentNo || "N/A"}
+                          </span>
                         </div>
                       </div>
-                      <div className="text-right" dir="rtl">
-                        <div className="text-gray-500 font-medium text-[10px]">
-                          {row.labelAr}
-                        </div>
-                        <div
-                          className={`text-gray-900 ${row.mono ? "font-mono" : ""}`}
-                        >
-                          {row.valueAr || "—"}
-                        </div>
-                      </div>
                     </div>
-                  ))}
-                  <div className="mt-2 text-xs text-gray-500 space-y-0.5">
-                    <div className="flex gap-3">
-                    <div className="text-gray-500 font-medium text-[10px]">
-                      Email/Website
-                    </div>
-                    <div className="text-gray-500 font-medium text-[10px]">
-                      البريد/الموقع الإلكتروني
-                    </div>
-                    </div>
-                    <p>
-                      {companyData.email} | {companyData.website}
-                    </p>
-                    
                   </div>
-
-                </div>
-              </div>
-
-              {/* Invoice Title & Info */}
-              <div className="text-right">
-                <div className="mb-4 bg-gradient-to-tl from-gray-600 to-gray-700 text-white px-6 py-3 rounded">
-                  <h2 className="text-2xl font-bold mb-1">TAX INVOICE</h2>
-                  <p className="text-lg font-bold" dir="rtl">
-                    فاتورة ضريبية
-                  </p>
-                </div>
-                <div className="text-xs space-y-1 bg-gray-50 p-4 border-1 border-gray-300 rounded">
+                  <h2
+                    className="text-lg font-bold text-gray-900 mb-4"
+                    dir="rtl"
+                  ></h2>
                   <div className="space-y-2">
-                    <div className="flex justify-between gap-4">
-                      <span className="text-gray-600">Invoice No. / رقم الفاتورة:</span>
-                      <span className="font-bold text-gray-900">
-                        {invoiceData.invoice?.invoiceNo || "N/A"}
-                      </span>
-                    </div>
-                    <div className="flex justify-between gap-4">
-                      <span className="text-gray-600">Date / تاريخ:</span>
-                      <span className="font-semibold text-gray-900">
-                        {formatDate(invoiceData.invoice?.saleDate)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between gap-4">
-                      <span className="text-gray-600">Ref. No. / رقم المرجع:</span>
-                      <span className="font-semibold text-gray-900">
-                        {invoiceData.documentNo || "N/A"}
-                      </span>
-                    </div>
+                    {companyDetailRows.map((row) => (
+                      <div
+                        key={row.label}
+                        className="grid grid-cols-2 gap-4 text-xs"
+                      >
+                        <div>
+                          <div className="text-gray-500 font-bold uppercase tracking-wide text-[12px]">
+                            {row.label}
+                          </div>
+                          <div
+                            className={`text-gray-900 ${row.mono ? "font-mono" : ""}`}
+                          >
+                            {row.value || "—"}
+                          </div>
+                        </div>
+                        <div className="text-right" dir="rtl">
+                          <div className="text-gray-500 font-bold text-[12px]">
+                            {row.labelAr}
+                          </div>
+                          <div
+                            className={`text-gray-900 ${row.mono ? "font-mono" : ""}`}
+                          >
+                            {row.valueAr || ""}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-
-          {/* Customer Information Section - Enhanced */}
-          <div className="mb-3">
-            <div className="border-1 border-gray-200 rounded-md overflow-hidden">
-              {/* Section Header */}
-              <div className="bg-gray-100 border-b-2 border-gray-400">
-                <div className="grid grid-cols-2">
-                  <div className="px-4 py-3 border-r border-gray-300">
-                    <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">
-                      Customer Information
-                    </h3>
-                  </div>
-                  <div className="px-4 py-3 text-right" dir="rtl">
-                    <h3 className="text-sm font-bold text-gray-900">
-                      معلومات العميل
-                    </h3>
-                  </div>
+            <div className=" text-[16px] text-gray-500 space-y-0.5 bg-gray-100 px-3 py-2 rounded border border-gray-300 mb-2">
+              <div className="flex gap-3">
+                <div className="text-gray-800 font-bold">
+                  Description / الوصف :
+                </div>
+                <div className="text-gray-500 font-medium">
+                  {invoiceData.routeType === "MIXED"
+                    ? "International Ticket – KSA Origin / تذكرة دولية – المغادرة من السعودية"
+                    : invoiceData.routeType === "DOMESTIC"
+                      ? "Domestic Airline Ticket / تذكرة طيران محلية"
+                      : invoiceData.routeType === "Internal"
+                        ? "International Ticket – KSA Destination / تذكرة دولية – الوصول إلى السعودية"
+                        : invoiceData.routeType === "ZERO_VAT"
+                          ? "International Ticket – Non-KSA / تذكرة دولية – خارج السعودية"
+                          : ""}
                 </div>
               </div>
-
-              {invoiceData.customer ? (
-                /* Regular / credit / Tabby-Tamara customer — full details.
-                                   customerType (CREDIT vs TABBY_OR_TAMARA) doesn't change
-                                   what's shown here; this is a customer-facing invoice, not
-                                   an internal BNPL settlement breakdown. */
-                <div className="divide-y divide-gray-300">
-                  <div className="grid grid-cols-2 hover:bg-gray-50 transition-colors">
-                    <div className="px-4 py-3 flex items-center gap-1">
-                      <span className="text-xs text-gray-600 block">
-                        Customer Name:
-                      </span>
-                      <span className="text-xs font-bold text-gray-900">
-                        {invoiceData.customer.customerName || invoiceData.paxName}
-                      </span>
+            </div>
+            <div className="mb-4 bg-gradient-to-tl from-gray-600 to-gray-700 text-white p-1/2 rounded flex items-center justify-center gap-8">
+              <h2 className="text-lg font-bold">TAX INVOICE</h2>
+              <p className="text-lg font-bold" dir="rtl">
+                فاتورة ضريبية
+              </p>
+            </div>
+            {/* Customer Information Section - Enhanced */}
+            <div className="mb-2">
+              <div className="border-1 border-gray-200 rounded-md overflow-hidden">
+                {/* Section Header */}
+                <div className="bg-gray-100 border-b-2 border-gray-400">
+                  <div className="grid grid-cols-2">
+                    <div className="px-4 py-3 border-r border-gray-300">
+                      <h3 className="text-sm font-bold mb-0! text-gray-900 uppercase tracking-wide">
+                        Customer Information
+                      </h3>
                     </div>
-                    <div
-                      className="px-4 flex items-center gap-1 text-right"
-                      dir="rtl"
-                    >
-                      <span className="text-xs text-gray-600 block">
-                        اسم العميل:
-                      </span>
-                      <span className="text-xs font-bold text-gray-900">
-                        {invoiceData.customer.customerName || "غير متوفر"}
-                      </span>
-                    </div>
-                    <div className="px-4 flex item-center gap-1">
-                      <span className="text-xs text-gray-600 block">
-                        Customer VAT ID
-                      </span>
-                      <span className="text-xs font-semibold text-gray-900 font-mono">
-                        {invoiceData.customer.customerVatId || "N/A"}
-                      </span>
-                    </div>
-                    <div
-                      className="px-4 text-right flex items-center gap-1"
-                      dir="rtl"
-                    >
-                      <span className="text-xs text-gray-600 block">
-                        الرقم الضريبي للعميل:
-                      </span>
-                      <span className="text-xs font-semibold text-gray-900 font-mono">
-                        {invoiceData.customer.customerVatId || "غير متوفر"}
-                      </span>
-                    </div>
-                    <div className="px-4 py-3 flex item-center gap-1">
-                      <span className="text-xs text-gray-600 block">
-                        Address
-                      </span>
-                      <span className="text-xs text-gray-900 leading-relaxed">
-                        {invoiceData.customer.address || "N/A"}
-                      </span>
-                    </div>
-                    <div
-                      className="px-4 text-right flex items-center gap-1"
-                      dir="rtl"
-                    >
-                      <span className="text-xs text-gray-600 block">
-                        العنوان:
-                      </span>
-                      <span className="text-xs text-gray-900 leading-relaxed">
-                        {invoiceData.customer.address || "غير متوفر"}
-                      </span>
-                    </div>
-                    <div className="px-4 flex item-center gap-1">
-                      <span className="text-xs text-gray-600 block">Phone</span>
-                      <span className="text-xs font-semibold text-gray-900">
-                        {invoiceData.customer.phone || "N/A"}
-                      </span>
-                    </div>
-                    <div
-                      className="px-4 flex items-center gap-1 text-right"
-                      dir="rtl"
-                    >
-                      <span className="text-xs text-gray-600 block">
-                        رقم الهاتف:
-                      </span>
-                      <span
-                        className="text-xs font-semibold text-gray-900"
-                        dir="ltr"
-                      >
-                        {invoiceData.customer.phone || "غير متوفر"}
-                      </span>
+                    <div className="px-4 py-3 text-right" dir="rtl">
+                      <h3 className="text-sm font-bold text-gray-900">
+                        معلومات العميل
+                      </h3>
                     </div>
                   </div>
                 </div>
-              ) : (
-                /* No customer linked — walk-in sale */
-                <div className="px-4 py-3 flex items-center justify-between">
-                  <span className="text-xs font-bold text-gray-900">
-                    {invoiceData.paxName || "Walkin Customer"}
-                  </span>
-                  <span className="text-xs text-gray-600" dir="rtl">
-                   {invoiceData.paxName || "Walkin Customer"}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
 
-          {/* Items Table */}
-          <div className="mb-3">
-            <div className="border-1 border-gray-300 rounded-lg overflow-hidden shadow-sm">
-              <table className="w-full text-xs border-collapse">
-                <thead>
-                  <tr className="bg-gradient-to-tl from-gray-600 to-gray-700 text-white">
-                    <th className="border-r border-gray-700 px-3 py-3 text-left font-semibold">
-                      <div className="leading-tight">Ticket No.</div>
+                {invoiceData.customer ? (
+                  <div className="divide-y divide-gray-300">
+                    <div className="grid grid-cols-2 hover:bg-gray-50 transition-colors">
+                      <div className="px-4 py-3 flex items-center gap-1">
+                        <span className="text-xs text-gray-600 block">
+                          Customer Name:
+                        </span>
+                        <span className="text-xs font-bold text-gray-900">
+                          {invoiceData.customer.customerName ||
+                            invoiceData.paxName}
+                        </span>
+                      </div>
                       <div
-                        className="font-normal text-[10px] opacity-90 mt-0.5"
+                        className="px-4 flex items-center gap-1 text-right"
                         dir="rtl"
                       >
-                        رقم التذكرة
+                        <span className="text-xs text-gray-600 block">
+                          اسم العميل:
+                        </span>
+                        <span className="text-xs font-bold text-gray-900">
+                          {invoiceData.customer.customerName || "غير متوفر"}
+                        </span>
                       </div>
-                    </th>
-                    <th className="border-r border-gray-700 px-3 py-3 text-left font-semibold">
-                      <div className="leading-tight">Passenger Name</div>
-                      <div
-                        className="font-normal text-[10px] opacity-90 mt-0.5"
-                        dir="rtl"
-                      >
-                        اسم الراكب
-                      </div>
-                    </th>
-                    <th className="border-r border-gray-700 px-3 py-3 text-left font-semibold">
-                      <div className="leading-tight">Airline</div>
-                      <div
-                        className="font-normal text-[10px] opacity-90 mt-0.5"
-                        dir="rtl"
-                      >
-                        شركة الطيران
-                      </div>
-                    </th>
-                    <th className="border-r border-gray-700 px-3 py-3 text-left font-semibold">
-                      <div className="leading-tight">Route</div>
-                      <div
-                        className="font-normal text-[10px] opacity-90 mt-0.5"
-                        dir="rtl"
-                      >
-                        المسار
-                      </div>
-                    </th>
-                    <th className="border-r border-gray-700 px-3 py-3 text-left font-semibold">
-                      <div className="leading-tight">PNR</div>
-                      <div
-                        className="font-normal text-[10px] opacity-90 mt-0.5"
-                        dir="rtl"
-                      >
-                        رقم الهاتف
-                      </div>
-                    </th>
-                    <th className="border-r border-gray-700 px-3 py-3 text-left font-semibold">
-                      <div className="leading-tight">Vendor</div>
-                      <div
-                        className="font-normal text-[10px] opacity-90 mt-0.5"
-                        dir="rtl"
-                      >
-                        المورد
-                      </div>
-                    </th>
-                    <th className="border-r border-gray-700 px-3 py-3 text-right font-semibold">
-                      <div className="leading-tight">Base Fare</div>
-                      <div
-                        className="font-normal text-[10px] opacity-90 mt-0.5"
-                        dir="rtl"
-                      >
-                        الأجرة الأساسية
-                      </div>
-                    </th>
-                    <th className="border-r border-gray-700 px-3 py-3 text-right font-semibold">
-                      <div className="leading-tight">VAT (15%)</div>
-                      <div
-                        className="font-normal text-[10px] opacity-90 mt-0.5"
-                        dir="rtl"
-                      >
-                        ضريبة
-                      </div>
-                    </th>
-                    <th className="px-3 py-3 text-right font-semibold">
-                      <div className="leading-tight">Total</div>
-                      <div
-                        className="font-normal text-[10px] opacity-90 mt-0.5"
-                        dir="rtl"
-                      >
-                        مجموع
-                      </div>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="hover:bg-gray-50 transition-colors">
-                    <td className="border-r border-gray-300 px-3 py-3 font-mono">
-                      {invoiceData.documentNo || "N/A"}
-                    </td>
-                    <td className="border-r border-gray-300 px-3 py-3 font-semibold text-gray-900">
-                      {invoiceData.paxName || "N/A"}
-                    </td>
-                    <td className="border-r border-gray-300 px-3 py-3">
-                      <div className="font-medium">
-                        {invoiceData.airline?.airlineName || "N/A"}
-                      </div>
-                      {invoiceData.airline?.iataName && (
-                        <div className="text-[10px] text-gray-600">
-                          ({invoiceData.airline.iataName})
+                      {invoiceData.customer.customerVatId && (
+                        <div className="px-4 flex item-center gap-1">
+                          <span className="text-xs text-gray-600 block">
+                            Customer VAT ID
+                          </span>
+                          <span className="text-xs font-semibold text-gray-900 font-mono">
+                            {invoiceData.customer.customerVatId || "N/A"}
+                          </span>
                         </div>
                       )}
-                    </td>
-                    <td className="border-r border-gray-300 px-3 py-3 font-medium">
-                      {formatDestinations(invoiceData.destinations)}
-                    </td>
-                    <td className="border-r border-gray-300 px-3 py-3 text-right font-semibold text-green-700">
-                      {invoiceData.pnr}
-                    </td>
-                    <td className="border-r border-gray-300 px-3 py-3">
-                      {invoiceData.vendor?.vendorName || "N/A"}
-                    </td>
-                    <td className="border-r border-gray-300 px-3 py-3 text-right font-semibold">
-                      {baseFare.toFixed(2)}
-                    </td>
-                    <td className="border-r border-gray-300 px-3 py-3 text-right font-semibold text-blue-700">
-                      {vatAmount.toFixed(2)}
-                    </td>
-                    <td className="px-3 py-3 text-right font-bold text-gray-900">
-                      {rowTotal.toFixed(2)}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
+                      {invoiceData.customer.customerVatId && (
+                        <div
+                          className="px-4 text-right flex items-center gap-1"
+                          dir="rtl"
+                        >
+                          <span className="text-xs text-gray-600 block">
+                            الرقم الضريبي للعميل:
+                          </span>
+                          <span className="text-xs font-semibold text-gray-900 font-mono">
+                            {invoiceData.customer.customerVatId || "غير متوفر"}
+                          </span>
+                        </div>
+                      )}
+                      {invoiceData.customer.address && (
+                        <div className="px-4 py-3 flex item-center gap-1">
+                          <span className="text-xs text-gray-600 block">
+                            Address
+                          </span>
+                          <span className="text-xs text-gray-900 leading-relaxed">
+                            {invoiceData.customer.address || "N/A"}
+                          </span>
+                        </div>
+                      )}
+                      {invoiceData.customer.address && (
+                        <div
+                          className="px-4 text-right flex items-center gap-1"
+                          dir="rtl"
+                        >
+                          <span className="text-xs text-gray-600 block">
+                            العنوان:
+                          </span>
+                          <span className="text-xs text-gray-900 leading-relaxed">
+                            {invoiceData.customer.address || "غير متوفر"}
+                          </span>
+                        </div>
+                      )}
+                      {invoiceData.customer.phone &&
+                        invoiceData.customer.phone !== "NA" && (
+                          <div className="px-4 flex items-center gap-1">
+                            <span className="text-xs text-gray-600 block">
+                              Phone
+                            </span>
+                            <span className="text-xs font-semibold text-gray-900">
+                              {invoiceData.customer.phone}
+                            </span>
+                          </div>
+                        )}
 
-          {/* Summary Section */}
-          <div className="flex flex-row-reverse justify-between mb-3">
-            <div className="">
+                      {invoiceData.customer.phone &&
+                        invoiceData.customer.phone !== "NA" && (
+                          <div
+                            className="px-4 flex items-center gap-1 text-right"
+                            dir="rtl"
+                          >
+                            <span className="text-xs text-gray-600 block">
+                              رقم الهاتف:
+                            </span>
+                            <span
+                              className="text-xs font-semibold text-gray-900"
+                              dir="ltr"
+                            >
+                              {invoiceData.customer.phone || "غير متوفر"}
+                            </span>
+                          </div>
+                        )}
+                    </div>
+                  </div>
+                ) : (
+                  /* No customer linked — walk-in sale */
+                  <div className="px-4 py-3 flex items-center justify-between">
+                    <span className="text-xs font-bold text-gray-900">
+                      {invoiceData.paxName || "Walkin Customer"}
+                    </span>
+                    <span className="text-xs text-gray-600" dir="rtl">
+                      {invoiceData.paxName || "Walkin Customer"}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Items Table */}
+            <div className="mb-3">
               <div className="border-1 border-gray-300 rounded-lg overflow-hidden shadow-sm">
-                <table className="w-full text-xs">
-                  <tbody>
-                    <tr className="border-b border-gray-300">
-                      <td className="py-4 px-4 text-gray-700 font-medium">
-                        Base Fare / الأجرة الأساسية
-                      </td>
-                      <td className="py-4 px-4 text-right font-semibold text-gray-900">
-                        SAR {baseFare.toFixed(2)}
-                      </td>
-                    </tr>
-                    {/* <tr className="border-b border-gray-300 bg-gray-50">
-                                            <td className="py-2.5 px-4 text-gray-700 font-medium">Service Charges / رسوم الخدمة</td>
-                                            <td className="py-2.5 px-4 text-right font-semibold text-green-700">SAR {serviceCharges.toFixed(2)}</td>
-                                        </tr> */}
-                    <tr className="border-b-2 border-gray-400 bg-gray-50">
-                      <td className="py-4 px-4 font-semibold text-gray-900">
-                        VAT @ 15% / ضريبة القيمة المضافة
-                      </td>
-                      <td className="py-4 px-4 text-right font-bold text-blue-700">
-                        SAR {vatAmount.toFixed(2)}
-                      </td>
-                    </tr>
+                <table className="w-full text-xs border-collapse">
+                  <thead>
                     <tr className="bg-gradient-to-tl from-gray-600 to-gray-700 text-white">
-                      <td className="py-4 px-4 font-bold text-sm uppercase tracking-wide">
-                        <div className="flex items-center">
-                          <span>Grand Total / المجموع الكلي</span>
+                      <th className="border-r border-gray-700 px-3 py-1 text-left font-semibold">
+                        <div className="leading-tight">Ticket No.</div>
+                        <div
+                          className="font-normal text-[10px] opacity-90 mt-0.5"
+                          dir="rtl"
+                        >
+                          رقم التذكرة
                         </div>
+                      </th>
+                      <th className="border-r border-gray-700 px-3 py-1 text-left font-semibold">
+                        <div className="leading-tight">Passenger Name</div>
+                        <div
+                          className="font-normal text-[10px] opacity-90 mt-0.5"
+                          dir="rtl"
+                        >
+                          اسم الراكب
+                        </div>
+                      </th>
+                      <th className="border-r border-gray-700 px-3 py-1 text-left font-semibold">
+                        <div className="leading-tight">Airline</div>
+                        <div
+                          className="font-normal text-[10px] opacity-90 mt-0.5"
+                          dir="rtl"
+                        >
+                          شركة الطيران
+                        </div>
+                      </th>
+                      <th className="border-r border-gray-700 px-3 py-1 text-left font-semibold">
+                        <div className="leading-tight">Route</div>
+                        <div
+                          className="font-normal text-[10px] opacity-90 mt-0.5"
+                          dir="rtl"
+                        >
+                          المسار
+                        </div>
+                      </th>
+                      <th className="border-r border-gray-700 px-3 py-1 text-left font-semibold">
+                        <div className="leading-tight">PNR</div>
+                        <div
+                          className="font-normal text-[10px] opacity-90 mt-0.5"
+                          dir="rtl"
+                        >
+                          رقم الهاتف
+                        </div>
+                      </th>
+                      <th className="border-r border-gray-700 px-3 py-1 text-left font-semibold">
+                        <div className="leading-tight">Vendor</div>
+                        <div
+                          className="font-normal text-[10px] opacity-90 mt-0.5"
+                          dir="rtl"
+                        >
+                          المورد
+                        </div>
+                      </th>
+                      <th className="border-r border-gray-700 px-3 py-1 text-right font-semibold">
+                        <div className="leading-tight">Base Fare</div>
+                        <div
+                          className="font-normal text-[10px] opacity-90 mt-0.5"
+                          dir="rtl"
+                        >
+                          الأجرة الأساسية
+                        </div>
+                      </th>
+                      {invoiceData.routeType === "DOMESTIC" && (
+                        <th className="border-r border-gray-700 px-1 py-1 text-right font-semibold">
+                          <div className="leading-tight">PAX VAT (15%)</div>
+                          <div
+                            className="font-normal text-[10px] opacity-90 mt-0.5"
+                            dir="rtl"
+                          >
+                            ضريبة القيمة المضافة
+                          </div>
+                        </th>
+                      )}
+                      <th className="border-r border-gray-700 px-3 py-1 text-right font-semibold">
+                        <div className="leading-tight">S.C</div>
+                        <div
+                          className="font-normal text-[10px] opacity-90 mt-0.5"
+                          dir="rtl"
+                        >
+                          تكلفة الخدمة
+                        </div>
+                      </th>
+                      <th className="px-3 py-1 text-right font-semibold">
+                        <div className="leading-tight">VAT (15%)</div>
+                        <div
+                          className="font-normal text-[10px] opacity-90 mt-0.5"
+                          dir="rtl"
+                        >
+                          ضريبة
+                        </div>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="hover:bg-gray-50 transition-colors">
+                      <td className="border-r border-gray-300 px-3 py-2 font-mono">
+                        {invoiceData.documentNo || "N/A"}
                       </td>
-                      <td className="py-4 px-4 text-right">
-                        <div className="font-bold text-2xl tracking-wide">
-                          SAR {rowTotal.toFixed(2)}
+
+                      <td className="border-r border-gray-300 px-3 py-2 font-semibold text-gray-900">
+                        {invoiceData.paxName || "N/A"}
+                      </td>
+
+                      <td className="border-r border-gray-300 px-3 py-2">
+                        <div className="font-medium">
+                          {invoiceData.airline?.airlineName || "N/A"}
                         </div>
+                        {invoiceData.airline?.iataName && (
+                          <div className="text-[10px] text-gray-600">
+                            ({invoiceData.airline.iataName})
+                          </div>
+                        )}
+                      </td>
+
+                      <td className="border-r border-gray-300 px-3 py-2 font-medium">
+                        {formatDestinations(invoiceData.destinations)}
+                      </td>
+
+                      <td className="border-r border-gray-300 px-3 py-2 text-right font-semibold text-green-700">
+                        {invoiceData.pnr}
+                      </td>
+
+                      <td className="border-r border-gray-300 px-3 py-2">
+                        {invoiceData.vendor?.vendorName || "N/A"}
+                      </td>
+                      <td className="border-r border-gray-300 px-3 py-2 text-right font-semibold">
+                        {baseFare.toFixed(2)}
+                      </td>
+
+                      {/* PAX VAT */}
+                      {invoiceData.routeType === "DOMESTIC" && (
+                        <td className="border-r border-gray-300 px-3 py-2 text-right font-semibold text-blue-700">
+                          {paxVat.toFixed(2)}
+                        </td>
+                      )}
+                      {/* Service Charges */}
+                      <td className="border-r border-gray-300 px-3 py-2 text-right font-semibold text-green-700">
+                        {serviceCharges.toFixed(2)}
+                      </td>
+
+                      {/* Company VAT @ 15% on Service Charges */}
+                      <td className="px-3 py-2 text-right font-semibold text-blue-700">
+                        {vatAmount.toFixed(2)}
                       </td>
                     </tr>
                   </tbody>
                 </table>
               </div>
             </div>
-            {/* ZATCA QR Code Section */}
-            <div className="mb-3 flex justify-center">
-              <div className="border-1 border-gray-300 rounded-lg p-2 bg-gray-50">
-                <ZATCAQRCode invoiceData={zatcaInvoiceData} />
+
+            {/* Summary Section */}
+            <div className="flex flex-row-reverse justify-between">
+              <div className="">
+                <div className="border-1 border-gray-300 rounded-lg overflow-hidden shadow-sm">
+                  <table className="w-full text-xs">
+                    <tbody>
+                      <tr className="border-b border-gray-300">
+                        <td className="py-4 px-4 text-gray-700 font-medium">
+                          Base Fare / الأجرة الأساسية
+                        </td>
+                        <td className="py-4 px-4 text-right font-semibold text-gray-900">
+                          SAR {baseFare.toFixed(2)}
+                        </td>
+                      </tr>
+                      <tr className="border-b border-gray-300 bg-gray-50">
+                        <td className="py-2.5 px-4 text-gray-700 font-medium">
+                          Service Charges / رسوم الخدمة
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-semibold text-green-700">
+                          SAR {serviceCharges.toFixed(2)}
+                        </td>
+                      </tr>
+
+                      <tr className="bg-gradient-to-tl from-gray-600 to-gray-700 text-white">
+                        <td className="py-4 px-4 font-bold text-sm uppercase tracking-wide">
+                          <div className="flex items-center">
+                            <span>Grand Total / المجموع الكلي</span>
+                          </div>
+                        </td>
+                        <td className="py-4 px-4 text-right">
+                          <div className="font-bold text-2xl tracking-wide">
+                            SAR {rowTotal.toFixed(2)}
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              {/* ZATCA QR Code Section */}
+              <div className="mb-3 flex justify-center">
+                <div className="border-1 border-gray-300 rounded-lg p-2 bg-gray-50">
+                  <ZATCAQRCode invoiceData={zatcaInvoiceData} />
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Terms & Conditions */}
-          <div className="border-t-2 border-gray-300 pt-5 mt-8">
-            <h3 className="text-xs font-bold text-gray-900 mb-3 uppercase tracking-wide flex items-center">
-              <span className="bg-gradient-to-tl from-gray-600 to-gray-700 text-white px-2 py-1 mr-2">
-                T&C
-              </span>
-              Terms & Conditions / الشروط والأحكام
-            </h3>
-            <div className="text-[10px] text-gray-600 space-y-1.5 leading-relaxed bg-gray-50 p-4 rounded border border-gray-200">
-              <p className="flex items-start">
-                <span className="text-gray-900 font-bold mr-2 flex-shrink-0">
-                  •
+            {/* Terms & Conditions */}
+            <div className="border-t-2 border-gray-300 pt-5">
+              <h3 className="text-xs font-bold text-gray-900 mb-1 uppercase tracking-wide flex items-center">
+                <span className="bg-gradient-to-tl from-gray-600 to-gray-700 text-white px-2 py-1 mr-2">
+                  T&C
                 </span>
-                <span>
-                  This is a computer generated statement, hence does not require
-                  any signature. / هذا بيان تم إنشاؤه بواسطة الكمبيوتر، وبالتالي
-                  لا يتطلب أي توقيع.
-                </span>
-              </p>
-              <p className="flex items-start">
-                <span className="text-gray-900 font-bold mr-2 flex-shrink-0">
-                  •
-                </span>
-                <span>
-                  Cash payments to be made to the cashier and printed official
-                  receipt must be obtained. / يجب الحصول على المدفوعات النقدية
-                  المدفوعة للصراف والإيصال الرسمي المطبوع.
-                </span>
-              </p>
-              <p className="flex items-start">
-                <span className="text-gray-900 font-bold mr-2 flex-shrink-0">
-                  •
-                </span>
-                <span>
-                  All cheques/demand drafts in payment of bills must be crossed
-                  "A/c Payee Only" and drawn in favour of {companyData.name}.
-                </span>
-              </p>
-              <p className="flex items-start">
-                <span className="text-gray-900 font-bold mr-2 flex-shrink-0">
-                  •
-                </span>
-                <span>
-                  Interest @ 24% per annum will be charged on all outstanding
-                  bills after due date. / سيتم احتساب فائدة بنسبة 24٪ سنويًا على
-                  جميع الفواتير المستحقة بعد تاريخ الاستحقاق.
-                </span>
-              </p>
-              <p className="flex items-start">
-                <span className="text-gray-900 font-bold mr-2 flex-shrink-0">
-                  •
-                </span>
-                <span>
-                  If you have any queries or dispute on the invoice, please
-                  raise the query within 7 days of the invoice otherwise we
-                  consider it as accepted. / إذا كان لديك أي استفسارات أو نزاع
-                  بشأن الفاتورة، يرجى طرح الاستفسار في غضون 7 أيام من الفاتورة
-                  وإلا سنعتبرها مقبولة.
-                </span>
-              </p>
+                Terms & Conditions / الشروط والأحكام
+              </h3>
+              <div className="text-[10px] text-gray-600 space-y-1.5 leading-relaxed bg-gray-50 p-4 rounded border border-gray-200">
+                <p className="flex items-start">
+                  <span className="text-gray-900 font-bold mr-2 flex-shrink-0">
+                    •
+                  </span>
+                  <span>
+                    This is a computer generated statement, hence does not
+                    require any signature. / هذا بيان تم إنشاؤه بواسطة
+                    الكمبيوتر، وبالتالي لا يتطلب أي توقيع.
+                  </span>
+                </p>
+                <p className="flex items-start">
+                  <span className="text-gray-900 font-bold mr-2 flex-shrink-0">
+                    •
+                  </span>
+                  <span>
+                    Cash payments to be made to the cashier and printed official
+                    receipt must be obtained. / يجب الحصول على المدفوعات النقدية
+                    المدفوعة للصراف والإيصال الرسمي المطبوع.
+                  </span>
+                </p>
+                <p className="flex items-start">
+                  <span className="text-gray-900 font-bold mr-2 flex-shrink-0">
+                    •
+                  </span>
+                  <span>
+                    All cheques/demand drafts in payment of bills must be
+                    crossed "A/c Payee Only" and drawn in favour of{" "}
+                    {companyData.name}.
+                  </span>
+                </p>
+                <p className="flex items-start">
+                  <span className="text-gray-900 font-bold mr-2 flex-shrink-0">
+                    •
+                  </span>
+                  <span>
+                    If you have any queries or dispute on the invoice, please
+                    raise the query within 7 days of the invoice otherwise we
+                    consider it as accepted. / إذا كان لديك أي استفسارات أو نزاع
+                    بشأن الفاتورة، يرجى طرح الاستفسار في غضون 7 أيام من الفاتورة
+                    وإلا سنعتبرها مقبولة.
+                  </span>
+                </p>
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 };
 

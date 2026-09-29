@@ -71,7 +71,7 @@ import SalePayment from "../PaymentComponents/SalePayment";
 import { useNavigate } from "react-router-dom";
 import { appToast } from "../../../shadcn/components/ui/appToast";
 import { useAuth } from "../../context/AuthContext"; // ✅ ADD THIS — adjust relative path if needed
-import CopyableCell from "../copyAble"
+import CopyableCell from "../copyAble";
 import ExportSalesReport from "./ExportSalesReport";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
@@ -84,7 +84,14 @@ const SEARCH_BY_LABELS = {
   date: "date",
 };
 
-function PaginationBar({ page, pageSize, total, totalPages, onPageChange, onPageSizeChange }) {
+function PaginationBar({
+  page,
+  pageSize,
+  total,
+  totalPages,
+  onPageChange,
+  onPageSizeChange,
+}) {
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, total);
 
@@ -92,13 +99,18 @@ function PaginationBar({ page, pageSize, total, totalPages, onPageChange, onPage
     <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t mt-4">
       <div className="flex items-center gap-2 text-sm text-gray-600">
         <span>Rows per page</span>
-        <Select value={String(pageSize)} onValueChange={(v) => onPageSizeChange(Number(v))}>
+        <Select
+          value={String(pageSize)}
+          onValueChange={(v) => onPageSizeChange(Number(v))}
+        >
           <SelectTrigger className="w-[80px] h-8">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             {PAGE_SIZE_OPTIONS.map((n) => (
-              <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+              <SelectItem key={n} value={String(n)}>
+                {n}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -200,15 +212,14 @@ export default function DetailedReportTab({
     }
     navigate(`/edit-services/${invoiceId}`);
   };
-
   const GenerateInvoice = (id) => {
     if (!id) return;
-    navigate(`/invoice-print/${id}`);
+    window.open(`/invoice-print/${id}`, "_blank");
   };
 
   const GenerateCustomerInvoice = (id) => {
     if (!id) return;
-    navigate(`/customer-invoice/${id}`);
+    window.open(`/customer-invoice/${id}`, "_blank");
   };
 
   const handleViewInvoice = (invoiceId) => {
@@ -341,12 +352,20 @@ export default function DetailedReportTab({
     if (!refund?.refundType) return null;
 
     const payoutMap = {
-      CASH: { label: "Cash", className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+      CASH: {
+        label: "Cash",
+        className: "bg-emerald-50 text-emerald-700 border-emerald-200",
+      },
       BANK_TRANSFER: {
-        label: refund.bank?.bankName ? `Bank - ${refund.bank.bankName}` : "Bank Transfer",
+        label: refund.bank?.bankName
+          ? `Bank - ${refund.bank.bankName}`
+          : "Bank Transfer",
         className: "bg-sky-50 text-sky-700 border-sky-200",
       },
-      CUSTOMER_LEDGER: { label: "Customer Ledger", className: "bg-violet-50 text-violet-700 border-violet-200" },
+      CUSTOMER_LEDGER: {
+        label: "Customer Ledger",
+        className: "bg-violet-50 text-violet-700 border-violet-200",
+      },
     };
     const cfg = payoutMap[refund.refundType?.toUpperCase()] || {
       label: refund.refundType,
@@ -415,24 +434,27 @@ export default function DetailedReportTab({
             )}
           </CardDescription>
           <div className="flex flex-wrap gap-3 pt-2 justify-between">
-          {rows.length > 0 && (
-            <div className="flex flex-wrap gap-3 pt-2">
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-sm font-medium">
-                <Receipt className="h-4 w-4" /> {total ?? rows.length} Transactions
+            {rows.length > 0 && (
+              <div className="flex flex-wrap gap-3 pt-2">
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-sm font-medium">
+                  <Receipt className="h-4 w-4" /> {total ?? rows.length}{" "}
+                  Transactions
+                </div>
+                <div className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-purple-50 text-purple-700 text-sm font-medium">
+                  <SaudiRiyal size={14} /> {Number(totalSales || 0).toFixed(2)}{" "}
+                  Total Sell
+                </div>
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-50 text-green-700 text-sm font-medium">
+                  <TrendingUp className="h-4 w-4" />{" "}
+                  {Number(totalProfit || 0).toFixed(2)} Total Profit
+                </div>
               </div>
-              <div className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-purple-50 text-purple-700 text-sm font-medium">
-                <SaudiRiyal size={14} /> {Number(totalSales || 0).toFixed(2)} Total Sell
-              </div>
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-50 text-green-700 text-sm font-medium">
-                <TrendingUp className="h-4 w-4" /> {Number(totalProfit || 0).toFixed(2)} Total Profit
-              </div>
-            </div>
-          )}
-          <ExportSalesReport
-            sales={salesData}
-            disabled={activeTab !== "detailed" || !salesData.length}
-            activeTab={activeTab} 
-          />
+            )}
+            <ExportSalesReport
+              sales={salesData}
+              disabled={activeTab !== "detailed" || !salesData.length}
+              activeTab={activeTab}
+            />
           </div>
         </CardHeader>
         <CardContent>
@@ -533,10 +555,7 @@ export default function DetailedReportTab({
                             </TableCell>
                             <TableCell className="font-mono text-sm">
                               <CopyableCell value={sale.documentNo}>
-                                {highlightText(
-                                  sale.documentNo,
-                                  searchQuery,
-                                )}
+                                {highlightText(sale.documentNo, searchQuery)}
                               </CopyableCell>
                             </TableCell>
                             <TableCell
@@ -622,7 +641,9 @@ export default function DetailedReportTab({
                                   <DropdownMenuSeparator />
                                   {/* ✅ View Invoice/History always visible — page access already implies SALE_READ */}
                                   <DropdownMenuItem
-                                    onClick={() => handleViewInvoice(invoice.id)}
+                                    onClick={() =>
+                                      handleViewInvoice(invoice.id)
+                                    }
                                   >
                                     <Eye className="mr-2 h-4 w-4" />
                                     View Invoice
@@ -680,7 +701,9 @@ export default function DetailedReportTab({
                                     Generate Invoice
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
-                                    onClick={() => GenerateCustomerInvoice(sale.id)}
+                                    onClick={() =>
+                                      GenerateCustomerInvoice(sale.id)
+                                    }
                                   >
                                     <Printer className="mr-2 h-4 w-4" />
                                     Customer Invoice
