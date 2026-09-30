@@ -330,12 +330,12 @@ export default function VatReport() {
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <StatCard
-                label="Total Refund Amount"
-                labelAr="إجمالي المبالغ المستردة"
+                label="Total Refunded Profit"
+                labelAr="إجمالي ربح المبيعات المستردة"
                 value={report.totalRefund}
                 color="rose"
                 icon={TrendingDown}
-                sub={`${report.refundCount} refund${report.refundCount === 1 ? "" : "s"}`}
+                sub={`Original profit of ${report.refundCount} refunded sale${report.refundCount === 1 ? "" : "s"}`}
               />
               <StatCard
                 label="Refund VAT (15%, exclusive)"
@@ -446,7 +446,8 @@ export default function VatReport() {
                             <TableHead>Invoice #</TableHead>
                             <TableHead>Document #</TableHead>
                             <TableHead>Reason</TableHead>
-                            <TableHead className="text-right">Refund Amount</TableHead>
+                            <TableHead className="text-right">Paid to Customer</TableHead>
+                            <TableHead className="text-right">Original Profit</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -460,8 +461,11 @@ export default function VatReport() {
                               <TableCell className="text-xs max-w-[180px] truncate" title={r.refundReason}>
                                 {r.refundReason || "—"}
                               </TableCell>
-                              <TableCell className="text-right text-xs font-semibold text-rose-700">
+                              <TableCell className="text-right text-xs text-slate-500">
                                 {r.netRefundToCustomer.toFixed(2)}
+                              </TableCell>
+                              <TableCell className="text-right text-xs font-semibold text-rose-700">
+                                {r.originalProfit.toFixed(2)}
                               </TableCell>
                             </TableRow>
                           ))}
