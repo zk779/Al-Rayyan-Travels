@@ -263,8 +263,10 @@ const InvoicePrint = () => {
   const vatAmount = Number(invoiceData.vatAmount || 0);
   const paxVat = Number(invoiceData.paxVat || 0);
   const serviceCharges = Number(invoiceData.profit || 0);
-  const baseFare = grossAmount;
-  const rowTotal = grossAmount + serviceCharges;
+  const baseFare = grossAmount - paxVat;
+  const totalBaseFare = baseFare + paxVat;
+  const totalServiceCharges = serviceCharges;
+  const rowTotal = totalServiceCharges + totalBaseFare;
 
   // Prepare ZATCA QR data
   const grandTotalforQR = parseFloat(rowTotal) || 0;
@@ -292,6 +294,7 @@ const InvoicePrint = () => {
           @media print {
             body {
               background: white !important;
+              padding: 0 !important;
             }
 
             .invoice-container {
@@ -539,13 +542,37 @@ const InvoicePrint = () => {
               </div>
             </div>
 
-            {/* Items Table */}
+            {/* Items Table — table-fixed with explicit column widths, so
+                every column keeps a guaranteed share of the page width no
+                matter how many are showing (was auto-layout before, which
+                let content push the table wider than the page and get
+                clipped). Long values wrap to a second line within their
+                own cell instead of being shrunk or cut off — same font
+                sizes as before, just tighter padding. */}
             <div className="mb-3">
               <div className="border-1 border-gray-300 rounded-lg overflow-hidden shadow-sm">
-                <table className="w-full text-xs border-collapse">
+                <table className="w-full table-fixed text-xs border-collapse">
+                  <colgroup>
+                    <col style={{ width: "7%" }} />
+                    <col style={{ width: "12%" }} />
+                    <col style={{ width: "9%" }} />
+                    <col style={{ width: "10%" }} />
+                    <col style={{ width: "6%" }} />
+                    <col style={{ width: "9%" }} />
+                    <col style={{ width: "8%" }} />
+                    {invoiceData.routeType === "DOMESTIC" && (
+                      <col style={{ width: "7%" }} />
+                    )}
+                    {invoiceData.routeType === "DOMESTIC" && (
+                      <col style={{ width: "8%" }} />
+                    )}
+                    <col style={{ width: "6%" }} />
+                    <col style={{ width: "8%" }} />
+                    <col style={{ width: "8%" }} />
+                  </colgroup>
                   <thead>
                     <tr className="bg-gradient-to-tl from-gray-600 to-gray-700 text-white">
-                      <th className="border-r border-gray-700 px-3 py-1 text-left font-semibold">
+                      <th className="border-r border-gray-700 px-1.5 py-1 text-left font-semibold">
                         <div className="leading-tight">Ticket No.</div>
                         <div
                           className="font-normal text-[10px] opacity-90 mt-0.5"
@@ -554,7 +581,7 @@ const InvoicePrint = () => {
                           رقم التذكرة
                         </div>
                       </th>
-                      <th className="border-r border-gray-700 px-3 py-1 text-left font-semibold">
+                      <th className="border-r border-gray-700 px-1.5 py-1 text-left font-semibold">
                         <div className="leading-tight">Passenger Name</div>
                         <div
                           className="font-normal text-[10px] opacity-90 mt-0.5"
@@ -563,7 +590,7 @@ const InvoicePrint = () => {
                           اسم الراكب
                         </div>
                       </th>
-                      <th className="border-r border-gray-700 px-3 py-1 text-left font-semibold">
+                      <th className="border-r border-gray-700 px-1.5 py-1 text-left font-semibold">
                         <div className="leading-tight">Airline</div>
                         <div
                           className="font-normal text-[10px] opacity-90 mt-0.5"
@@ -572,7 +599,7 @@ const InvoicePrint = () => {
                           شركة الطيران
                         </div>
                       </th>
-                      <th className="border-r border-gray-700 px-3 py-1 text-left font-semibold">
+                      <th className="border-r border-gray-700 px-1.5 py-1 text-left font-semibold">
                         <div className="leading-tight">Route</div>
                         <div
                           className="font-normal text-[10px] opacity-90 mt-0.5"
@@ -581,7 +608,7 @@ const InvoicePrint = () => {
                           المسار
                         </div>
                       </th>
-                      <th className="border-r border-gray-700 px-3 py-1 text-left font-semibold">
+                      <th className="border-r border-gray-700 px-1.5 py-1 text-left font-semibold">
                         <div className="leading-tight">PNR</div>
                         <div
                           className="font-normal text-[10px] opacity-90 mt-0.5"
@@ -590,7 +617,7 @@ const InvoicePrint = () => {
                           رقم الهاتف
                         </div>
                       </th>
-                      <th className="border-r border-gray-700 px-3 py-1 text-left font-semibold">
+                      <th className="border-r border-gray-700 px-1.5 py-1 text-left font-semibold">
                         <div className="leading-tight">Vendor</div>
                         <div
                           className="font-normal text-[10px] opacity-90 mt-0.5"
@@ -599,7 +626,7 @@ const InvoicePrint = () => {
                           المورد
                         </div>
                       </th>
-                      <th className="border-r border-gray-700 px-3 py-1 text-right font-semibold">
+                      <th className="border-r border-gray-700 px-1.5 py-1 text-right font-semibold">
                         <div className="leading-tight">Base Fare</div>
                         <div
                           className="font-normal text-[10px] opacity-90 mt-0.5"
@@ -619,7 +646,18 @@ const InvoicePrint = () => {
                           </div>
                         </th>
                       )}
-                      <th className="border-r border-gray-700 px-3 py-1 text-right font-semibold">
+                      {invoiceData.routeType === "DOMESTIC" && (
+                        <th className="border-r border-gray-700 px-1.5 py-1 text-right font-semibold">
+                          <div className="leading-tight"> Net Amount</div>
+                          <div
+                            className="font-normal text-[10px] opacity-90 mt-0.5"
+                            dir="rtl"
+                          >
+                            المبلغ الصافي
+                          </div>
+                        </th>
+                      )}
+                      <th className="border-r border-gray-700 px-1.5 py-1 text-right font-semibold">
                         <div className="leading-tight">S.C</div>
                         <div
                           className="font-normal text-[10px] opacity-90 mt-0.5"
@@ -628,28 +666,38 @@ const InvoicePrint = () => {
                           تكلفة الخدمة
                         </div>
                       </th>
-                      <th className="px-3 py-1 text-right font-semibold">
+                      <th className="border-r border-gray-700 px-1.5 py-1 text-right font-semibold">
                         <div className="leading-tight">VAT (15%)</div>
                         <div
                           className="font-normal text-[10px] opacity-90 mt-0.5"
                           dir="rtl"
                         >
-                          ضريبة
+                          ضريبة القيمة المضافة
+                        </div>
+                      </th>
+
+                      <th className="px-1.5 py-1 text-right font-semibold">
+                        <div className="leading-tight">Total</div>
+                        <div
+                          className="font-normal text-[10px] opacity-90 mt-0.5"
+                          dir="rtl"
+                        >
+                          الإجمالي
                         </div>
                       </th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr className="hover:bg-gray-50 transition-colors">
-                      <td className="border-r border-gray-300 px-3 py-2 font-mono">
+                    <tr className="hover:bg-gray-50 transition-colors align-top">
+                      <td className="border-r border-gray-300 px-1.5 py-1.5 font-mono break-words">
                         {invoiceData.documentNo || "N/A"}
                       </td>
 
-                      <td className="border-r border-gray-300 px-3 py-2 font-semibold text-gray-900">
+                      <td className="border-r border-gray-300 px-1.5 py-1.5 font-semibold text-gray-900 break-words">
                         {invoiceData.paxName || "N/A"}
                       </td>
 
-                      <td className="border-r border-gray-300 px-3 py-2">
+                      <td className="border-r border-gray-300 px-1.5 py-1.5 break-words">
                         <div className="font-medium">
                           {invoiceData.airline?.airlineName || "N/A"}
                         </div>
@@ -660,35 +708,45 @@ const InvoicePrint = () => {
                         )}
                       </td>
 
-                      <td className="border-r border-gray-300 px-3 py-2 font-medium">
+                      <td className="border-r border-gray-300 px-1.5 py-1.5 font-medium break-words">
                         {formatDestinations(invoiceData.destinations)}
                       </td>
 
-                      <td className="border-r border-gray-300 px-3 py-2 text-right font-semibold text-green-700">
+                      <td className="border-r border-gray-300 px-1.5 py-1.5 text-right font-semibold text-green-700 break-words">
                         {invoiceData.pnr}
                       </td>
 
-                      <td className="border-r border-gray-300 px-3 py-2">
+                      <td className="border-r border-gray-300 px-1.5 py-1.5 break-words">
                         {invoiceData.vendor?.vendorName || "N/A"}
                       </td>
-                      <td className="border-r border-gray-300 px-3 py-2 text-right font-semibold">
+                      <td className="border-r border-gray-300 px-1.5 py-1.5 text-right font-semibold">
                         {baseFare.toFixed(2)}
                       </td>
 
                       {/* PAX VAT */}
                       {invoiceData.routeType === "DOMESTIC" && (
-                        <td className="border-r border-gray-300 px-3 py-2 text-right font-semibold text-blue-700">
+                        <td className="border-r border-gray-300 px-1 py-1.5 text-right font-semibold text-blue-700">
                           {paxVat.toFixed(2)}
                         </td>
                       )}
+                      {/* PAX VAT */}
+                      {invoiceData.routeType === "DOMESTIC" && (
+                        <td className="border-r border-gray-300 px-1.5 py-1.5 text-right font-semibold text-blue-700">
+                          {totalBaseFare.toFixed(2)}
+                        </td>
+                      )}
                       {/* Service Charges */}
-                      <td className="border-r border-gray-300 px-3 py-2 text-right font-semibold text-green-700">
+                      <td className="border-r border-gray-300 px-1.5 py-1.5 text-right font-semibold text-green-700">
                         {serviceCharges.toFixed(2)}
                       </td>
 
                       {/* Company VAT @ 15% on Service Charges */}
-                      <td className="px-3 py-2 text-right font-semibold text-blue-700">
+                      <td className="border-r border-gray-300 px-1.5 py-1.5 text-right font-semibold text-blue-700">
                         {vatAmount.toFixed(2)}
+                      </td>
+                      {/* Company VAT @ 15% on Service Charges */}
+                      <td className="px-1.5 py-1.5 text-right font-semibold text-blue-700">
+                        {rowTotal.toFixed(2)}
                       </td>
                     </tr>
                   </tbody>
@@ -704,10 +762,10 @@ const InvoicePrint = () => {
                     <tbody>
                       <tr className="border-b border-gray-300">
                         <td className="py-4 px-4 text-gray-700 font-medium">
-                          Base Fare / الأجرة الأساسية
+                          Base Fare (inc. Tax) / الأجرة الأساسية (شاملة الضريبة)
                         </td>
                         <td className="py-4 px-4 text-right font-semibold text-gray-900">
-                          SAR {baseFare.toFixed(2)}
+                          SAR {totalBaseFare.toFixed(2)}
                         </td>
                       </tr>
                       <tr className="border-b border-gray-300 bg-gray-50">
@@ -716,6 +774,14 @@ const InvoicePrint = () => {
                         </td>
                         <td className="py-2.5 px-4 text-right font-semibold text-green-700">
                           SAR {serviceCharges.toFixed(2)}
+                        </td>
+                      </tr>
+                      <tr className="border-b border-gray-300 bg-gray-50">
+                        <td className="py-2.5 px-4 text-gray-700 font-medium">
+                          VAT 15% / ضريبة القيمة المضافة
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-semibold text-green-700">
+                          SAR {vatAmount.toFixed(2)}
                         </td>
                       </tr>
 

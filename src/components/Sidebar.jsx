@@ -10,6 +10,7 @@ import {
   HandCoins,
   ScrollText,
   PieChart,
+  Percent,
   SaudiRiyal,
   BookCheck,
   RotateCcwIcon,
@@ -281,6 +282,12 @@ const Sidebar = () => {
           icon={ScrollText}
           label={t("salesReport")}
           any={["SALE_READ", "REFUND_READ"]}
+        />
+        <NavItem
+          to="/vat-report"
+          icon={Percent}
+          label={t("vatReport")}
+          permission="REPORT_READ"
         />
         <NavItem
           to="/report"

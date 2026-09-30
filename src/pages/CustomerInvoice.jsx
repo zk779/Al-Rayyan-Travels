@@ -377,10 +377,6 @@ const InvoicePrint = () => {
                 فاتورة ضريبية
               </p>
             </div>
-            {/* Customer Information Section - Enhanced */}
-            {/* Customer Info — freely-typed, not pulled from the system.
-                        On screen: always-editable inputs. In print: only shown
-                        (as plain text) if something was actually typed. */}
             <div className="mb-3 print:hidden">
               <div className="border-1 border-gray-200 rounded-md overflow-hidden">
                 <div className="bg-gray-100 border-b-2 border-gray-400 px-4 py-3">

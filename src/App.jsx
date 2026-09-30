@@ -16,6 +16,7 @@ import ProfilePage from "./pages/Profile";
 import Dashboard from "./pages/Dashboard";
 import Expense from "./pages/Expense";
 import ReportPage from "./pages/ReportPage";
+import VatReport from "./pages/VatReport";
 import LoginPage from "./pages/Login";
 import ProtectedRoutes from "./ProtectedRoutes";
 import PermissionRoute from "./PermissionRoute"; // ✅ ADD THIS
@@ -158,6 +159,14 @@ function App() {
 										element={
 											<PermissionRoute permission="REPORT_READ">
 												<SalesReport />
+											</PermissionRoute>
+										}
+									/>
+									<Route
+										path="vat-report"
+										element={
+											<PermissionRoute permission="REPORT_READ">
+												<VatReport />
 											</PermissionRoute>
 										}
 									/>

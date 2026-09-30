@@ -18,7 +18,8 @@ const hideSidebarAndHeader =
   location.pathname === "/403" ||
   location.pathname.startsWith("/invoice-print/") ||
   location.pathname.startsWith("/customer-invoice/") ||
-  location.pathname.startsWith("/view-invoice/");
+  location.pathname.startsWith("/view-invoice/") ||
+  location.pathname.startsWith("/vat-report");
 
   // Determine margin-left class based on sidebar state and current route
   let sidebarMarginClass = hideSidebarAndHeader ? "ml-0" : "ml-64"; // Default expanded
@@ -39,15 +40,24 @@ const hideSidebarAndHeader =
     // the language toggle (rest of the app is untouched, as requested).
     <LanguageProvider>
       <div className={`min-h-screen flex flex-col ${isDarkMode ? "dark" : ""}`}>
-        {/* Sidebar */}
-        {!hideSidebarAndHeader && <Sidebar />}
+        {/* Sidebar — print:hidden so any page's print output (not just the
+            bare document-style ones above) never includes the nav chrome */}
+        {!hideSidebarAndHeader && (
+          <div className="print:hidden">
+            <Sidebar />
+          </div>
+        )}
 
         {/* Main Content */}
         <div
           className={`flex-1 flex flex-col transition-all duration-300 ${sidebarMarginClass} bg-gray-50 text-gray-800 min-h-screen`}
         >
           {/* Header */}
-          {!hideSidebarAndHeader && <Header />}
+          {!hideSidebarAndHeader && (
+            <div className="print:hidden">
+              <Header />
+            </div>
+          )}
 
           {/* Page Content */}
           <div className={`${contentPaddingClass} flex-1`}>
@@ -57,11 +67,12 @@ const hideSidebarAndHeader =
 
         {/* Floating calculator — available everywhere except the "/" landing
             route and bare document-style pages (invoice print / customer
-            invoice / view invoice) */}
+            invoice / view invoice / VAT report) */}
         {location.pathname !== "/" &&
           !location.pathname.startsWith("/invoice-print/") &&
           !location.pathname.startsWith("/customer-invoice/") &&
-          !location.pathname.startsWith("/view-invoice/") && <FloatingCalculator />}
+          !location.pathname.startsWith("/view-invoice/") &&
+          !location.pathname.startsWith("/vat-report") && <FloatingCalculator />}
       </div>
     </LanguageProvider>
   );

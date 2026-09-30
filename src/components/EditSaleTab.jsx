@@ -58,9 +58,11 @@ const calcVAT = (profit) => {
   const p = Number(profit) || 0;
   return p > 0 ? (p * 0.15).toFixed(2) : "0.00";
 };
+// PAX VAT is inclusive — netPrice already has the 15% baked in, so this
+// extracts it out of netPrice rather than adding 15% on top of it.
 const calcPaxVAT = (netPrice) => {
   const n = Number(netPrice) || 0;
-  return n > 0 ? (n * 0.15).toFixed(2) : "0.00";
+  return n > 0 ? (n - n / 1.15).toFixed(2) : "0.00";
 };
 const calcProfit = (net, sell) =>
   (Number(sell || 0) - Number(net || 0)).toFixed(2);
