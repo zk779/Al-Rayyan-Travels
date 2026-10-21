@@ -15,7 +15,8 @@ import {
   BookCheck,
   RotateCcwIcon,
   LandmarkIcon,
-  Wallet,
+    Wallet,
+  Scale,
   UserCog,
   LogOut,
   Menu,
@@ -323,6 +324,12 @@ const Sidebar = () => {
         icon={Wallet}
         label={t("expenses")}
         permission="EXPENSE_READ"
+      />
+      <NavItem
+        to="/balance-adjustments"
+        icon={Scale}
+        label={t("balanceAdjustments")}
+        permission="BALANCE_ADJUSTMENT_READ"
       />
       <NavItem
         to="/users"

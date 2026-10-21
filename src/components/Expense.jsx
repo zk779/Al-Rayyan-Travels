@@ -82,6 +82,8 @@ import {
 } from "../../shadcn/components/ui/alert-dialog";
 import { Textarea } from "../../shadcn/components/ui/textarea";
 import { useAuth } from "../context/AuthContext"; // ✅ ADD THIS
+import DateRangeInputs from "./DateRangeInputs";
+import { getLocalTimeZone } from "../utils/reportUtils";
 
 // ── Backend config — adjust these paths if your routes are mounted elsewhere ──
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
@@ -110,6 +112,11 @@ const CATEGORIES = [
   { value: "MARKETING", label: "Marketing" },
   { value: "MEALS", label: "Meals" },
   { value: "TRAINING", label: "Training" },
+  { value: "UTILITIES", label: "Utilities" },
+  { value: "RENT", label: "Rent" },
+  { value: "INSURANCE", label: "Insurance" },
+  { value: "MAINTENANCE", label: "Maintenance" },
+  { value: "OTHER", label: "Other" },
 ];
 const STATUSES = [
   { value: "APPROVED", label: "Approved" },
@@ -155,6 +162,12 @@ export default function ExpensePage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [branchFilter, setBranchFilter] = useState("all");
+  const [paymentModeFilter, setPaymentModeFilter] = useState("all");
+  const [bankFilter, setBankFilter] = useState("all");
+  const [createdByFilter, setCreatedByFilter] = useState("all");
+  // Date range is opt-in: empty by default, so no date filter is sent at all.
+  const [dateRange, setDateRange] = useState({ from: undefined, to: undefined });
+  const [debouncedSearch, setDebouncedSearch] = useState("");
 
   const [pagination, setPagination] = useState(DEFAULT_PAGINATION);
   const [summary, setSummary] = useState(DEFAULT_SUMMARY);
@@ -177,6 +190,15 @@ export default function ExpensePage() {
       if (branchFilter !== "all") params.set("branchId", branchFilter);
       if (categoryFilter !== "all") params.set("category", categoryFilter);
       if (statusFilter !== "all") params.set("status", statusFilter);
+      if (paymentModeFilter !== "all") params.set("paymentMode", paymentModeFilter);
+      if (paymentModeFilter === "BANK_TRANSFER" && bankFilter !== "all") params.set("bankId", bankFilter);
+      if (createdByFilter !== "all") params.set("createdById", createdByFilter);
+      if (debouncedSearch) params.set("search", debouncedSearch);
+      if (dateRange.from || dateRange.to) {
+        params.set("timeZone", getLocalTimeZone());
+        if (dateRange.from) params.set("dateFrom", format(dateRange.from, "yyyy-MM-dd"));
+        if (dateRange.to) params.set("dateTo", format(dateRange.to, "yyyy-MM-dd"));
+      }
 
       const res = await fetch(`${EXPENSES_URL}?${params}`, { headers: authHeaders() });
       const json = await res.json();
@@ -191,7 +213,18 @@ export default function ExpensePage() {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, branchFilter, categoryFilter, statusFilter]);
+  }, [
+    page,
+    pageSize,
+    branchFilter,
+    categoryFilter,
+    statusFilter,
+    paymentModeFilter,
+    bankFilter,
+    createdByFilter,
+    debouncedSearch,
+    dateRange,
+  ]);
 
   // Users are only ever needed for SALARY expenses — fetch lazily, once.
   // NOTE: assumes each user record includes a `branchId` field so we can
@@ -231,7 +264,30 @@ export default function ExpensePage() {
   // Any filter change (other than the page itself) should snap back to page 1
   useEffect(() => {
     setPage(1);
-  }, [branchFilter, categoryFilter, statusFilter, pageSize]);
+  }, [
+    branchFilter,
+    categoryFilter,
+    statusFilter,
+    paymentModeFilter,
+    bankFilter,
+    createdByFilter,
+    debouncedSearch,
+    dateRange,
+    pageSize,
+  ]);
+
+  // Search is applied server-side (so it spans every page and combines with the
+  // other filters) — debounce typing so we don't fetch on every keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 400);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // The "Created By" filter needs the user list up-front.
+  useEffect(() => {
+    ensureUsersLoaded();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Fetch users the moment the form's category becomes SALARY
   useEffect(() => {
@@ -245,21 +301,19 @@ export default function ExpensePage() {
   }, [users, form.branchId]);
 
   // ── Derived data ──────────────────────────────────────────────────────
-  // Text search only refines what's already on the current page — status,
-  // category and branch are all filtered server-side (they affect pagination
-  // totals), so a client-side search across pages would show a mismatched count.
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return expenses;
-    return expenses.filter(
-      (e) =>
-        e.description?.toLowerCase().includes(q) ||
-        catLabel(e.category).toLowerCase().includes(q) ||
-        e.branch?.name?.toLowerCase().includes(q) ||
-        e.user?.fullName?.toLowerCase().includes(q) ||
-        e.createdBy?.fullName?.toLowerCase().includes(q)
-    );
-  }, [expenses, search]);
+  // Every filter (including the text search and date range) is applied
+  // server-side, so pagination totals and summary cards always match the rows.
+  const filtered = expenses;
+
+  const hasActiveFilters =
+    !!search ||
+    statusFilter !== "all" ||
+    categoryFilter !== "all" ||
+    branchFilter !== "all" ||
+    paymentModeFilter !== "all" ||
+    createdByFilter !== "all" ||
+    !!dateRange.from ||
+    !!dateRange.to;
 
   const branchTotalCards = useMemo(() => {
     if (branchFilter !== "all") {
@@ -505,9 +559,9 @@ export default function ExpensePage() {
 
       {/* Filters */}
       <Card className="border-slate-200">
-        <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-5 gap-4">
+        <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="space-y-2">
-            <Label>Search (this page)</Label>
+            <Label>Search</Label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 h-4 w-4" />
               <Input
@@ -566,16 +620,93 @@ export default function ExpensePage() {
               </SelectContent>
             </Select>
           </div>
+          <div className="space-y-2 md:col-span-2">
+              <DateRangeInputs
+                from={dateRange.from}
+                to={dateRange.to}
+                onChange={setDateRange}
+              />
+            <Label className="flex items-center justify-between">
+              {(dateRange.from || dateRange.to) && (
+                <button
+                  type="button"
+                  onClick={() => setDateRange({ from: undefined, to: undefined })}
+                  className="text-xs font-normal text-red-600 hover:underline"
+                >
+                  Clear dates X
+                </button>
+              )}
+            </Label>
+          </div>
+          <div className="space-y-2">
+            <Label>Payment Mode</Label>
+            <Select
+              value={paymentModeFilter}
+              onValueChange={(v) => {
+                setPaymentModeFilter(v);
+                if (v !== "BANK_TRANSFER") setBankFilter("all");
+              }}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Modes</SelectItem>
+                <SelectItem value="CASH">Cash</SelectItem>
+                <SelectItem value="BANK_TRANSFER">Bank Transfer</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {paymentModeFilter === "BANK_TRANSFER" && (
+            <div className="space-y-2">
+              <Label>Bank</Label>
+              <Select value={bankFilter} onValueChange={setBankFilter}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Banks</SelectItem>
+                  {banks.map((b) => (
+                    <SelectItem key={b.id} value={b.id}>
+                      {b.bankName} — {b.accountNumber}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          <div className="space-y-2">
+            <Label>Created By</Label>
+            <Select value={createdByFilter} onValueChange={setCreatedByFilter}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Users</SelectItem>
+                {users.map((u) => (
+                  <SelectItem key={u.id} value={u.id}>
+                    {u.fullName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="space-y-2">
             <Label>&nbsp;</Label>
             <Button
               variant="outline"
               className="w-full"
+              disabled={!hasActiveFilters}
               onClick={() => {
                 setSearch("");
+                setDebouncedSearch("");
                 setStatusFilter("all");
                 setCategoryFilter("all");
                 setBranchFilter("all");
+                setPaymentModeFilter("all");
+                setBankFilter("all");
+                setCreatedByFilter("all");
+                setDateRange({ from: undefined, to: undefined });
               }}
             >
               Clear Filters
@@ -598,6 +729,7 @@ export default function ExpensePage() {
                 <TableHead className="text-right">Amount</TableHead>
                 <TableHead>Branch</TableHead>
                 <TableHead>Created By</TableHead>
+                <TableHead>Remarks</TableHead>
                 <TableHead>Payment</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-16">Actions</TableHead>
@@ -607,7 +739,7 @@ export default function ExpensePage() {
               {loading ? (
                 <TableRow>
                   <TableCell
-                    colSpan={8}
+                    colSpan={9}
                     className="text-center py-8 text-slate-400"
                   >
                     Loading...
@@ -616,7 +748,7 @@ export default function ExpensePage() {
               ) : filtered.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={8}
+                    colSpan={9}
                     className="text-center py-8 text-slate-400"
                   >
                     No expenses found
@@ -656,6 +788,9 @@ export default function ExpensePage() {
                       ) : (
                         <span className="text-slate-300">-</span>
                       )}
+                    </TableCell>
+                    <TableCell className="italic text-slate-600 text-sm">
+                      {e.description}
                     </TableCell>
                     <TableCell>
                       <span className="flex items-center gap-1.5 text-sm text-slate-600">

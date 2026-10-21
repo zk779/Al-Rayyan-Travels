@@ -15,6 +15,7 @@ import SalesReport from "./pages/SalesReport";
 import ProfilePage from "./pages/Profile";
 import Dashboard from "./pages/Dashboard";
 import Expense from "./pages/Expense";
+import BalanceAdjustment from "./pages/BalanceAdjustment";
 import ReportPage from "./pages/ReportPage";
 import VatReport from "./pages/VatReport";
 import LoginPage from "./pages/Login";
@@ -183,6 +184,14 @@ function App() {
 										element={
 											<PermissionRoute permission="EXPENSE_READ">
 												<Expense />
+											</PermissionRoute>
+										}
+									/>
+									<Route
+										path="balance-adjustments"
+										element={
+											<PermissionRoute permission="BALANCE_ADJUSTMENT_READ">
+												<BalanceAdjustment />
 											</PermissionRoute>
 										}
 									/>
