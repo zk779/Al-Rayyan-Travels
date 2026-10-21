@@ -855,14 +855,14 @@ export default function ReportPage() {
               icon={Percent}
               tone="sky"
             />
-            <KpiCard
+            {/* <KpiCard
               label="Cancellation Charges"
               value={money(t.totalCancellationCharges)}
               sub="Added to profit"
               icon={Undo2}
               tone="amber"
               trend="up"
-            />
+            /> */}
             <KpiCard
               label="Total Expenses"
               value={money(t.totalExpenses)}
@@ -871,14 +871,7 @@ export default function ReportPage() {
               tone="rose"
               trend="down"
             />
-            <KpiCard
-              label="Net Revenue"
-              value={money(t.netRevenue)}
-              sub="Profit + Cancellation − Expenses"
-              icon={Landmark}
-              tone={t.netRevenue >= 0 ? "emerald" : "rose"}
-              trend={t.netRevenue >= 0 ? "up" : "down"}
-            />
+            
             <KpiCard
               label="Outstanding Due"
               value={money(t.outstandingDue)}
@@ -886,20 +879,20 @@ export default function ReportPage() {
               icon={Wallet}
               tone="rose"
             />
-            <KpiCard
+            {/* <KpiCard
               label="Refunded to Customers"
               value={money(t.totalRefundedToCustomers)}
               sub={`${t.refundsCount || 0} refunds (informational)`}
               icon={Undo2}
               tone="slate"
-            />
-            <KpiCard
+            /> */}
+            {/* <KpiCard
               label="POS Order Amount"
               value={money(t.totalPosOrderAmount)}
               sub={`${t.posSalesCount || 0} POS sales (original swiped amount)`}
               icon={Terminal}
               tone="cyan"
-            />
+            /> */}
             <KpiCard
               label="POS Net Received"
               value={money(t.totalPosNetAmount)}
@@ -907,12 +900,20 @@ export default function ReportPage() {
               icon={Terminal}
               tone="cyan"
             />
-            <KpiCard
-              label="POS Commission"
+            {/* <KpiCard
+              label="POS Deducted Amount"
               value={money(t.totalPosCommission)}
               sub="Order − Net (informational)"
               icon={Percent}
               tone="amber"
+            /> */}
+            <KpiCard
+              label="Net Revenue"
+              value={money(t.netRevenue)}
+              sub="Profit + Cancellation − Expenses"
+              icon={Landmark}
+              tone={t.netRevenue >= 0 ? "emerald" : "rose"}
+              trend={t.netRevenue >= 0 ? "up" : "down"}
             />
           </>
         )}

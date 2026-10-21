@@ -292,15 +292,15 @@ const Sidebar = () => {
           any={["SALE_READ", "REFUND_READ"]}
         />
         <NavItem
+            to="/report"
+            icon={PieChart}
+            label={t("reports")}
+            permission="REPORT_READ"
+          />
+        <NavItem
           to="/vat-report"
           icon={Percent}
           label={t("vatReport")}
-          permission="REPORT_READ"
-        />
-        <NavItem
-          to="/report"
-          icon={PieChart}
-          label={t("reports")}
           permission="REPORT_READ"
         />
       </Collapsible>
@@ -318,15 +318,7 @@ const Sidebar = () => {
           label={t("refunds")}
           permission="REFUND_READ"
         />
-      </Collapsible>
-
-      <NavItem
-        to="/ledger"
-        icon={LandmarkIcon}
-        label={t("ledger")}
-        permission="LEDGER_READ"
-      />
-      <NavItem
+              <NavItem
         to="/expenses"
         icon={Wallet}
         label={t("expenses")}
@@ -338,6 +330,15 @@ const Sidebar = () => {
         label={t("balanceAdjustments")}
         permission="BALANCE_ADJUSTMENT_READ"
       />
+      </Collapsible>
+
+      <NavItem
+        to="/ledger"
+        icon={LandmarkIcon}
+        label={t("ledger")}
+        permission="LEDGER_READ"
+      />
+
       <NavItem
         to="/users"
         icon={UserCog}
