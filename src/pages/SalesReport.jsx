@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useNavigationType } from "react-router-dom";
 import { format } from "date-fns";
 import { Filter, Search, X, RefreshCw, Check, ChevronUp } from "lucide-react";
 
@@ -52,13 +53,25 @@ const defaultFilters = () => ({
   order: "desc", // desc = newest first
 });
 
-// Lets a visit to Edit Sale (via the row actions dropdown) come right back
-// to this exact search — same filters, tab, and page — instead of resetting.
+// Lets a visit to Edit Sale / Edit Refund (via the row actions dropdown) come
+// right back to this exact search — same filters, tab, and page — instead of
+// resetting. It ONLY applies when returning here by going BACK (Go Back button
+// or browser back); opening the page any other way (sidebar link, etc.) starts
+// from a clean slate, so filters never leak from one visit to the next.
 // sessionStorage (not localStorage) so it's scoped to this tab and clears
 // itself once the tab closes. Written by detailedReport.jsx's Edit Invoice
 // click and read back once here on mount.
 const STORAGE_KEY = "salesReport:state";
 const SCROLL_STORAGE_KEY = "salesReport:scrollY";
+
+function clearSavedState() {
+  try {
+    sessionStorage.removeItem(STORAGE_KEY);
+    sessionStorage.removeItem(SCROLL_STORAGE_KEY);
+  } catch {
+    // sessionStorage unavailable — nothing to clear
+  }
+}
 
 function loadSavedState() {
   try {
@@ -85,9 +98,15 @@ export default function SalesReport() {
   const canFilterByAgent =
     hasPermission("SALE_VIEW_BRANCH") || hasPermission("SALE_VIEW_ALL");
 
-  // Computed once, on first render only — the snapshot (if any) left behind
-  // before navigating away to edit a sale.
-  const [saved] = useState(loadSavedState);
+  // Computed once, on first render only. The snapshot left behind before
+  // navigating away to edit a sale is restored only on a back navigation
+  // ("POP"); a normal visit (sidebar click = "PUSH"/"REPLACE") discards it.
+  const navigationType = useNavigationType();
+  const [saved] = useState(() => {
+    if (navigationType === "POP") return loadSavedState();
+    clearSavedState();
+    return null;
+  });
 
   // Default to whichever tab the user actually has access to
   const [activeTab, setActiveTab] = useState(
