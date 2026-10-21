@@ -220,6 +220,7 @@ export default function ReportPage() {
     paymentStatus: ALL,
     saleStatus: ALL,
     paymentMethod: ALL,
+    saleType: ALL,
   });
   // Start date is left blank on purpose — the report shows nothing until
   // the user picks one and hits Apply. End date defaults to today, since
@@ -443,7 +444,7 @@ export default function ReportPage() {
 
   // Scoped to just the Advanced Filters panel — Branch/Agent/Date Range now
   // live in the header and aren't touched by this "Clear all".
-  const ADVANCED_KEYS = ["vendorId", "customerId", "airlineCode", "paymentStatus", "saleStatus", "paymentMethod"];
+  const ADVANCED_KEYS = ["vendorId", "customerId", "airlineCode", "paymentStatus", "saleStatus", "paymentMethod", "saleType"];
   const hasActiveAdvancedFilters = ADVANCED_KEYS.some((k) => draftFilters[k] !== ALL);
   const clearAdvancedFilters = () => {
     const next = { ...draftFilters };
@@ -474,7 +475,7 @@ export default function ReportPage() {
   // actually live in that panel (main ones are already visible in the header).
   const advancedActiveCount =
     advancedFilterFields.filter(({ key }) => applied.filters[key] !== ALL).length +
-    ["airlineCode", "paymentStatus", "saleStatus", "paymentMethod"].filter(
+    ["airlineCode", "paymentStatus", "saleStatus", "paymentMethod", "saleType"].filter(
       (key) => applied.filters[key] !== ALL,
     ).length;
 
@@ -731,6 +732,24 @@ export default function ReportPage() {
                         {m.replace("_", " ")}
                       </SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-slate-500">
+                  Sale Type
+                </Label>
+                <Select
+                  value={draftFilters.saleType}
+                  onValueChange={setDraftFilter("saleType")}
+                >
+                  <SelectTrigger size="sm" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL}>Airline &amp; Hotel</SelectItem>
+                    <SelectItem value="AIRLINE">Airline</SelectItem>
+                    <SelectItem value="HOTEL">Hotel</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

@@ -40,6 +40,7 @@ import ManageDestinationsDialog from "./ManageDestinationsDialog";
 import PaymentDialog from "./PaymentDialog";
 import { appToast } from "../../shadcn/components/ui/appToast";
 import { computePaymentBreakdown } from "./paymentBreakdown";
+import { HOTEL_ICAO } from "../utils/hotelText";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
@@ -458,7 +459,9 @@ export default function SalesTabComponent() {
   }, [addSaleRow]);
 
   /* ── Options ── */
-  const airlineOptions = airlines.map((a) => ({
+  const airlineOptions = airlines
+    .filter((a) => !HOTEL_ICAO.has(a.icao_code))
+    .map((a) => ({
     value: a.id,
     label: `${a.airlineCode} - ${a.iataName}`,
   }));

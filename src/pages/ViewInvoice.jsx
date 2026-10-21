@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { format } from "date-fns";
+import { hotelStayText, isHotelSale, storedNights } from "../utils/hotelText";
 import {
   Loader2,
   AlertCircle,
@@ -194,15 +195,29 @@ function SaleCard({ sale, index }) {
       <div className="p-5 space-y-4">
         {/* Core details */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-          <Field label="Passenger" value={sale.paxName} highlight />
+          <Field label={isHotelSale(sale) ? "Guest" : "Passenger"} value={sale.paxName} highlight />
           <Field
-            label="Airline"
-            value={sale.airline ? `${sale.airline.airlineCode} — ${sale.airline.airlineName}` : "N/A"}
+            label={isHotelSale(sale) ? "Hotel Type" : "Airline"}
+            value={
+              isHotelSale(sale)
+                ? sale.airline?.airlineName || "N/A"
+                : sale.airline ? `${sale.airline.airlineCode} — ${sale.airline.airlineName}` : "N/A"
+            }
           />
-          <Field label="Route" value={route || "N/A"} />
+          <Field
+            label={isHotelSale(sale) ? "Stay" : "Route"}
+            value={isHotelSale(sale) ? hotelStayText(sale) : route || "N/A"}
+          />
           <Field label="Vendor" value={sale.vendor?.vendorName || "N/A"} />
           <Field label="Customer" value={sale.customer?.customerName || "Walk-in"} />
-          <Field label="Trip Type" value={sale.tripType || "N/A"} />
+          <Field
+            label={isHotelSale(sale) ? "Nights" : "Trip Type"}
+            value={
+              isHotelSale(sale)
+                ? `${storedNights(sale.checkInDate, sale.checkOutDate)}`
+                : sale.tripType || "N/A"
+            }
+          />
         </div>
 
         <div className="h-px bg-slate-100" />

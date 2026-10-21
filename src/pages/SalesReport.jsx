@@ -48,6 +48,7 @@ const defaultFilters = () => ({
   searchBy: "all",
   agent: "all",
   branch: "all",
+  saleType: "all", // all | AIRLINE | HOTEL
   order: "desc", // desc = newest first
 });
 
@@ -187,6 +188,8 @@ export default function SalesReport() {
         params.set(agentKey, filters.agent);
       if (canViewAllBranches && filters.branch !== "all")
         params.set("branchId", filters.branch);
+      if (filters.saleType && filters.saleType !== "all")
+        params.set("saleType", filters.saleType);
       params.set(orderKey, filters.order);
       params.set("tz", Intl.DateTimeFormat().resolvedOptions().timeZone);
       return params.toString();
@@ -424,9 +427,11 @@ export default function SalesReport() {
   // Scoped to just the Advanced Filters panel — Search/Date/Branch/Agent
   // live in the header and aren't touched by this "Clear all".
   const hasActiveFilters =
-    draftFilters.searchBy !== "all" || draftFilters.order !== "desc";
+    draftFilters.searchBy !== "all" ||
+    draftFilters.order !== "desc" ||
+    (draftFilters.saleType ?? "all") !== "all";
   const clearFilters = () => {
-    const next = { ...draftFilters, searchBy: "all", order: "desc" };
+    const next = { ...draftFilters, searchBy: "all", order: "desc", saleType: "all" };
     setDraftFilters(next);
     setApplied((a) => ({ ...a, filters: next }));
     setSalesPage(1);
@@ -434,7 +439,8 @@ export default function SalesReport() {
   };
   const advancedActiveCount =
     (applied.filters.searchBy !== "all" ? 1 : 0) +
-    (applied.filters.order !== "desc" ? 1 : 0);
+    (applied.filters.order !== "desc" ? 1 : 0) +
+    ((applied.filters.saleType ?? "all") !== "all" ? 1 : 0);
 
   const activeLoading = activeTab === "detailed" ? loading : refundLoading;
   const handleRefresh = () => {
@@ -679,6 +685,27 @@ export default function SalesReport() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {activeTab === "detailed" && (
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium text-slate-500">
+                    Sale Type
+                  </Label>
+                  <Select
+                    value={draftFilters.saleType ?? "all"}
+                    onValueChange={(v) => setField("saleType", v)}
+                  >
+                    <SelectTrigger size="sm" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All (Airline &amp; Hotel)</SelectItem>
+                      <SelectItem value="AIRLINE">Airline</SelectItem>
+                      <SelectItem value="HOTEL">Hotel</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">

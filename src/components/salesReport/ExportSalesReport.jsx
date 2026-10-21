@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "../../../shadcn/components/ui/dialog";
 import { tabbyFromNet } from "../paymentBreakdown";
+import { formatStay, storedNights } from "../../utils/stayDates";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 const authHeaders = () => ({
@@ -138,6 +139,16 @@ const FIELD_GROUPS = [
       },
       { key: "posCommission", label: "POS Commission", get: (s) => posSum(s, "commission") },
       { key: "posNetAmount", label: "POS Net Amount", get: (s) => posSum(s, "net") },
+    ],
+  },
+  {
+    group: "Hotel Details",
+    fields: [
+      { key: "saleType", label: "Sale Type", get: (s) => (s.saleType === "HOTEL" ? "Hotel" : "Airline") },
+      { key: "hotelName", label: "Hotel Name", get: (s) => s.hotelName || "" },
+      { key: "checkInDate", label: "Check-in", get: (s) => (s.checkInDate ? formatStay(s.checkInDate, "yyyy-MM-dd") : "") },
+      { key: "checkOutDate", label: "Check-out", get: (s) => (s.checkOutDate ? formatStay(s.checkOutDate, "yyyy-MM-dd") : "") },
+      { key: "nights", label: "Nights", get: (s) => (s.checkInDate && s.checkOutDate ? storedNights(s.checkInDate, s.checkOutDate) : "") },
     ],
   },
   {

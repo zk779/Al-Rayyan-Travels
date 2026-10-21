@@ -65,6 +65,7 @@ import {
 // Import your reusable component
 import CustomAlertDialog from "../CustomAlertDialog";
 import { ExpandableSaleRow } from "../ViewSaleData";
+import { formatStay, storedNights } from "../../utils/stayDates";
 import { HistoryDialog } from "../SaleHistory";
 import SalePayment from "../PaymentComponents/SalePayment";
 
@@ -200,7 +201,7 @@ export default function DetailedReportTab({
 
   const navigate = useNavigate();
 
-  const handleEdit = (invoiceId) => {
+  const handleEdit = (invoiceId, saleType) => {
     if (!canEditSale) return; // ✅ RBAC guard
     if (!invoiceId) return;
     // Remembered by SalesReport.jsx so coming back (Back button / browser
@@ -210,7 +211,11 @@ export default function DetailedReportTab({
     } catch {
       // sessionStorage unavailable — scroll just won't be restored
     }
-    navigate(`/edit-services/${invoiceId}`);
+    navigate(
+      String(saleType).toUpperCase() === "HOTEL"
+        ? `/edit-hotel-booking/${invoiceId}`
+        : `/edit-services/${invoiceId}`,
+    );
   };
   const GenerateInvoice = (id) => {
     if (!id) return;
@@ -548,10 +553,33 @@ export default function DetailedReportTab({
                             <TableCell>
                               <Badge
                                 variant="secondary"
-                                className="bg-blue-50 text-blue-700"
+                                className={
+                                  sale.saleType === "HOTEL"
+                                    ? "bg-teal-50 text-teal-700"
+                                    : "bg-blue-50 text-blue-700"
+                                }
+                                title={
+                                  sale.saleType === "HOTEL"
+                                    ? [sale.hotelName, sale.airlineName].filter(Boolean).join(" · ")
+                                    : undefined
+                                }
                               >
-                                {sale.airlineCode}
+                                {sale.saleType === "HOTEL"
+                                  ? sale.airlineName || "Hotel"
+                                  : sale.airlineCode}
                               </Badge>
+                              {sale.saleType === "HOTEL" && (
+                                <div className="mt-1 text-[10px] leading-tight text-slate-500 whitespace-nowrap">
+                                  {sale.hotelName && (
+                                    <div className="max-w-[150px] truncate font-medium text-slate-600" title={sale.hotelName}>
+                                      {sale.hotelName}
+                                    </div>
+                                  )}
+                                  {sale.checkInDate && sale.checkOutDate
+                                    ? `${formatStay(sale.checkInDate, "dd MMM")} → ${formatStay(sale.checkOutDate, "dd MMM yy")} · ${storedNights(sale.checkInDate, sale.checkOutDate)}N`
+                                    : null}
+                                </div>
+                              )}
                             </TableCell>
                             <TableCell className="font-mono text-sm">
                               <CopyableCell value={sale.documentNo}>
@@ -669,7 +697,7 @@ export default function DetailedReportTab({
                                       {canEditSale && (
                                         <DropdownMenuItem
                                           onClick={() =>
-                                            handleEdit(sale.invoiceId)
+                                            handleEdit(sale.invoiceId, sale.saleType)
                                           }
                                         >
                                           <Edit className="mr-2 h-4 w-4" />

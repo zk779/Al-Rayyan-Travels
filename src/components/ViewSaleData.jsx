@@ -18,10 +18,14 @@ import {
   Wallet,
   Building2,
   Banknote,
-  Terminal,
+    Terminal,
   SplitSquareHorizontal,
   SaudiRiyal,
+  Hotel,
+  MapPin,
+  Moon,
 } from "lucide-react";
+import { formatStay, storedNights } from "../utils/stayDates";
 import { Badge } from "../../shadcn/components/ui/badge";
 import { TableCell, TableRow } from "../../shadcn/components/ui/table";
 import { cn } from "../../shadcn/lib/utils";
@@ -65,6 +69,7 @@ const TINT = {
   emerald: { border: "border-emerald-200", bg: "bg-emerald-50/40", chip: "bg-emerald-100 text-emerald-600" },
   rose: { border: "border-rose-200", bg: "bg-rose-50/40", chip: "bg-rose-100 text-rose-600" },
   amber: { border: "border-amber-200", bg: "bg-amber-50/40", chip: "bg-amber-100 text-amber-600" },
+  teal: { border: "border-teal-200", bg: "bg-teal-50/50", chip: "bg-teal-100 text-teal-600" },
 };
 
 const pill = (label, map) => (
@@ -205,6 +210,33 @@ function buildSections(invoice, sale) {
   //     </div>
   //   ),
   // });
+
+  if (String(sale.saleType).toUpperCase() === "HOTEL") {
+    const nights = storedNights(sale.checkInDate, sale.checkOutDate);
+    const cities = (sale.destinations || [])
+      .map((d) => d.airport?.city || d.value)
+      .filter(Boolean)
+      .join(", ");
+    sections.push({
+      key: "hotelStay",
+      label: "Hotel Stay",
+      icon: Hotel,
+      tint: "teal",
+      full: true,
+      content: (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+          <Field label="Hotel" value={sale.hotelName || "Not specified"} icon={Hotel} />
+          <Field label="Type" value={sale.airlineName} />
+          <Field label="City" value={cities || "N/A"} icon={MapPin} />
+          <Field label="Nights" value={nights ? String(nights) : "N/A"} icon={Moon} />
+          <Field label="Check-in" value={formatStay(sale.checkInDate)} icon={Calendar} />
+          <Field label="Check-out" value={formatStay(sale.checkOutDate)} icon={Calendar} />
+          <Field label="Guest" value={sale.paxName || "N/A"} icon={User} />
+          <Field label="Confirmation No." value={sale.pnr || "N/A"} icon={Hash} mono />
+        </div>
+      ),
+    });
+  }
 
   if (sale.customerId) {
     sections.push({

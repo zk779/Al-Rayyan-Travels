@@ -16,7 +16,8 @@ import {
   RotateCcwIcon,
   LandmarkIcon,
     Wallet,
-  Scale,
+    Scale,
+  Hotel,
   UserCog,
   LogOut,
   Menu,
@@ -276,6 +277,12 @@ const Sidebar = () => {
           to="/new-services"
           icon={Plus}
           label={t("newServices")}
+          permission="SALE_CREATE"
+        />
+        <NavItem
+          to="/new-hotel-booking"
+          icon={Hotel}
+          label={t("hotelBooking")}
           permission="SALE_CREATE"
         />
         <NavItem

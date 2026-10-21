@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import ZATCAQRCode from "../components/ZATCAQRGenerator";
+import { hotelStayText, hotelDescription } from "../utils/hotelText";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
@@ -391,7 +392,9 @@ const InvoicePrint = () => {
                   Description / الوصف :
                 </div>
                 <div className="text-gray-500 font-medium">
-                  {invoiceData.routeType === "MIXED"
+                  {invoiceData.saleType === "HOTEL"
+                    ? hotelDescription(invoiceData)
+                    : invoiceData.routeType === "MIXED"
                     ? "International Ticket – KSA Origin / تذكرة دولية – المغادرة من السعودية"
                     : invoiceData.routeType === "DOMESTIC"
                       ? "Domestic Airline Ticket / تذكرة طيران محلية"
@@ -709,7 +712,9 @@ const InvoicePrint = () => {
                       </td>
 
                       <td className="border-r border-gray-300 px-1.5 py-1.5 font-medium break-words">
-                        {formatDestinations(invoiceData.destinations)}
+                        {invoiceData.saleType === "HOTEL"
+                          ? hotelStayText(invoiceData)
+                          : formatDestinations(invoiceData.destinations)}
                       </td>
 
                       <td className="border-r border-gray-300 px-1.5 py-1.5 text-right font-semibold text-green-700 break-words">

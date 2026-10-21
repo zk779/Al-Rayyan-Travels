@@ -16,6 +16,8 @@ import ProfilePage from "./pages/Profile";
 import Dashboard from "./pages/Dashboard";
 import Expense from "./pages/Expense";
 import BalanceAdjustment from "./pages/BalanceAdjustment";
+import NewHotelBooking from "./pages/NewHotelBooking";
+import EditHotelBooking from "./pages/EditHotelBooking";
 import ReportPage from "./pages/ReportPage";
 import VatReport from "./pages/VatReport";
 import LoginPage from "./pages/Login";
@@ -72,6 +74,22 @@ function App() {
 										element={
 											<PermissionRoute permission="SALE_CREATE">
 												<NewServices />
+											</PermissionRoute>
+										}
+									/>
+									<Route
+										path="new-hotel-booking"
+										element={
+											<PermissionRoute permission="SALE_CREATE">
+												<NewHotelBooking />
+											</PermissionRoute>
+										}
+									/>
+									<Route
+										path="edit-hotel-booking/:invoiceId"
+										element={
+											<PermissionRoute permission="SALE_EDIT">
+												<EditHotelBooking />
 											</PermissionRoute>
 										}
 									/>
