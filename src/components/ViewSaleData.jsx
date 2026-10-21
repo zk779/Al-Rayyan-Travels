@@ -18,6 +18,7 @@ import {
   Wallet,
   Building2,
   Banknote,
+  Terminal,
   SplitSquareHorizontal,
   SaudiRiyal,
 } from "lucide-react";
@@ -52,6 +53,7 @@ const statusColor = {
 const LEG_META = {
   CASH: { icon: Banknote, chip: "bg-emerald-100 text-emerald-600", border: "border-emerald-200", bg: "bg-emerald-50/60" },
   BANK_TRANSFER: { icon: Building2, chip: "bg-blue-100 text-blue-600", border: "border-blue-200", bg: "bg-blue-50/60" },
+  POS: { icon: Terminal, chip: "bg-cyan-100 text-cyan-600", border: "border-cyan-200", bg: "bg-cyan-50/60" },
   CREDIT: { icon: CreditCard, chip: "bg-violet-100 text-violet-600", border: "border-violet-200", bg: "bg-violet-50/60" },
 };
 
@@ -277,6 +279,15 @@ function buildSections(invoice, sale) {
                   </div>
                   <p className="text-[10px] text-gray-500 truncate">
                     {leg.method === "BANK_TRANSFER" && leg.bankName}
+                    {leg.method === "POS" &&
+                      [
+                        leg.posBankName,
+                        leg.posTerminalId && `Terminal ${leg.posTerminalId}`,
+                        leg.posCardType &&
+                          `${leg.posCardType}${leg.posCommissionRate != null ? ` (${leg.posCommissionRate}%)` : ""}`,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
                     {leg.method === "CREDIT" && leg.customerName}
                     {leg.method === "CASH" && "Cash in hand"}
                     {leg.paymentDate && ` • ${format(new Date(leg.paymentDate), "MMM dd, yyyy")}`}

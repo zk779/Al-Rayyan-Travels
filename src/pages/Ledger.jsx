@@ -342,15 +342,34 @@ function PaymentDetail({ payment }) {
 					</div>
 				</div>
 			)}
-			{payment.bank?.bankName && (
-				<div className="flex items-start gap-2">
-					<Building2 className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />
-					<div>
-						<p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Bank</p>
-						<p className="text-xs font-semibold text-gray-800">{payment.bank.bankName}</p>
+			{(payment.bank?.bankName || payment.pos?.bank?.bankName) && (
+					<div className="flex items-start gap-2">
+						<Building2 className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />
+						<div>
+							<p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Bank</p>
+							<p className="text-xs font-semibold text-gray-800">
+								{payment.bank?.bankName || payment.pos?.bank?.bankName}
+							</p>
+						</div>
 					</div>
-				</div>
-			)}
+				)}
+				{payment.pos && (
+					<div className="flex items-start gap-2">
+						<Banknote className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />
+						<div>
+							<p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">POS</p>
+							<p className="text-xs font-semibold text-gray-800">
+								{[
+									payment.pos.terminalId && `Terminal ${payment.pos.terminalId}`,
+									payment.posCardType &&
+										`${payment.posCardType}${payment.posCommissionRate != null ? ` (${payment.posCommissionRate}%)` : ""}`,
+								]
+									.filter(Boolean)
+									.join(" · ")}
+							</p>
+						</div>
+					</div>
+				)}
 			{payment.customer?.customerName && (
 				<div className="flex items-start gap-2">
 					<Users className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />

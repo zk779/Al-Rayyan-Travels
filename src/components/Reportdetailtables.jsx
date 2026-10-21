@@ -145,6 +145,9 @@ export default function ReportDetailTables({ sales = [], refunds = [], expenses 
     return tabbyFromNet(sale.sellPrice);
   };
   const hasTabbyRows = sales.some((s) => tabbyBreakdown(s) != null);
+  // POS rows come pre-computed from the backend (order amount reverse-calculated
+  // from the stored net amount + commission rate, per POS leg).
+  const hasPosRows = sales.some((s) => s.hasPos);
 
   const salesSearch = usePagedSearch(sales, [
     "invoiceNumber",
@@ -169,7 +172,7 @@ export default function ReportDetailTables({ sales = [], refunds = [], expenses 
     if (tab === "sales") {
       downloadCsv(
         `sales-detail-${format(new Date(), "yyyyMMdd-HHmm")}.csv`,
-        ["Date", "Invoice #", "Airline", "Vendor", "Customer", "Tabby/Tamara Order Price", "Agent", "Method", "Payment Status", "Status", "Net", "Sell", "VAT", "Profit", "Paid"],
+        ["Date", "Invoice #", "Airline", "Vendor", "Customer", "Tabby/Tamara Order Price", "POS Order Amount", "POS Card Type", "POS Commission Rate", "POS Commission", "POS Net Amount", "Agent", "Method", "Payment Status", "Status", "Net", "Sell", "VAT", "Profit", "Paid"],
         salesSearch.filtered.map((s) => [
           s.date ? format(new Date(s.date), "yyyy-MM-dd") : "",
           s.invoiceNumber,
@@ -177,6 +180,13 @@ export default function ReportDetailTables({ sales = [], refunds = [], expenses 
           s.vendor,
           s.customer || "Walk-in",
           tabbyBreakdown(s)?.orderAmount?.toFixed(2) || "",
+          s.hasPos ? s.posOrderAmount?.toFixed(2) : "",
+          s.hasPos ? s.posLegs.map((l) => l.cardType || "").filter(Boolean).join(" / ") : "",
+          s.hasPos
+            ? s.posLegs.map((l) => (l.commissionRate != null ? `${l.commissionRate}%` : "")).filter(Boolean).join(" / ")
+            : "",
+          s.hasPos ? s.posCommission?.toFixed(2) : "",
+          s.hasPos ? s.posNetAmount?.toFixed(2) : "",
           s.agent,
           s.paymentMethod,
           s.paymentStatus,
@@ -231,6 +241,9 @@ export default function ReportDetailTables({ sales = [], refunds = [], expenses 
         { label: "Sell total", value: money(rows.reduce((s, r) => s + (r.sellPrice || 0), 0)) },
         { label: "Profit total", value: money(rows.reduce((s, r) => s + (r.profit || 0), 0)) },
         { label: "VAT total", value: money(rows.reduce((s, r) => s + (r.vatTotal || 0), 0)) },
+        ...(rows.some((r) => r.hasPos)
+          ? [{ label: "POS order total", value: money(rows.reduce((s, r) => s + (r.posOrderAmount || 0), 0)) }]
+          : []),
       ];
     }
     if (tab === "refunds") {
@@ -321,6 +334,7 @@ export default function ReportDetailTables({ sales = [], refunds = [], expenses 
                         {hasTabbyRows && (
                           <TableHead className="">Tabby/Tamara OP</TableHead>
                         )}
+                        {hasPosRows && <TableHead className="">POS Order Amount</TableHead>}
                         <TableHead className="">Net</TableHead>
                         <TableHead className="">Sell</TableHead>
                         <TableHead className="">VAT</TableHead>
@@ -375,6 +389,53 @@ export default function ReportDetailTables({ sales = [], refunds = [], expenses 
                                           <span className="opacity-80">Sell Amount</span>
                                           <span className="font-semibold">{money(tb.netAmount)}</span>
                                         </div>
+                                      </div>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </span>
+                              ) : (
+                                <span className="text-slate-300">—</span>
+                              )}
+                            </TableCell>
+                          )}
+                          {hasPosRows && (
+                            <TableCell className="text-right tabular-nums text-cyan-700">
+                              {s.hasPos ? (
+                                <span className="inline-flex items-center justify-end gap-1">
+                                  {money(s.posOrderAmount)}
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Info className="h-3 w-3 text-cyan-400 hover:text-cyan-600 cursor-help shrink-0" />
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top">
+                                      <div className="space-y-2 min-w-[190px]">
+                                        {s.posLegs.map((l, i) => (
+                                          <div key={i} className="space-y-1">
+                                            <div className="font-semibold">
+                                              {l.cardType || "POS"}
+                                              {l.commissionRate != null ? ` (${l.commissionRate}%)` : ""}
+                                            </div>
+                                            {(l.bankName || l.terminalId) && (
+                                              <div className="opacity-70 text-[11px]">
+                                                {[l.bankName, l.terminalId && `Terminal ${l.terminalId}`]
+                                                  .filter(Boolean)
+                                                  .join(" · ")}
+                                              </div>
+                                            )}
+                                            <div className="flex justify-between gap-4">
+                                              <span className="opacity-80">Order Amount</span>
+                                              <span className="font-semibold">{money(l.orderAmount)}</span>
+                                            </div>
+                                            <div className="flex justify-between gap-4">
+                                              <span className="opacity-80">Commission</span>
+                                              <span className="font-semibold">{money(l.commission)}</span>
+                                            </div>
+                                            <div className="flex justify-between gap-4 border-t border-white/20 pt-1">
+                                              <span className="opacity-80">Net Amount</span>
+                                              <span className="font-semibold">{money(l.netAmount)}</span>
+                                            </div>
+                                          </div>
+                                        ))}
                                       </div>
                                     </TooltipContent>
                                   </Tooltip>

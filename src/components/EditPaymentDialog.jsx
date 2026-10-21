@@ -76,6 +76,13 @@ const PARTIAL_COMBOS = [
     a: "BANK_TRANSFER",
     b: "CREDIT",
   },
+  {
+    value: "POS+BANK_TRANSFER",
+    label: "POS + Bank Transfer",
+    a: "POS",
+    b: "BANK_TRANSFER",
+  },
+  { value: "POS+CASH", label: "POS + Cash", a: "POS", b: "CASH" },
 ];
 
 const colorMap = {
@@ -213,6 +220,14 @@ const emptyPartial = (combo = "") => ({
   bBankId: "",
   aOrderAmount: "",
   bOrderAmount: "",
+  aPosId: "",
+  bPosId: "",
+  aPosCardType: "",
+  bPosCardType: "",
+  aPosCommissionRate: null,
+  bPosCommissionRate: null,
+  aPosOrderAmount: "",
+  bPosOrderAmount: "",
 });
 
 /* ─── Resolves initial state from sale prop ─────────────────
@@ -259,6 +274,14 @@ function resolveState(sale, sell) {
         bBankId: meta.bBankId ?? "",
         aOrderAmount: meta.aOrderAmount ?? "",
         bOrderAmount: meta.bOrderAmount ?? "",
+        aPosId: meta.aPosId ?? "",
+        bPosId: meta.bPosId ?? "",
+        aPosCardType: meta.aPosCardType ?? "",
+        bPosCardType: meta.bPosCardType ?? "",
+        aPosCommissionRate: meta.aPosCommissionRate ?? null,
+        bPosCommissionRate: meta.bPosCommissionRate ?? null,
+        aPosOrderAmount: meta.aPosOrderAmount ?? "",
+        bPosOrderAmount: meta.bPosOrderAmount ?? "",
       },
     };
   }
@@ -268,11 +291,17 @@ function resolveState(sale, sell) {
     Array.isArray(sale.payments) &&
     sale.payments.length >= 2
   ) {
-    const legA = sale.payments[0];
-    const legB = sale.payments[1];
-    const mA = String(legA?.method || "").toUpperCase();
-    const mB = String(legB?.method || "").toUpperCase();
-    const found = PARTIAL_COMBOS.find((c) => c.value === `${mA}+${mB}`);
+    const methodOf = (l) => String(l?.method || "").toUpperCase();
+    const first = sale.payments[0];
+    const second = sale.payments[1];
+    const m1 = methodOf(first);
+    const m2 = methodOf(second);
+    const found = PARTIAL_COMBOS.find(
+      (c) => (c.a === m1 && c.b === m2) || (c.a === m2 && c.b === m1),
+    );
+    const swapped = !!found && !(found.a === m1 && found.b === m2);
+    const legA = swapped ? second : first;
+    const legB = swapped ? first : second;
     return {
       mode: "PARTIAL",
       amount: "",
@@ -293,6 +322,16 @@ function resolveState(sale, sell) {
         bBankId: legB?.bank?.id ?? legB?.bankId ?? "",
         aOrderAmount: "",
         bOrderAmount: "",
+        aPosId: legA?.pos?.id ?? legA?.posId ?? "",
+        bPosId: legB?.pos?.id ?? legB?.posId ?? "",
+        aPosCardType: legA?.posCardType ?? "",
+        bPosCardType: legB?.posCardType ?? "",
+        aPosCommissionRate: legA?.posCommissionRate ?? null,
+        bPosCommissionRate: legB?.posCommissionRate ?? null,
+        // Order Amount isn't persisted — PosFields reverse-calculates it from
+        // the saved net amount + commission rate when the dialog opens.
+        aPosOrderAmount: "",
+        bPosOrderAmount: "",
       },
     };
   }
@@ -671,6 +710,8 @@ export default function EditPaymentDialog({
   }, [open]);
 
   const patch = (obj) => setS((prev) => ({ ...prev, ...obj }));
+  const patchPartial = (obj) =>
+    setS((prev) => ({ ...prev, partial: { ...prev.partial, ...obj } }));
 
   const resetFields = () =>
     patch({
@@ -709,6 +750,54 @@ export default function EditPaymentDialog({
     getCustomerType(s.partial.bCustomerId, customerOptions) ===
       "TABBY_OR_TAMARA";
 
+  const partialHasPos = selectedCombo?.a === "POS" || selectedCombo?.b === "POS";
+
+  // One half of a split payment: a POS leg gets the full machine → card
+  // type → order amount flow, every other method the regular slot fields.
+  const renderPartialSlot = (side) => {
+    const method = selectedCombo[side];
+    const set = (field) => (v) => patchPartial({ [`${side}${field}`]: v });
+
+    if (method === "POS") {
+      return (
+        <PosFields
+          posId={s.partial[`${side}PosId`]}
+          setPosId={set("PosId")}
+          posCardType={s.partial[`${side}PosCardType`]}
+          setPosCardType={set("PosCardType")}
+          posCommissionRate={s.partial[`${side}PosCommissionRate`]}
+          setPosCommissionRate={set("PosCommissionRate")}
+          posOrderAmount={s.partial[`${side}PosOrderAmount`]}
+          setPosOrderAmount={set("PosOrderAmount")}
+          amount={s.partial[`${side}Amount`]}
+          setAmount={set("Amount")}
+          posOptions={posOptions}
+        />
+      );
+    }
+
+    return (
+      <SlotFields
+        methodValue={method}
+        amount={s.partial[`${side}Amount`]}
+        setAmount={set("Amount")}
+        customerId={s.partial[`${side}CustomerId`]}
+        setCustomerId={(v) =>
+          patchPartial({
+            [`${side}CustomerId`]: v,
+            [`${side}OrderAmount`]: "",
+          })
+        }
+        bankId={s.partial[`${side}BankId`]}
+        setBankId={set("BankId")}
+        orderAmount={s.partial[`${side}OrderAmount`]}
+        setOrderAmount={set("OrderAmount")}
+        customerOptions={customerOptions}
+        bankOptions={bankOptions}
+      />
+    );
+  };
+
   const isValid = () => {
     if (!s.mode) return false;
     if (s.mode === "BANK_ACCOUNT") return false; // category screen only
@@ -730,6 +819,16 @@ export default function EditPaymentDialog({
         return false;
       if (selectedCombo?.b === "BANK_TRANSFER" && !s.partial.bBankId)
         return false;
+      for (const side of ["a", "b"]) {
+        if (selectedCombo?.[side] !== "POS") continue;
+        if (!s.partial[`${side}PosId`] || !s.partial[`${side}PosCardType`])
+          return false;
+        if (
+          !s.partial[`${side}PosOrderAmount`] ||
+          Number(s.partial[`${side}PosOrderAmount`]) <= 0
+        )
+          return false;
+      }
       if (
         aIsTabbyOrTamara &&
         (!s.partial.aOrderAmount || Number(s.partial.aOrderAmount) <= 0)
@@ -792,6 +891,29 @@ export default function EditPaymentDialog({
               bCustomerId: s.partial.bCustomerId || null,
               aBankId: s.partial.aBankId || null,
               bBankId: s.partial.bBankId || null,
+              // POS leg details — posOrderAmount is deliberately NOT named
+              // aOrderAmount/bOrderAmount, which the sale row treats as the
+              // Tabby/Tamara signal (and zeroes out Paid for).
+              aPosId: selectedCombo.a === "POS" ? s.partial.aPosId || null : null,
+              bPosId: selectedCombo.b === "POS" ? s.partial.bPosId || null : null,
+              aPosCardType:
+                selectedCombo.a === "POS" ? s.partial.aPosCardType || null : null,
+              bPosCardType:
+                selectedCombo.b === "POS" ? s.partial.bPosCardType || null : null,
+              aPosCommissionRate:
+                selectedCombo.a === "POS"
+                  ? (s.partial.aPosCommissionRate ?? null)
+                  : null,
+              bPosCommissionRate:
+                selectedCombo.b === "POS"
+                  ? (s.partial.bPosCommissionRate ?? null)
+                  : null,
+              ...(selectedCombo.a === "POS" && s.partial.aPosOrderAmount
+                ? { aPosOrderAmount: s.partial.aPosOrderAmount }
+                : {}),
+              ...(selectedCombo.b === "POS" && s.partial.bPosOrderAmount
+                ? { bPosOrderAmount: s.partial.bPosOrderAmount }
+                : {}),
               ...(aIsTabbyOrTamara
                 ? {
                     aOrderAmount: s.partial.aOrderAmount,
@@ -811,6 +933,9 @@ export default function EditPaymentDialog({
             },
             customerId: s.partial.aCustomerId || s.partial.bCustomerId || "",
             bankId: null,
+            posId: null,
+            posCardType: null,
+            posCommissionRate: null,
             // Only the CASH/BANK_TRANSFER leg counts as "paid" — the CREDIT
             // leg is a receivable, not cash received.
             paidAmount: String(partialPaidAmount),
@@ -849,7 +974,11 @@ export default function EditPaymentDialog({
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent
+          className={
+            s.mode === "PARTIAL" && partialHasPos ? "max-w-2xl" : "max-w-md"
+          }
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
               <CreditCard className="h-4 w-4" /> Edit Payment Method
@@ -1019,60 +1148,8 @@ export default function EditPaymentDialog({
 
               {selectedCombo && (
                 <div className="grid grid-cols-2 gap-3">
-                  <SlotFields
-                    methodValue={selectedCombo.a}
-                    amount={s.partial.aAmount}
-                    setAmount={(v) =>
-                      patch({ partial: { ...s.partial, aAmount: v } })
-                    }
-                    customerId={s.partial.aCustomerId}
-                    setCustomerId={(v) =>
-                      patch({
-                        partial: {
-                          ...s.partial,
-                          aCustomerId: v,
-                          aOrderAmount: "",
-                        },
-                      })
-                    }
-                    bankId={s.partial.aBankId}
-                    setBankId={(v) =>
-                      patch({ partial: { ...s.partial, aBankId: v } })
-                    }
-                    orderAmount={s.partial.aOrderAmount}
-                    setOrderAmount={(v) =>
-                      patch({ partial: { ...s.partial, aOrderAmount: v } })
-                    }
-                    customerOptions={customerOptions}
-                    bankOptions={bankOptions}
-                  />
-                  <SlotFields
-                    methodValue={selectedCombo.b}
-                    amount={s.partial.bAmount}
-                    setAmount={(v) =>
-                      patch({ partial: { ...s.partial, bAmount: v } })
-                    }
-                    customerId={s.partial.bCustomerId}
-                    setCustomerId={(v) =>
-                      patch({
-                        partial: {
-                          ...s.partial,
-                          bCustomerId: v,
-                          bOrderAmount: "",
-                        },
-                      })
-                    }
-                    bankId={s.partial.bBankId}
-                    setBankId={(v) =>
-                      patch({ partial: { ...s.partial, bBankId: v } })
-                    }
-                    orderAmount={s.partial.bOrderAmount}
-                    setOrderAmount={(v) =>
-                      patch({ partial: { ...s.partial, bOrderAmount: v } })
-                    }
-                    customerOptions={customerOptions}
-                    bankOptions={bankOptions}
-                  />
+                  {renderPartialSlot("a")}
+                  {renderPartialSlot("b")}
                 </div>
               )}
 

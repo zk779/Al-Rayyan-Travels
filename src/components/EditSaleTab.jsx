@@ -448,12 +448,18 @@ export default function EditSalesTab({ saleId }) {
                   amount: Number(s.paymentMeta.aAmount),
                   bankId: s.paymentMeta.aBankId || null,
                   customerId: s.paymentMeta.aCustomerId || null,
+                  posId: s.paymentMeta.aPosId || null,
+                  posCardType: s.paymentMeta.aPosCardType || null,
+                  posCommissionRate: s.paymentMeta.aPosCommissionRate ?? null,
                 },
                 {
                   method: s.paymentMeta.bMethod,
                   amount: Number(s.paymentMeta.bAmount),
                   bankId: s.paymentMeta.bBankId || null,
                   customerId: s.paymentMeta.bCustomerId || null,
+                  posId: s.paymentMeta.bPosId || null,
+                  posCardType: s.paymentMeta.bPosCardType || null,
+                  posCommissionRate: s.paymentMeta.bPosCommissionRate ?? null,
                 },
               ]
             : String(s.paymentType).toUpperCase() === "PARTIAL" &&
@@ -464,6 +470,9 @@ export default function EditSalesTab({ saleId }) {
                   amount: Number(leg.amount),
                   bankId: leg.bank?.id || leg.bankId || null,
                   customerId: leg.customer?.id || leg.customerId || null,
+                  posId: leg.pos?.id || leg.posId || null,
+                  posCardType: leg.posCardType || null,
+                  posCommissionRate: leg.posCommissionRate ?? null,
                 }))
               : null,
         remarks: s.remarks || null,

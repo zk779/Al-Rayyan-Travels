@@ -14,7 +14,8 @@ import {
   Users2,
   Store,
   X,
-  Percent,
+    Percent,
+  Terminal,
   Globe2,
   ChevronUp,
   Check,
@@ -82,7 +83,7 @@ const CHART_COLORS = [
 ];
 const PAYMENT_STATUSES = ["DUE", "PARTIAL", "PAID"];
 const SALE_STATUSES = ["PENDING", "COMPLETED", "CANCELLED", "REFUNDED"];
-const PAYMENT_METHODS = ["CASH", "CREDIT", "BANK_TRANSFER", "PARTIAL"];
+const PAYMENT_METHODS = ["CASH", "CREDIT", "BANK_TRANSFER", "POS", "PARTIAL"];
 const ALL = "__all__";
 
 // Length-based fallback so a big number never gets clipped/truncated —
@@ -102,7 +103,8 @@ function KpiCard({ label, value, sub, icon: Icon, trend, tone = "slate" }) {
     rose: "from-rose-500 to-rose-700",
     indigo: "from-indigo-500 to-indigo-700",
     amber: "from-amber-500 to-amber-700",
-    sky: "from-sky-500 to-sky-700",
+        sky: "from-sky-500 to-sky-700",
+    cyan: "from-cyan-500 to-cyan-700",
   };
   return (
     <Card className="relative overflow-hidden border-slate-100 shadow-sm hover:shadow-md transition-shadow py-0 gap-0">
@@ -872,9 +874,74 @@ export default function ReportPage() {
               icon={Undo2}
               tone="slate"
             />
+            <KpiCard
+              label="POS Order Amount"
+              value={money(t.totalPosOrderAmount)}
+              sub={`${t.posSalesCount || 0} POS sales (original swiped amount)`}
+              icon={Terminal}
+              tone="cyan"
+            />
+            <KpiCard
+              label="POS Net Received"
+              value={money(t.totalPosNetAmount)}
+              sub="Order amount after commission"
+              icon={Terminal}
+              tone="cyan"
+            />
+            <KpiCard
+              label="POS Commission"
+              value={money(t.totalPosCommission)}
+              sub="Order − Net (informational)"
+              icon={Percent}
+              tone="amber"
+            />
           </>
         )}
       </div>
+
+      {/* POS stats by card type — only when the period has POS sales */}
+      {t.posByCardType?.length > 0 && (
+        <Card className="border-slate-200 py-5 gap-3">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Terminal className="h-4 w-4 text-cyan-600" /> POS Sales by Card Type
+            </CardTitle>
+            <CardDescription>
+              Original order amount, commission and net received for POS and split-POS payments
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Card Type</TableHead>
+                    <TableHead className="text-right">Rate</TableHead>
+                    <TableHead className="text-right">Payments</TableHead>
+                    <TableHead className="text-right">Order Amount</TableHead>
+                    <TableHead className="text-right">Commission</TableHead>
+                    <TableHead className="text-right">Net Received</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {t.posByCardType.map((c) => (
+                    <TableRow key={c.cardType}>
+                      <TableCell className="font-medium">{c.cardType}</TableCell>
+                      <TableCell className="text-right tabular-nums text-slate-500">
+                        {c.commissionRate != null ? `${c.commissionRate}%` : "—"}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">{c.count}</TableCell>
+                      <TableCell className="text-right tabular-nums text-cyan-700">{money(c.orderAmount)}</TableCell>
+                      <TableCell className="text-right tabular-nums text-amber-700">{money(c.commission)}</TableCell>
+                      <TableCell className="text-right tabular-nums font-medium">{money(c.netAmount)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Full row-level detail — sales / refunds / expenses, searchable & paginated */}
       <ReportDetailTables

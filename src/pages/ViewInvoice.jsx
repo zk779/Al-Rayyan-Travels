@@ -143,7 +143,18 @@ function PaymentDetail({ sale }) {
     return (
       <span>
         {(ps.legs || [])
-          .map((l) => `${l.method} (${Number(l.amount || 0).toFixed(2)})`)
+          .map((l) => {
+            const amt = Number(l.amount || 0).toFixed(2);
+            if (l.method !== "POS") return `${l.method} (${amt})`;
+            const extra = [
+              l.posBankName,
+              l.posCardType &&
+                `${l.posCardType}${l.posCommissionRate != null ? ` ${l.posCommissionRate}%` : ""}`,
+            ]
+              .filter(Boolean)
+              .join(" · ");
+            return `POS (${amt}${extra ? ` · ${extra}` : ""})`;
+          })
           .join(" + ")}
       </span>
     );

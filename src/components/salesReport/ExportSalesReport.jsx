@@ -64,6 +64,13 @@ const FIELD_GROUPS = [
             .map((l) => {
               const bits = [`${l.method}: ${Number(l.amount || 0).toFixed(2)}`];
               if (l.bankName) bits.push(l.bankName);
+              if (l.method === "POS") {
+                if (l.posBankName) bits.push(l.posBankName);
+                if (l.posCardType)
+                  bits.push(
+                    `${l.posCardType}${l.posCommissionRate != null ? ` ${l.posCommissionRate}%` : ""}`,
+                  );
+              }
               if (l.customerName) bits.push(l.customerName);
               return bits.join(" — ");
             })
@@ -119,6 +126,20 @@ const FIELD_GROUPS = [
       { key: "refundReason", label: "Refund Reason", get: (s) => s.refund?.refundReason || "" },
     ],
   },
+    {
+    group: "POS Details",
+    fields: [
+      { key: "posOrderAmount", label: "POS Order Amount", get: (s) => posSum(s, "order") },
+      { key: "posCardType", label: "POS Card Type", get: (s) => posLegs(s).map((l) => l.cardType).filter(Boolean).join(" / ") },
+      {
+        key: "posCommissionRate",
+        label: "POS Commission Rate",
+        get: (s) => posLegs(s).map((l) => (l.rate != null ? `${l.rate}%` : "")).filter(Boolean).join(" / "),
+      },
+      { key: "posCommission", label: "POS Commission", get: (s) => posSum(s, "commission") },
+      { key: "posNetAmount", label: "POS Net Amount", get: (s) => posSum(s, "net") },
+    ],
+  },
   {
     group: "Tabby / Tamara Details",
     fields: [
@@ -159,6 +180,31 @@ function tabbyBreakdown(sale, { typeById, typeByName }) {
   }
   return null;
 }
+
+// POS portions of a row: a plain POS sale (net lives in paidAmount/sellPrice,
+// card details on the sale) or the POS leg(s) of a PARTIAL sale. Order amount is
+// reverse-calculated from the net amount + commission rate.
+function posLegs(sale) {
+  const pt = String(sale.paymentType || "").toUpperCase();
+  const toLeg = (net, rate, cardType) => {
+    const n = Number(net) || 0;
+    const r = Number(rate) || 0;
+    const order = r > 0 && r < 100 ? Math.round((n / (1 - r / 100) + Number.EPSILON) * 100) / 100 : n;
+    return { cardType: cardType || "", rate: rate ?? null, order, net: n, commission: order - n };
+  };
+  if (pt === "POS") return [toLeg(sale.paidAmount ?? sale.sellPrice, sale.posCommissionRate, sale.posCardType)];
+  if (pt === "PARTIAL") {
+    return (sale.paymentLegs || [])
+      .filter((l) => String(l.method).toUpperCase() === "POS")
+      .map((l) => toLeg(l.amount, l.posCommissionRate, l.posCardType));
+  }
+  return [];
+}
+
+const posSum = (sale, field) => {
+  const legs = posLegs(sale);
+  return legs.length ? legs.reduce((a, l) => a + l[field], 0).toFixed(2) : "";
+};
 
 function tabbyValue(sale, maps, field) {
   const t = tabbyBreakdown(sale, maps);
