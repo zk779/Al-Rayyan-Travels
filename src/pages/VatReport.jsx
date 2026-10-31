@@ -15,7 +15,8 @@ import {
   AlertCircle,
   Receipt,
   SaudiRiyal,
-  ListTree,
+    ListTree,
+  Globe2,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
@@ -102,6 +103,10 @@ export default function VatReport() {
   // Payable VAT = selling VAT − purchasing VAT (worked out here, not by the API).
   // Refund VAT is neither subtracted nor displayed on this page.
   const payableVat = Math.round(((r.sellingVat || 0) - (r.purchasingVat || 0) + Number.EPSILON) * 100) / 100;
+  // Sales on a ZERO_VAT route (non-KSA) — a subset of the sales above
+  const zeroVatSales = (report?.sales || []).filter((s) => s.routeType === "ZERO_VAT");
+  const zeroVat = r.zeroVat || { count: 0, totalSell: 0, totalNet: 0 };
+  const zeroShare = r.totalSell > 0 ? (zeroVat.totalSell / r.totalSell) * 100 : 0;
   const rows = [
     {
       label: "Sales",
@@ -325,9 +330,90 @@ export default function VatReport() {
                   </p>
                 </div>
 
+                {/* Zero-VAT route sales — a subset of the sales counted above */}
+                <div className="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200/80">
+                  <div className="flex items-center justify-between px-5 pt-5">
+                    <h2 className="flex items-center gap-2 text-[15px] font-semibold text-slate-900">
+                      <Globe2 size={16} className="text-slate-600" /> Zero-VAT route sales
+                      <span className="text-xs font-normal text-slate-400">· route type ZERO_VAT (non-KSA)</span>
+                    </h2>
+                    <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
+                      {loading ? "…" : `${zeroVat.count} sale${zeroVat.count === 1 ? "" : "s"}`}
+                    </span>
+                  </div>
+                  <div className="mt-4 grid grid-cols-1 gap-3 px-5 pb-5 sm:grid-cols-3">
+                    <div className="rounded-xl bg-slate-50 px-4 py-3 ring-1 ring-slate-100">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Total sales</p>
+                      <p className="mt-0.5 text-lg font-bold text-slate-900">
+                        {loading ? <Skeleton w="w-24" /> : <SarAmount value={zeroVat.totalSell} size={15} />}
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-slate-50 px-4 py-3 ring-1 ring-slate-100">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Total net</p>
+                      <p className="mt-0.5 text-lg font-bold text-slate-900">
+                        {loading ? <Skeleton w="w-24" /> : <SarAmount value={zeroVat.totalNet} size={15} />}
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-slate-50 px-4 py-3 ring-1 ring-slate-100">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Share of all sales</p>
+                      <p className="mt-0.5 text-lg font-bold text-slate-900">{loading ? <Skeleton w="w-16" /> : `${zeroShare.toFixed(1)}%`}</p>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Optional breakdown tables */}
                 {showBreakdown && report && !loading && (
                   <div className="space-y-4">
+                    <div className="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200/80">
+                      <h3 className="flex items-center gap-2 px-5 pt-5 text-[15px] font-semibold text-slate-900">
+                        <Globe2 size={16} className="text-slate-600" /> Zero-VAT route sales
+                        <span className="text-xs font-normal text-slate-400">({zeroVatSales.length})</span>
+                      </h3>
+                      {zeroVatSales.length === 0 ? (
+                        <p className="py-10 text-center text-sm text-gray-500">No Zero-VAT route sales in this period.</p>
+                      ) : (
+                        <div className="mt-3 overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow className="bg-slate-50/70">
+                                <TableHead>Date</TableHead>
+                                <TableHead>Invoice #</TableHead>
+                                <TableHead>Document #</TableHead>
+                                <TableHead>Vendor</TableHead>
+                                <TableHead>Payment</TableHead>
+                                <TableHead className="text-right">Net</TableHead>
+                                <TableHead className="text-right">Sell</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {zeroVatSales.map((s) => (
+                                <TableRow key={s.id}>
+                                  <TableCell className="whitespace-nowrap text-xs">
+                                    {s.saleDate ? format(new Date(s.saleDate), "dd MMM yyyy") : "—"}
+                                  </TableCell>
+                                  <TableCell className="font-mono text-xs">{s.invoiceNo || "—"}</TableCell>
+                                  <TableCell className="font-mono text-xs">{s.documentNo || "—"}</TableCell>
+                                  <TableCell className="max-w-[140px] truncate text-xs" title={s.vendorName}>
+                                    {s.vendorName || "—"}
+                                  </TableCell>
+                                  <TableCell>{getPaymentBadge(s.paymentType)}</TableCell>
+                                  <TableCell className="text-right text-xs font-medium tabular-nums">{money(s.netPrice)}</TableCell>
+                                  <TableCell className="text-right text-xs font-medium tabular-nums">{money(s.sellPrice)}</TableCell>
+                                </TableRow>
+                              ))}
+                              <TableRow className="vat-print-exact bg-slate-100 hover:bg-slate-100">
+                                <TableCell colSpan={5} className="text-xs font-semibold text-slate-900">
+                                  Total · {zeroVatSales.length} sale{zeroVatSales.length === 1 ? "" : "s"}
+                                </TableCell>
+                                <TableCell className="text-right text-xs font-semibold tabular-nums text-slate-900">{money(zeroVat.totalNet)}</TableCell>
+                                <TableCell className="text-right text-xs font-semibold tabular-nums text-slate-900">{money(zeroVat.totalSell)}</TableCell>
+                              </TableRow>
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
+                    </div>
+
                     <div className="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200/80">
                       <h3 className="flex items-center gap-2 px-5 pt-5 text-[15px] font-semibold text-slate-900">
                         <FileBarChart2 size={16} className="text-slate-600" /> Contributing sales
