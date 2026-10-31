@@ -42,12 +42,7 @@ export default function VatStandardTable({ title, titleAr, totalLabel, totalLabe
                 Category
                 <Ar>الفئة</Ar>
               </th>
-              {withTotalSales && (
-                <th className="px-5 py-3 text-right">
-                  Total Sales
-                  <Ar>إجمالي المبيعات</Ar>
-                </th>
-              )}
+
               <th className="px-5 py-3 text-right">
                 {withTotalSales ? "Amount counted" : "Amount"}
                 <Ar>{withTotalSales ? "المبلغ المحتسب" : "المبلغ"}</Ar>
@@ -72,7 +67,7 @@ export default function VatStandardTable({ title, titleAr, totalLabel, totalLabe
                   </span>
                   <span className="block text-[10px] text-slate-400">{r.basis}</span>
                 </td>
-                {withTotalSales && <td className="px-5 py-3.5 text-right">{cell(r.totalSales, "text-slate-500")}</td>}
+                {/* {withTotalSales && <td className="px-5 py-3.5 text-right">{cell(r.totalSales, "text-slate-500")}</td>} */}
                 <td className="px-5 py-3.5 text-right">{cell(r.amount)}</td>
                 <td className="px-5 py-3.5 text-right">{cell(r.vat, "text-slate-600")}</td>
               </tr>
@@ -90,7 +85,7 @@ export default function VatStandardTable({ title, titleAr, totalLabel, totalLabe
                   )}
                 </span>
               </td>
-              {withTotalSales && <td className="px-5 py-3.5 text-right">{cell(data.totalSales, "font-semibold text-slate-600")}</td>}
+              {/* {withTotalSales && <td className="px-5 py-3.5 text-right">{cell(data.totalSales, "font-semibold text-slate-600")}</td>} */}
               <td className="px-5 py-3.5 text-right">{cell(data.total, "font-bold")}</td>
               <td className="px-5 py-3.5 text-right">{cell(data.vat, "font-bold")}</td>
             </tr>
