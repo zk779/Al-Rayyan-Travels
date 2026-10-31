@@ -22,7 +22,8 @@ import {
   SaudiRiyal,
   ChevronLeft,
   ChevronRight,
-  Layers,
+    Layers,
+  Percent,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -116,6 +117,7 @@ const CATEGORIES = [
   { value: "RENT", label: "Rent" },
   { value: "INSURANCE", label: "Insurance" },
   { value: "MAINTENANCE", label: "Maintenance" },
+  { value: "RETURNABLE_VAT", label: "Returnable VAT %" },
   { value: "OTHER", label: "Other" },
 ];
 const STATUSES = [
@@ -123,11 +125,24 @@ const STATUSES = [
   { value: "REJECTED", label: "Rejected" },
 ];
 const catLabel = (v) => CATEGORIES.find((c) => c.value === v)?.label ?? v;
+
+// Returnable VAT: the amount entered is the GROSS figure — the 15% VAT is
+// already inside it (5000.00 = 4347.83 net + 652.17 VAT). It's worked out here,
+// in whole halalas, and sent to the API as `vatAmount`, which just stores it.
+const RETURNABLE_VAT = "RETURNABLE_VAT";
+const VAT_RATE_PERCENT = 15;
+const splitVat = (gross) => {
+  const cents = Math.round(Number(gross || 0) * 100);
+  const vatCents = Math.round((cents * VAT_RATE_PERCENT) / (100 + VAT_RATE_PERCENT));
+  return { vat: vatCents / 100, net: (cents - vatCents) / 100, gross: cents / 100 };
+};
+const calcVat = (gross) => splitVat(gross).vat;
+const money2 = (n) => Number(n || 0).toFixed(2);
 const statusColor = (s) => (s === "APPROVED" ? "default" : "destructive");
 
 const PAGE_SIZE_OPTIONS = [10, 20, 30, 50, 100];
 const DEFAULT_PAGINATION = { page: 1, limit: 20, total: 0, pages: 1 };
-const DEFAULT_SUMMARY = { count: 0, totalAmount: 0, byBranch: null };
+const DEFAULT_SUMMARY = { count: 0, totalAmount: 0, totalVat: 0, byBranch: null };
 
 const emptyForm = {
   expenseDate: new Date(),
@@ -391,6 +406,8 @@ export default function ExpensePage() {
         paymentMode: form.paymentMode,
         bankId: form.paymentMode === "BANK_TRANSFER" ? form.bankId : null,
         userId: form.category === "SALARY" ? form.userId : null,
+        // Calculated on this page (amount is VAT-inclusive); the API just stores it
+        vatAmount: form.category === RETURNABLE_VAT ? calcVat(form.amount) : null,
         description: form.description || null,
       };
 
@@ -468,7 +485,7 @@ export default function ExpensePage() {
       )}
 
       {/* Summary cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <Card className="border-slate-200">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-slate-500">
@@ -520,6 +537,21 @@ export default function ExpensePage() {
             </div>
             <p className="text-xs text-red-600/70">
               {expenses.filter((e) => e.status === "REJECTED").length} rejected
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="border-amber-100 bg-amber-50/40">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-amber-700">
+              Returnable VAT
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-amber-700 inline-flex items-center gap-1">
+              <SaudiRiyal /> {money2(summary.totalVat)}
+            </div>
+            <p className="text-xs text-amber-600/70">
+              VAT included in these expenses (to claim back) · all matching records
             </p>
           </CardContent>
         </Card>
@@ -762,7 +794,13 @@ export default function ExpensePage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col">
-                        <span>{catLabel(e.category)}</span>
+                        {e.category === RETURNABLE_VAT ? (
+                          <span className="inline-flex w-fit items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                            {catLabel(e.category)}
+                          </span>
+                        ) : (
+                          <span>{catLabel(e.category)}</span>
+                        )}
                         {e.category === "SALARY" && e.user?.fullName && (
                           <span className="text-xs text-slate-400">
                             {e.user.fullName}
@@ -771,7 +809,19 @@ export default function ExpensePage() {
                       </div>
                     </TableCell>
                     <TableCell className="text-right font-medium">
-                      ${e.amount.toFixed(2)}
+                      <div className="flex flex-col items-end leading-tight">
+                        <span>${money2(e.amount)}</span>
+                        {e.category === RETURNABLE_VAT && e.vatAmount != null && (
+                          <>
+                            <span className="mt-0.5 text-[11px] font-semibold text-amber-600">
+                              incl. VAT 15% · {money2(e.vatAmount)}
+                            </span>
+                            <span className="text-[10px] font-normal text-slate-400">
+                              Net {money2(Number(e.amount) - Number(e.vatAmount))}
+                            </span>
+                          </>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <span className="inline-flex items-center gap-1.5 text-sm">
@@ -1060,6 +1110,43 @@ export default function ExpensePage() {
                 </div>
               </div>
 
+              {/* Returnable VAT — 15% exclusive, calculated live (read-only; the server saves it) */}
+              {form.category === RETURNABLE_VAT && (
+                <div className="space-y-1.5 rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+                  <Label className="flex items-center gap-1.5 text-amber-900">
+                    <Percent className="h-3.5 w-3.5" />
+                    Returnable VAT (15% included in the amount)
+                  </Label>
+                  <Input
+                    readOnly
+                    tabIndex={-1}
+                    value={form.amount ? money2(calcVat(form.amount)) : ""}
+                    placeholder="0.00"
+                    className="bg-white font-semibold text-amber-800 cursor-not-allowed"
+                  />
+                  {form.amount && Number(form.amount) > 0 ? (
+                    <div className="space-y-1 rounded-md bg-white/70 px-3 py-2 text-xs text-amber-900">
+                      <div className="flex justify-between">
+                        <span>Net Amount (excluding tax)</span>
+                        <span className="font-semibold tabular-nums">${money2(splitVat(form.amount).net)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Tax (15.0%)</span>
+                        <span className="font-semibold tabular-nums">${money2(splitVat(form.amount).vat)}</span>
+                      </div>
+                      <div className="flex justify-between border-t border-amber-200 pt-1 text-sm font-bold">
+                        <span>Gross Amount (including tax)</span>
+                        <span className="tabular-nums">${money2(splitVat(form.amount).gross)}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-amber-700/80">
+                      The amount you enter includes 15% VAT. The VAT is calculated here and saved with this expense.
+                    </p>
+                  )}
+                </div>
+              )}
+
               {/* Payment mode */}
               <div className="space-y-1.5">
                 <Label>Payment Mode</Label>
@@ -1223,8 +1310,24 @@ export default function ExpensePage() {
               <div>
                 <Label className="text-xs text-slate-400">Amount</Label>
                 <p className="text-2xl font-bold">
-                  ${viewing.amount.toFixed(2)}
+                  ${money2(viewing.amount)}
                 </p>
+                {viewing.category === RETURNABLE_VAT && viewing.vatAmount != null && (
+                  <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-sm">
+                    <div className="flex justify-between text-xs text-slate-600">
+                      <span>Net Amount (excluding tax)</span>
+                      <span className="tabular-nums">${money2(Number(viewing.amount) - Number(viewing.vatAmount))}</span>
+                    </div>
+                    <div className="flex justify-between text-amber-800">
+                      <span>Tax (15.0%) · returnable</span>
+                      <span className="font-semibold tabular-nums">${money2(viewing.vatAmount)}</span>
+                    </div>
+                    <div className="mt-0.5 flex justify-between border-t border-amber-200 pt-1 text-xs font-semibold text-slate-700">
+                      <span>Gross Amount (including tax)</span>
+                      <span className="tabular-nums">${money2(viewing.amount)}</span>
+                    </div>
+                  </div>
+                )}
               </div>
               <div>
                 <Label className="text-xs text-slate-400">Description</Label>
