@@ -31,41 +31,8 @@ import {
 import VatPeriodPicker from "../components/vat/VatPeriodPicker";
 import { PrintLetterhead, SarAmount } from "../components/vat/vatCommon";
 import { money } from "../components/vat/vatFormat";
-import { rangeParams, useVatPeriod } from "../components/vat/vatPeriod";
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL;
-const authHeaders = () => ({
-  Authorization: `Bearer ${localStorage.getItem("token")}`,
-});
-
-const MAX_PAGES = 25; // 200 / page — a safety cap, far above any realistic period
-
-// Every APPROVED "Returnable VAT" expense in the period (a rejected expense is
-// never claimable). The expenses API pages at 200, so keep going until done.
-async function fetchReturnableExpenses(range, signal) {
-  const rows = [];
-  let page = 1;
-  let pages = 1;
-  do {
-    const params = new URLSearchParams({
-      category: "RETURNABLE_VAT",
-      status: "APPROVED",
-      limit: "200",
-      page: String(page),
-    });
-    if (range.from || range.to) {
-      const p = rangeParams(range, { fromKey: "dateFrom", toKey: "dateTo", tzKey: "timeZone" });
-      Object.entries(p).forEach(([k, v]) => params.set(k, v));
-    }
-    const res = await fetch(`${API_BASE}/api/expenses?${params}`, { headers: authHeaders(), signal });
-    const json = await res.json();
-    if (!res.ok || !json.success) throw new Error(json.error || "Failed to load returnable VAT expenses");
-    rows.push(...(json.data || []));
-    pages = json.pagination?.pages || 1;
-    page += 1;
-  } while (page <= pages && page <= MAX_PAGES);
-  return rows;
-}
+import { EMPTY_TABBY, fetchReturnableExpenses, fetchTabbyFees, summarizeReturnable } from "../components/vat/returnableVat";
+import { useVatPeriod } from "../components/vat/vatPeriod";
 
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const Skeleton = ({ w = "w-20" }) => <span className={`inline-block h-4 ${w} animate-pulse rounded bg-slate-100`} />;
@@ -76,6 +43,7 @@ export default function ReturnableVat() {
   const { range, ready, label: periodLabel } = period;
 
   const [expenses, setExpenses] = useState([]);
+  const [tabby, setTabby] = useState(EMPTY_TABBY);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -84,17 +52,22 @@ export default function ReturnableVat() {
   useEffect(() => {
     if (!ready) {
       setExpenses([]);
+      setTabby(EMPTY_TABBY);
       setError("");
       return undefined;
     }
     const ctrl = new AbortController();
     setLoading(true);
     setError("");
-    fetchReturnableExpenses(range, ctrl.signal)
-      .then(setExpenses)
+    Promise.all([fetchReturnableExpenses(range, ctrl.signal), fetchTabbyFees(range, ctrl.signal)])
+      .then(([rows, fees]) => {
+        setExpenses(rows);
+        setTabby(fees);
+      })
       .catch((err) => {
         if (err.name === "AbortError") return;
         setExpenses([]);
+        setTabby(EMPTY_TABBY);
         setError(err.message);
       })
       .finally(() => {
@@ -104,11 +77,7 @@ export default function ReturnableVat() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fromKey, toKey, ready]);
 
-  const totals = useMemo(() => {
-    const gross = r2(expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0));
-    const vat = r2(expenses.reduce((s, e) => s + (Number(e.vatAmount) || 0), 0));
-    return { gross, vat, net: r2(gross - vat), count: expenses.length };
-  }, [expenses]);
+  const totals = useMemo(() => summarizeReturnable(expenses), [expenses]);
 
   const byBranch = useMemo(() => {
     const map = new Map();
@@ -124,6 +93,9 @@ export default function ReturnableVat() {
   }, [expenses]);
 
   const missingVat = expenses.filter((e) => e.vatAmount == null).length;
+  // everything we can claim back: VAT on the expenses + VAT on the Tabby / Tamara fees
+  const totalReturnable = r2(totals.vat + tabby.vat);
+  const hasAnything = expenses.length > 0 || tabby.count > 0;
 
   return (
     <div className="min-h-screen print:min-h-0">
@@ -170,7 +142,7 @@ export default function ReturnableVat() {
             <button
               type="button"
               onClick={() => window.print()}
-              disabled={loading || !expenses.length}
+              disabled={loading || !hasAnything}
               className="mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary text-sm font-semibold text-white shadow-md disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Printer size={17} /> Print report
@@ -210,11 +182,11 @@ export default function ReturnableVat() {
                         ) : (
                           <>
                             <SaudiRiyal size={28} />
-                            {money(totals.vat)}
+                            {money(totalReturnable)}
                           </>
                         )}
                       </p>
-                      <p className="mt-1 text-[11px] text-gray-400">VAT included in the approved Returnable VAT expenses</p>
+                      <p className="mt-1 text-[11px] text-gray-400">VAT on the approved Returnable VAT expenses + VAT paid to Tabby / Tamara on their fees</p>
                     </div>
                     <div className="flex flex-col items-end gap-1.5">
                       <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold">VAT rate 15%</span>
@@ -222,14 +194,16 @@ export default function ReturnableVat() {
                         <Receipt size={13} /> {periodLabel}
                         <span className="opacity-40">•</span>
                         {totals.count} expense{totals.count === 1 ? "" : "s"}
+                        <span className="opacity-40">•</span>
+                        {tabby.count} Tabby / Tamara sale{tabby.count === 1 ? "" : "s"}
                       </span>
                     </div>
                   </div>
                   <div className="relative mt-5 grid grid-cols-3 gap-2 text-xs">
                     {[
-                      ["Gross paid (incl. VAT)", totals.gross],
-                      ["Net (excl. VAT)", totals.net],
-                      ["Returnable VAT", totals.vat],
+                      ["VAT · Returnable VAT expenses", totals.vat],
+                      ["Tabby / Tamara · fees (excl. VAT)", tabby.fee],
+                      ["VAT · Tabby / Tamara fees", tabby.vat],
                     ].map(([l, v]) => (
                       <div key={l} className="rounded-xl bg-white/10 px-3 py-2.5">
                         <p className="text-gray-300">{l}</p>
@@ -246,6 +220,38 @@ export default function ReturnableVat() {
                     Open {missingVat === 1 ? "it" : "them"} in Expenses and save again to record the VAT.
                   </div>
                 )}
+
+                {/* Tabby / Tamara fees */}
+                <div className="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200/80">
+                  <h2 className="flex items-center gap-2 px-5 pt-5 text-[15px] font-semibold text-slate-900">
+                    <Wallet size={16} className="text-slate-600" /> Tabby / Tamara fees
+                    <span className="text-xs font-normal text-slate-400">({tabby.count} sale{tabby.count === 1 ? "" : "s"})</span>
+                  </h2>
+                  <div className="mt-3 overflow-x-auto">
+                    <table className="w-full min-w-[520px] text-sm">
+                      <thead>
+                        <tr className="border-y border-slate-100 bg-slate-50/70 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                          <th className="px-5 py-2.5 text-right">Order amount</th>
+                          <th className="px-5 py-2.5 text-right">Fee (6.99% + 1.5 SAR)</th>
+                          <th className="px-5 py-2.5 text-right">VAT (15% of fee)</th>
+                          <th className="px-5 py-2.5 text-right">Total deduction</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="vat-print-exact bg-slate-100">
+                          <td className="px-5 py-3 text-right">{loading ? <Skeleton /> : <SarAmount value={tabby.orderAmount} className="text-slate-700" />}</td>
+                          <td className="px-5 py-3 text-right">{loading ? <Skeleton /> : <SarAmount value={tabby.fee} className="text-slate-700" />}</td>
+                          <td className="px-5 py-3 text-right">{loading ? <Skeleton /> : <SarAmount value={tabby.vat} className="text-base font-bold text-slate-900" />}</td>
+                          <td className="px-5 py-3 text-right">{loading ? <Skeleton /> : <SarAmount value={tabby.totalDeduction} className="font-semibold text-slate-900" />}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="px-5 pb-4 pt-3 text-[11px] text-slate-400">
+                    Worked out from each Tabby / Tamara sale (including the Tabby / Tamara part of a split payment): the order amount is
+                    rebuilt from the net amount saved on the sale, then fee = order × 6.99% + 1.5 SAR and VAT = 15% of the fee.
+                  </p>
+                </div>
 
                 {/* By branch */}
                 {byBranch.length > 0 && !loading && (

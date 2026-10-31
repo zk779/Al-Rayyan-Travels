@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, FileBarChart2, ReceiptText, Percent, SaudiRiyal, TrendingUp, Undo2, ShoppingCart } from "lucide-react";
 import { money } from "../components/vat/vatFormat";
-import { buildVatTable } from "../components/vat/vatRoutes";
+import { buildStandardRated } from "../components/vat/vatRoutes";
 import { currentQuarter, currentYear, quarterRange, rangeParams } from "../components/vat/vatPeriod";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
@@ -12,7 +12,7 @@ const authHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem("toke
 
 /** Landing page for the VAT area: pick Submit VAT Report or Returnable VAT. */
 export default function VatHome() {
-  const [snap, setSnap] = useState({ payable: null, returnable: null });
+  const [snap, setSnap] = useState({ routes: null, tabby: null, returnable: null });
   const quarter = currentQuarter();
   const year = currentYear();
 
@@ -25,7 +25,7 @@ export default function VatHome() {
     const vatQs = new URLSearchParams(rangeParams(range)).toString();
     fetch(`${API_BASE}/api/sales/vat-report?${vatQs}`, { headers: authHeaders(), signal: ctrl.signal })
       .then((r) => r.json())
-      .then((j) => j.success && setSnap((s) => ({ ...s, payable: buildVatTable(j.data.routes).payableVat })))
+      .then((j) => j.success && setSnap((s) => ({ ...s, routes: j.data.routes, tabby: j.data.tabby || { count: 0, fee: 0, vat: 0 } })))
       .catch(() => {});
 
     const expQs = new URLSearchParams({
@@ -41,6 +41,12 @@ export default function VatHome() {
 
     return () => ctrl.abort();
   }, [year, quarter]);
+
+  // Same figure as the Submit VAT Report: VAT on standard rated sales − VAT on standard rated purchases
+  const payable =
+    snap.routes && snap.returnable != null ? buildStandardRated(snap.routes, { vat: snap.returnable, net: 0, count: 0 }, snap.tabby).payableVat : null;
+  // Returnable VAT = VAT on the Returnable-VAT expenses + VAT paid to Tabby/Tamara on their fees
+  const returnableTotal = snap.tabby && snap.returnable != null ? Math.round((snap.returnable + snap.tabby.vat) * 100) / 100 : null;
 
   const cards = [
     {
@@ -58,14 +64,14 @@ export default function VatHome() {
         { icon: Undo2, label: "Refunds" },
       ],
       statLabel: `Payable VAT · Q${quarter} ${year}`,
-      stat: snap.payable,
+      stat: payable,
       cta: "Open report",
     },
     {
       to: "/vat/return",
       title: "Returnable VAT",
       titleAr: "ضريبة القيمة المضافة المستردة",
-      desc: "VAT you paid on Returnable VAT expenses — what you can claim back, by branch and by expense.",
+      desc: "VAT you paid on Returnable VAT expenses and on Tabby / Tamara fees — what you can claim back.",
       icon: ReceiptText,
       iconBg: "from-gray-600 to-gray-900 shadow-slate-900/25",
       accent: "text-slate-800",
@@ -75,7 +81,7 @@ export default function VatHome() {
         { icon: ReceiptText, label: "Expenses" },
       ],
       statLabel: `Returnable VAT · Q${quarter} ${year}`,
-      stat: snap.returnable,
+      stat: returnableTotal,
       cta: "Open returnable VAT",
     },
   ];

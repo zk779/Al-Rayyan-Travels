@@ -52,3 +52,65 @@ export function buildVatTable(routes) {
 
   return { rows, totals, outputVat: totals.salesVat, inputVat: totals.purchasesVat, zeroProfitVat, payableVat };
 }
+
+/**
+ * Standard-rated sales and purchases, and the VAT payable on them.
+ *
+ *  Sales:      Domestic sales + Zero-VAT profit + Mixed profit + No-route sales
+ *              (Zero-VAT and Mixed routes count their profit only, never their sales)
+ *  Purchases:  Domestic purchases + Returnable-VAT expenses + Tabby/Tamara fees
+ *              (Zero-VAT / Mixed routes have no purchases; the expenses and fees count excl. VAT,
+ *              each with the VAT paid on it)
+ *  Payable VAT = VAT on the sales − VAT on the purchases
+ *
+ * @param routes      `data.routes` from GET /api/sales/vat-report
+ * @param returnable  summarizeReturnable() of the period's Returnable-VAT expenses
+ * @param tabby       `data.tabby` from the same report: the fee + VAT paid to Tabby/Tamara
+ */
+export function buildStandardRated(routes, returnable, tabby) {
+  const table = buildVatTable(routes);
+  const byKey = Object.fromEntries(table.rows.map((r) => [r.key, r]));
+
+  const salesRows = ["DOMESTIC", "ZERO_VAT", "MIXED", "OTHER"]
+    .filter((k) => byKey[k])
+    .map((k) => {
+      const r = byKey[k];
+      // Zero-VAT and Mixed routes are counted on profit alone
+      return r.zero || k === "MIXED"
+        ? { key: k, label: r.label, basis: "Profit", amount: r.profit, vat: r.profitVat }
+        : { key: k, label: r.label, basis: "Total sales", amount: r.totalSales, vat: r.salesVat };
+    });
+
+  const purchaseRows = ["DOMESTIC"]
+    .filter((k) => byKey[k])
+    .map((k) => ({
+      key: k,
+      label: byKey[k].label,
+      basis: "Total purchases",
+      amount: byKey[k].totalPurchases,
+      vat: byKey[k].purchasesVat,
+    }));
+  const ret = returnable || { net: 0, vat: 0, count: 0 };
+  purchaseRows.push({
+    key: "RETURNABLE",
+    label: "Returnable VAT Expenses",
+    basis: `Net, excl. VAT · ${ret.count} expense${ret.count === 1 ? "" : "s"}`,
+    amount: ret.net,
+    vat: ret.vat,
+  });
+  const tb = tabby || { count: 0, fee: 0, vat: 0 };
+  purchaseRows.push({
+    key: "TABBY",
+    label: "Tabby / Tamara Fees",
+    basis: `Fee excl. VAT · ${tb.count} sale${tb.count === 1 ? "" : "s"}`,
+    amount: tb.fee || 0,
+    vat: tb.vat || 0,
+  });
+
+  const sum = (rows, field) => fromCents(rows.reduce((a, r) => a + toCents(r[field]), 0));
+  const sales = { rows: salesRows, total: sum(salesRows, "amount"), vat: sum(salesRows, "vat") };
+  const purchases = { rows: purchaseRows, total: sum(purchaseRows, "amount"), vat: sum(purchaseRows, "vat") };
+  const payableVat = fromCents(toCents(sales.vat) - toCents(purchases.vat));
+
+  return { sales, purchases, payableVat, routeTable: table };
+}

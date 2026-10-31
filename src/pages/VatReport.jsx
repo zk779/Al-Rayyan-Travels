@@ -30,7 +30,9 @@ import {
 } from "../../shadcn/components/ui/table";
 import VatPeriodPicker from "../components/vat/VatPeriodPicker";
 import VatRouteTable from "../components/vat/VatRouteTable";
-import { buildVatTable } from "../components/vat/vatRoutes";
+import VatStandardTable from "../components/vat/VatStandardTable";
+import { fetchReturnableExpenses, summarizeReturnable } from "../components/vat/returnableVat";
+import { buildStandardRated } from "../components/vat/vatRoutes";
 import { PrintLetterhead, SarAmount } from "../components/vat/vatCommon";
 import { money } from "../components/vat/vatFormat";
 import { rangeParams, useVatPeriod } from "../components/vat/vatPeriod";
@@ -65,6 +67,7 @@ export default function VatReport() {
   const { range, ready, label: periodLabel } = period;
 
   const [report, setReport] = useState(null);
+  const [returnable, setReturnable] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showBreakdown, setShowBreakdown] = useState(false);
@@ -75,6 +78,7 @@ export default function VatReport() {
   useEffect(() => {
     if (!ready) {
       setReport(null);
+      setReturnable(null);
       setError("");
       return undefined;
     }
@@ -82,15 +86,24 @@ export default function VatReport() {
     setLoading(true);
     setError("");
     const qs = new URLSearchParams(rangeParams(range)).toString();
-    fetch(`${API_BASE}/api/sales/vat-report?${qs}`, { headers: authHeaders(), signal: ctrl.signal })
-      .then(async (res) => {
+    // The payable VAT needs both the sales report and the Returnable-VAT expenses, so a
+    // failure of either shows an error rather than a payable figure that leaves one out.
+    const loadReport = fetch(`${API_BASE}/api/sales/vat-report?${qs}`, { headers: authHeaders(), signal: ctrl.signal }).then(
+      async (res) => {
         const json = await res.json();
         if (!res.ok || !json.success) throw new Error(json.error || "Failed to generate VAT report");
-        setReport(json.data);
+        return json.data;
+      },
+    );
+    Promise.all([loadReport, fetchReturnableExpenses(range, ctrl.signal)])
+      .then(([data, expenses]) => {
+        setReport(data);
+        setReturnable(summarizeReturnable(expenses));
       })
       .catch((err) => {
         if (err.name === "AbortError") return;
         setReport(null);
+        setReturnable(null);
         setError(err.message);
       })
       .finally(() => {
@@ -101,11 +114,12 @@ export default function VatReport() {
   }, [fromKey, toKey, ready]);
 
   const r = report || {};
-  // One row per route type. Zero-VAT routes are taxed on profit only; the payable VAT is
-  // (sales VAT − purchases VAT) on the other routes + the Zero-VAT routes' profit VAT.
+  // Standard-rated sales (Domestic sales + Zero-VAT profit + Mixed profit + No route sales) and
+  // purchases (Domestic purchases + Returnable VAT expenses + Tabby/Tamara fees); payable = sales VAT − purchases VAT.
   // Worked out here, not by the API. Refund VAT is neither subtracted nor displayed.
-  const table = buildVatTable(r.routes);
-  const payableVat = table.payableVat;
+  const std = buildStandardRated(r.routes, returnable, r.tabby);
+  const table = std.routeTable;
+  const payableVat = std.payableVat;
   // Sales on a ZERO_VAT route (non-KSA) — a subset of the sales above
   const zeroVatSales = (report?.sales || []).filter((s) => s.routeType === "ZERO_VAT");
   const zeroVat = r.zeroVat || { count: 0, totalSell: 0, totalNet: 0 };
@@ -210,7 +224,7 @@ export default function VatReport() {
                           </>
                         )}
                       </p>
-                      <p className="mt-1 text-[11px] text-gray-400">Sales VAT − Purchases VAT + Zero-VAT profit VAT</p>
+                      <p className="mt-1 text-[11px] text-gray-400">Output VAT on standard rated sales − Input VAT on standard rated purchases</p>
                     </div>
                     <div className="flex flex-col items-end gap-1.5">
                       <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold">VAT rate 15%</span>
@@ -225,11 +239,12 @@ export default function VatReport() {
                       </span>
                     </div>
                   </div>
-                  <div className="relative mt-5 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
+                  <div className="relative mt-5 grid grid-cols-1 gap-2 text-xs sm:grid-cols-2 xl:grid-cols-4">
                     {[
-                      ["Sales VAT (Domestic + Mixed)", table.outputVat],
-                      ["Purchases VAT (Domestic + Mixed)", table.inputVat],
-                      ["Zero-VAT routes · profit VAT", table.zeroProfitVat],
+                      ["Output VAT · standard rated sales", std.sales.vat],
+                      ["Input VAT · domestic purchases", std.purchases.rows.find((x) => x.key === "DOMESTIC")?.vat ?? 0],
+                      ["Input VAT · returnable expenses", returnable?.vat ?? 0],
+                      ["Input VAT · Tabby / Tamara fees", r.tabby?.vat ?? 0],
                     ].map(([l, v]) => (
                       <div key={l} className="rounded-xl bg-white/10 px-3 py-2.5">
                         <p className="text-gray-300">{l}</p>
@@ -239,22 +254,39 @@ export default function VatReport() {
                   </div>
                 </div>
 
-                {/* One table: every route type, then the total */}
-                <VatRouteTable table={table} loading={loading} />
+                {/* Standard rated sales and purchases */}
+                <VatStandardTable
+                  title="Standard Rated Sales"
+                  titleAr="المبيعات الخاضعة للنسبة الأساسية"
+                  totalLabel="Total Standard Rated Sales"
+                  data={std.sales}
+                  loading={loading}
+                />
+                <VatStandardTable
+                  title="Standard Rated Purchases"
+                  titleAr="المشتريات الخاضعة للنسبة الأساسية"
+                  totalLabel="Total Standard Rated Purchases"
+                  data={std.purchases}
+                  loading={loading}
+                />
+                {returnable?.missingVat > 0 && !loading && (
+                  <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 print:hidden">
+                    <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    {returnable.missingVat} Returnable VAT expense{returnable.missingVat === 1 ? " has" : "s have"} no VAT saved and{" "}
+                    {returnable.missingVat === 1 ? "is" : "are"} counted as 0.00. Open {returnable.missingVat === 1 ? "it" : "them"} in Expenses and
+                    save again to record the VAT.
+                  </div>
+                )}
 
                 {/* How the payable VAT is reached */}
                 <div className="vat-print-exact flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-slate-100 px-5 py-4 ring-1 ring-slate-200">
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-600">
                     <span>
-                      Sales VAT <span className="font-semibold text-slate-900">{loading ? "…" : money(table.outputVat)}</span>
+                      Output VAT (sales) <span className="font-semibold text-slate-900">{loading ? "…" : money(std.sales.vat)}</span>
                     </span>
                     <span className="text-slate-400">−</span>
                     <span>
-                      Purchases VAT <span className="font-semibold text-slate-900">{loading ? "…" : money(table.inputVat)}</span>
-                    </span>
-                    <span className="text-slate-400">+</span>
-                    <span>
-                      Zero-VAT profit VAT <span className="font-semibold text-slate-900">{loading ? "…" : money(table.zeroProfitVat)}</span>
+                      Input VAT (purchases) <span className="font-semibold text-slate-900">{loading ? "…" : money(std.purchases.vat)}</span>
                     </span>
                     <span className="text-slate-400">=</span>
                   </div>
@@ -271,8 +303,15 @@ export default function VatReport() {
                   </p>
                 )}
                 <p className="px-1 text-[11px] text-slate-400">
-                  Exclusive VAT: 15% added on top of the sales and purchases totals. Each route's VAT is rounded so the rows add up exactly to the totals.
+                  Exclusive VAT: 15% added on top of the sales and purchases totals. Zero-VAT and Mixed routes count their profit only.
+                  Returnable VAT expenses and Tabby / Tamara fees count at their net (excl. VAT) amount, with the VAT paid on them.
                 </p>
+
+                {/* The route-by-route table (routes only — Returnable VAT expenses are not in it) */}
+                <h2 className="px-1 pt-2 text-[15px] font-semibold text-slate-900">
+                  Route breakdown <span className="text-xs font-normal text-slate-400">· sales routes only</span>
+                </h2>
+                <VatRouteTable table={table} loading={loading} />
 
                 {/* Optional breakdown tables */}
                 {showBreakdown && report && !loading && (
