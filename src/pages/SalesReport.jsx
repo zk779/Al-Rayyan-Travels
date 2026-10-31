@@ -768,6 +768,7 @@ export default function SalesReport() {
           <TabsContent value="detailed">
             <DetailedReportTab
               salesData={pagedSalesData}
+              exportData={salesData}
               loading={loading}
               hasSearched={hasSearched}
               searchQuery={applied.filters.search}
@@ -801,6 +802,7 @@ export default function SalesReport() {
       ) : canViewSales ? (
         <DetailedReportTab
           salesData={pagedSalesData}
+              exportData={salesData}
           loading={loading}
           hasSearched={hasSearched}
           searchQuery={applied.filters.search}

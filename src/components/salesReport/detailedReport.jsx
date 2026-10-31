@@ -161,6 +161,7 @@ export default function DetailedReportTab({
   totalPages,
   onPageChange,
   onPageSizeChange,
+  exportData,
   onEdit,
   onDelete,
 }) {
@@ -457,7 +458,8 @@ export default function DetailedReportTab({
             )}
             <ExportSalesReport
               sales={salesData}
-              disabled={activeTab !== "detailed" || !salesData.length}
+              allSales={exportData}
+              disabled={activeTab !== "detailed" || !(exportData?.length || salesData.length)}
               activeTab={activeTab}
             />
           </div>

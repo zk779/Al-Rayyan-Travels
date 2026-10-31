@@ -278,8 +278,14 @@ async function downloadWorkbook(wb, filename) {
   URL.revokeObjectURL(a.href);
 }
 
-export default function ExportSalesReport({ sales = [], disabled, activeTab }) {
+// `sales` is only the rows on the page currently shown; `allSales` is every row
+// matching the active filters (all pages). Exports default to ALL pages.
+export default function ExportSalesReport({ sales = [], allSales, disabled, activeTab }) {
   const [open, setOpen] = useState(false);
+  const [scope, setScope] = useState("all"); // all | page
+  const hasAll = Array.isArray(allSales) && allSales.length > 0;
+  const showScope = hasAll && allSales.length > sales.length;
+  const rowsToExport = scope === "all" && hasAll ? allSales : sales;
   const [exporting, setExporting] = useState(false);
   const [selected, setSelected] = useState(new Set(DEFAULT_KEYS));
   const [customers, setCustomers] = useState([]);
@@ -318,11 +324,12 @@ export default function ExportSalesReport({ sales = [], disabled, activeTab }) {
   const clearAll = () => setSelected(new Set());
 
   const handleExport = async () => {
-    if (!selected.size || !sales.length) return;
+    if (!selected.size || !rowsToExport.length) return;
     setExporting(true);
     try {
-      const wb = await buildWorkbook(sales, selected, maps);
-      await downloadWorkbook(wb, `sales-report-${format(new Date(), "yyyyMMdd-HHmm")}.xlsx`);
+      const wb = await buildWorkbook(rowsToExport, selected, maps);
+      const suffix = showScope && scope === "page" ? "-page" : "";
+      await downloadWorkbook(wb, `sales-report${suffix}-${format(new Date(), "yyyyMMdd-HHmm")}.xlsx`);
       setOpen(false);
     } finally {
       setExporting(false);
@@ -348,6 +355,38 @@ export default function ExportSalesReport({ sales = [], disabled, activeTab }) {
             red; Tabby/Tamara credit sales include a fee breakdown when that
             group is selected.
           </p>
+
+          {showScope && (
+            <div className="rounded-lg border bg-slate-50/70 p-3">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Rows to export</p>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {[
+                  { k: "all", title: "All pages", count: allSales.length, hint: "Every row matching your filters" },
+                  { k: "page", title: "Current page only", count: sales.length, hint: "Just the rows you see now" },
+                ].map((o) => (
+                  <button
+                    key={o.k}
+                    type="button"
+                    onClick={() => setScope(o.k)}
+                    aria-pressed={scope === o.k}
+                    className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                      scope === o.k
+                        ? "border-slate-800 bg-white shadow-sm ring-1 ring-slate-800"
+                        : "border-slate-200 bg-white hover:border-slate-400"
+                    }`}
+                  >
+                    <span>
+                      <span className="block text-sm font-semibold text-slate-800">{o.title}</span>
+                      <span className="block text-xs text-slate-500">{o.hint}</span>
+                    </span>
+                    <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700">
+                      {o.count} row{o.count === 1 ? "" : "s"}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="flex items-center justify-between border-b pb-3">
             <span className="text-sm text-slate-500">
@@ -394,7 +433,7 @@ export default function ExportSalesReport({ sales = [], disabled, activeTab }) {
               Cancel
             </Button>
             <Button onClick={handleExport} disabled={exporting || !selected.size} className="gap-2">
-              {exporting ? "Exporting..." : <><Download className="h-4 w-4" /> Export .xlsx</>}
+              {exporting ? "Exporting..." : <><Download className="h-4 w-4" /> Export .xlsx ({rowsToExport.length} row{rowsToExport.length === 1 ? "" : "s"})</>}
             </Button>
           </div>
         </DialogContent>
