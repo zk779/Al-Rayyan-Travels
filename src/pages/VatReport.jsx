@@ -29,7 +29,8 @@ import {
   TableRow,
 } from "../../shadcn/components/ui/table";
 import VatPeriodPicker from "../components/vat/VatPeriodPicker";
-import VatRouteSection from "../components/vat/VatRouteSection";
+import VatRouteTable from "../components/vat/VatRouteTable";
+import { buildVatTable } from "../components/vat/vatRoutes";
 import { PrintLetterhead, SarAmount } from "../components/vat/vatCommon";
 import { money } from "../components/vat/vatFormat";
 import { rangeParams, useVatPeriod } from "../components/vat/vatPeriod";
@@ -100,9 +101,11 @@ export default function VatReport() {
   }, [fromKey, toKey, ready]);
 
   const r = report || {};
-  // Payable VAT = selling VAT − purchasing VAT (worked out here, not by the API).
-  // Refund VAT is neither subtracted nor displayed on this page.
-  const payableVat = Math.round(((r.sellingVat || 0) - (r.purchasingVat || 0) + Number.EPSILON) * 100) / 100;
+  // One row per route type. Zero-VAT routes are taxed on profit only; the payable VAT is
+  // (sales VAT − purchases VAT) on the other routes + the Zero-VAT routes' profit VAT.
+  // Worked out here, not by the API. Refund VAT is neither subtracted nor displayed.
+  const table = buildVatTable(r.routes);
+  const payableVat = table.payableVat;
   // Sales on a ZERO_VAT route (non-KSA) — a subset of the sales above
   const zeroVatSales = (report?.sales || []).filter((s) => s.routeType === "ZERO_VAT");
   const zeroVat = r.zeroVat || { count: 0, totalSell: 0, totalNet: 0 };
@@ -207,7 +210,7 @@ export default function VatReport() {
                           </>
                         )}
                       </p>
-                      <p className="mt-1 text-[11px] text-gray-400">Selling VAT − Purchasing VAT</p>
+                      <p className="mt-1 text-[11px] text-gray-400">Sales VAT − Purchases VAT + Zero-VAT profit VAT</p>
                     </div>
                     <div className="flex flex-col items-end gap-1.5">
                       <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold">VAT rate 15%</span>
@@ -222,10 +225,11 @@ export default function VatReport() {
                       </span>
                     </div>
                   </div>
-                  <div className="relative mt-5 grid grid-cols-2 gap-2 text-xs">
+                  <div className="relative mt-5 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
                     {[
-                      ["Output VAT (sales)", r.sellingVat],
-                      ["Input VAT (purchases)", r.purchasingVat],
+                      ["Sales VAT (Domestic + Mixed)", table.outputVat],
+                      ["Purchases VAT (Domestic + Mixed)", table.inputVat],
+                      ["Zero-VAT routes · profit VAT", table.zeroProfitVat],
                     ].map(([l, v]) => (
                       <div key={l} className="rounded-xl bg-white/10 px-3 py-2.5">
                         <p className="text-gray-300">{l}</p>
@@ -235,43 +239,22 @@ export default function VatReport() {
                   </div>
                 </div>
 
-                {/* Sales — total per route type, each with its 15% */}
-                <VatRouteSection
-                  title="Sales"
-                  titleAr="المبيعات"
-                  amountLabel="Total sales"
-                  vatLabel="VAT (15%)"
-                  amountKey="totalSell"
-                  vatKey="sellVat"
-                  routes={r.routes}
-                  totalAmount={r.totalSell}
-                  totalVat={r.sellingVat}
-                  loading={loading}
-                />
-
-                {/* Purchases — total net per route type, each with its 15% */}
-                <VatRouteSection
-                  title="Purchases"
-                  titleAr="المشتريات"
-                  amountLabel="Total net"
-                  vatLabel="VAT (15%)"
-                  amountKey="totalNet"
-                  vatKey="netVat"
-                  routes={r.routes}
-                  totalAmount={r.totalNet}
-                  totalVat={r.purchasingVat}
-                  loading={loading}
-                />
+                {/* One table: every route type, then the total */}
+                <VatRouteTable table={table} loading={loading} />
 
                 {/* How the payable VAT is reached */}
                 <div className="vat-print-exact flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-slate-100 px-5 py-4 ring-1 ring-slate-200">
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-600">
                     <span>
-                      Output VAT <span className="font-semibold text-slate-900">{loading ? "…" : money(r.sellingVat)}</span>
+                      Sales VAT <span className="font-semibold text-slate-900">{loading ? "…" : money(table.outputVat)}</span>
                     </span>
                     <span className="text-slate-400">−</span>
                     <span>
-                      Input VAT <span className="font-semibold text-slate-900">{loading ? "…" : money(r.purchasingVat)}</span>
+                      Purchases VAT <span className="font-semibold text-slate-900">{loading ? "…" : money(table.inputVat)}</span>
+                    </span>
+                    <span className="text-slate-400">+</span>
+                    <span>
+                      Zero-VAT profit VAT <span className="font-semibold text-slate-900">{loading ? "…" : money(table.zeroProfitVat)}</span>
                     </span>
                     <span className="text-slate-400">=</span>
                   </div>
@@ -288,7 +271,7 @@ export default function VatReport() {
                   </p>
                 )}
                 <p className="px-1 text-[11px] text-slate-400">
-                  Exclusive VAT: 15% added on top of the selling and net totals. Each route's VAT is rounded so the routes add up exactly to the totals.
+                  Exclusive VAT: 15% added on top of the sales and purchases totals. Each route's VAT is rounded so the rows add up exactly to the totals.
                 </p>
 
                 {/* Optional breakdown tables */}

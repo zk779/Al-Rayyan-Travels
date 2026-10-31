@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, FileBarChart2, ReceiptText, Percent, SaudiRiyal, TrendingUp, Undo2, ShoppingCart } from "lucide-react";
 import { money } from "../components/vat/vatFormat";
+import { buildVatTable } from "../components/vat/vatRoutes";
 import { currentQuarter, currentYear, quarterRange, rangeParams } from "../components/vat/vatPeriod";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
@@ -24,7 +25,7 @@ export default function VatHome() {
     const vatQs = new URLSearchParams(rangeParams(range)).toString();
     fetch(`${API_BASE}/api/sales/vat-report?${vatQs}`, { headers: authHeaders(), signal: ctrl.signal })
       .then((r) => r.json())
-      .then((j) => j.success && setSnap((s) => ({ ...s, payable: Math.round(((j.data.sellingVat || 0) - (j.data.purchasingVat || 0) + Number.EPSILON) * 100) / 100 })))
+      .then((j) => j.success && setSnap((s) => ({ ...s, payable: buildVatTable(j.data.routes).payableVat })))
       .catch(() => {});
 
     const expQs = new URLSearchParams({
