@@ -254,6 +254,12 @@ export default function VatReport() {
                   </div>
                 </div>
 
+                {/* The route-by-route table (routes only — Returnable VAT expenses are not in it) */}
+                <h2 className="px-1 pt-2 text-[15px] font-semibold text-slate-900">
+                  Route breakdown <span className="text-xs font-normal text-slate-400">· sales routes only</span>
+                </h2>
+                <VatRouteTable table={table} loading={loading} />
+
                 {/* Standard rated sales and purchases */}
                 <VatStandardTable
                   title="Standard Rated Sales"
@@ -307,11 +313,7 @@ export default function VatReport() {
                   Returnable VAT expenses and Tabby / Tamara fees count at their net (excl. VAT) amount, with the VAT paid on them.
                 </p>
 
-                {/* The route-by-route table (routes only — Returnable VAT expenses are not in it) */}
-                <h2 className="px-1 pt-2 text-[15px] font-semibold text-slate-900">
-                  Route breakdown <span className="text-xs font-normal text-slate-400">· sales routes only</span>
-                </h2>
-                <VatRouteTable table={table} loading={loading} />
+                
 
                 {/* Optional breakdown tables */}
                 {showBreakdown && report && !loading && (
