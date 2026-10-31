@@ -14,9 +14,13 @@ import {
   Users2,
   Store,
   X,
-    Percent,
+  Percent,
+  MapPin,
   Terminal,
   Globe2,
+  Eye,
+  EyeOff,
+  Route as RouteIcon,
   ChevronUp,
   Check,
 } from "lucide-react";
@@ -85,6 +89,7 @@ const PAYMENT_STATUSES = ["DUE", "PARTIAL", "PAID"];
 const SALE_STATUSES = ["PENDING", "COMPLETED", "CANCELLED", "REFUNDED"];
 const PAYMENT_METHODS = ["CASH", "CREDIT", "BANK_TRANSFER", "POS", "PARTIAL"];
 const ALL = "__all__";
+const ROUTE_STATS_KEY = "reports:showRouteStats";
 
 // Length-based fallback so a big number never gets clipped/truncated —
 // long values shrink a step instead, short ones stay nice and bold.
@@ -136,6 +141,67 @@ function KpiCard({ label, value, sub, icon: Icon, trend, tone = "slate" }) {
             {sub}
           </p>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// Sales on one route type (Zero-VAT or Domestic): count, sell, net, profit and
+// its share of all sales. Driven by the same filtered totals as every other card.
+function RouteStatCard({ title, subtitle, icon: Icon, stats, totalSell, extra }) {
+  const s = stats || {};
+  const share = totalSell > 0 ? (Number(s.totalSell || 0) / totalSell) * 100 : 0;
+  return (
+    <Card className="relative overflow-hidden border-slate-200 shadow-sm py-0 gap-0">
+      <div className="h-1 bg-gradient-to-r from-gray-600 to-gray-900" />
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gradient-primary text-white">
+              <Icon className="h-4 w-4" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-slate-900 leading-tight">{title}</p>
+              <p className="text-[11px] text-slate-400 leading-tight">{subtitle}</p>
+            </div>
+          </div>
+          <Badge variant="secondary" className="shrink-0 bg-slate-100 text-slate-600 font-medium">
+            {s.count || 0} sale{s.count === 1 ? "" : "s"}
+          </Badge>
+        </div>
+
+        <div className="mt-4 flex items-end justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Total sell</p>
+            <p className="text-2xl font-bold tabular-nums text-slate-900">{money(s.totalSell)}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Share of sales</p>
+            <p className="text-lg font-bold tabular-nums text-slate-700">{share.toFixed(1)}%</p>
+          </div>
+        </div>
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
+          <div className="h-full rounded-full bg-gradient-to-r from-gray-500 to-gray-800" style={{ width: `${Math.min(Math.max(share, 0), 100)}%` }} />
+        </div>
+
+        <div className={`mt-4 grid gap-2 ${extra ? "grid-cols-3" : "grid-cols-2"}`}>
+          <div className="rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+            <p className="text-[11px] text-slate-400">Total net</p>
+            <p className="text-sm font-semibold tabular-nums text-slate-800">{money(s.totalNet)}</p>
+          </div>
+          <div className="rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+            <p className="text-[11px] text-slate-400">Profit</p>
+            <p className={`text-sm font-semibold tabular-nums ${Number(s.totalProfit) < 0 ? "text-rose-600" : "text-emerald-700"}`}>
+              {money(s.totalProfit)}
+            </p>
+          </div>
+          {extra && (
+            <div className="rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+              <p className="text-[11px] text-slate-400">{extra.label}</p>
+              <p className="text-sm font-semibold tabular-nums text-slate-800">{money(extra.value)}</p>
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );
@@ -206,6 +272,23 @@ export default function ReportPage() {
   const [refunds, setRefunds] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [totals, setTotals] = useState(null);
+  // Show/hide the "sales by route type" section — remembered in this browser
+  const [showRouteStats, setShowRouteStats] = useState(() => {
+    try {
+      return localStorage.getItem(ROUTE_STATS_KEY) !== "0";
+    } catch {
+      return true;
+    }
+  });
+  const toggleRouteStats = () =>
+    setShowRouteStats((v) => {
+      try {
+        localStorage.setItem(ROUTE_STATS_KEY, v ? "0" : "1");
+      } catch {
+        // storage unavailable — the toggle still works for this visit
+      }
+      return !v;
+    });
   const [meta, setMeta] = useState(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -918,6 +1001,63 @@ export default function ReportPage() {
           </>
         )}
       </div>
+
+      {/* Sales by route type — follows every filter above; can be hidden */}
+      {totals && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <RouteIcon className="h-4 w-4 text-slate-500" />
+              <h3 className="text-sm font-semibold text-slate-700">Sales by route type</h3>
+              <span className="hidden text-xs text-slate-400 sm:inline">follows all filters</span>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={toggleRouteStats}
+              aria-expanded={showRouteStats}
+              className="h-8 gap-1.5 text-xs"
+            >
+              {showRouteStats ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+              {showRouteStats ? "Hide" : "Show"}
+            </Button>
+          </div>
+
+          {showRouteStats && (
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <RouteStatCard
+                title="Zero-VAT sales"
+                subtitle="Route type: ZERO_VAT · non-KSA routes"
+                icon={Globe2}
+                stats={t.zeroVat}
+                totalSell={t.totalSellPrice}
+              />
+              <RouteStatCard
+                title="Domestic sales"
+                subtitle="Route type: DOMESTIC · KSA-only routes & hotels"
+                icon={MapPin}
+                stats={t.domestic}
+                totalSell={t.totalSellPrice}
+                extra={{ label: "PAX VAT", value: t.domestic?.totalPaxVat }}
+              />
+              <RouteStatCard
+                title="Mixed sales"
+                subtitle="Route type: MIXED · KSA ↔ international"
+                icon={RouteIcon}
+                stats={t.mixed}
+                totalSell={t.totalSellPrice}
+              />
+            </div>
+          )}
+          {showRouteStats && t.unclassified?.count > 0 && (
+            <p className="text-[11px] text-slate-400">
+              Not in any route type (older sales with no route saved): {t.unclassified.count} sale
+              {t.unclassified.count === 1 ? "" : "s"} · {money(t.unclassified.totalSell)} sell.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* POS stats by card type — only when the period has POS sales */}
       {t.posByCardType?.length > 0 && (
