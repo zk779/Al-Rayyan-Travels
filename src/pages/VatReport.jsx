@@ -5,8 +5,6 @@ import { format } from "date-fns";
 import {
   FileBarChart2,
   Printer,
-  TrendingUp,
-  ShoppingCart,
   Undo2,
   Landmark,
   Loader2,
@@ -15,7 +13,6 @@ import {
   AlertCircle,
   Receipt,
   SaudiRiyal,
-    ListTree,
   Globe2,
 } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -32,6 +29,7 @@ import {
   TableRow,
 } from "../../shadcn/components/ui/table";
 import VatPeriodPicker from "../components/vat/VatPeriodPicker";
+import VatRouteSection from "../components/vat/VatRouteSection";
 import { PrintLetterhead, SarAmount } from "../components/vat/vatCommon";
 import { money } from "../components/vat/vatFormat";
 import { rangeParams, useVatPeriod } from "../components/vat/vatPeriod";
@@ -55,6 +53,8 @@ const getPaymentBadge = (type) => {
     </Badge>
   );
 };
+
+const ROUTE_LABEL = { ZERO_VAT: "Zero-VAT", DOMESTIC: "Domestic", MIXED: "Mixed" };
 
 const Skeleton = ({ w = "w-20" }) => <span className={`inline-block h-4 ${w} animate-pulse rounded bg-slate-100`} />;
 
@@ -106,28 +106,6 @@ export default function VatReport() {
   // Sales on a ZERO_VAT route (non-KSA) — a subset of the sales above
   const zeroVatSales = (report?.sales || []).filter((s) => s.routeType === "ZERO_VAT");
   const zeroVat = r.zeroVat || { count: 0, totalSell: 0, totalNet: 0 };
-  const zeroShare = r.totalSell > 0 ? (zeroVat.totalSell / r.totalSell) * 100 : 0;
-  const rows = [
-    {
-      label: "Sales",
-      labelAr: "المبيعات",
-      icon: TrendingUp,
-      tint: "bg-slate-100 text-slate-700",
-      amount: r.totalSell,
-      vat: r.sellingVat,
-      hint: "Sell × 15%",
-    },
-    {
-      label: "Purchases",
-      labelAr: "المشتريات",
-      icon: ShoppingCart,
-      tint: "bg-slate-100 text-slate-600",
-      amount: r.totalNet,
-      vat: r.purchasingVat,
-      neg: true,
-      hint: "Net × 15%",
-    },
-  ];
 
   return (
     <div className="min-h-screen print:min-h-0">
@@ -257,109 +235,61 @@ export default function VatReport() {
                   </div>
                 </div>
 
-                {/* Breakdown */}
-                <div className="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200/80">
-                  <div className="flex items-center justify-between px-5 pt-5">
-                    <h2 className="flex items-center gap-2 text-[15px] font-semibold text-slate-900">
-                      <ListTree size={16} className="text-slate-600" /> Breakdown
-                    </h2>
-                    <span className="text-xs text-slate-400">{periodLabel}</span>
-                  </div>
-                  <div className="mt-3 overflow-x-auto">
-                    <table className="w-full min-w-[480px] text-sm">
-                      <thead>
-                        <tr className="border-y border-slate-100 bg-slate-50/70 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                          <th className="px-5 py-2.5 text-left">Category</th>
-                          <th className="px-5 py-2.5 text-right">Amount</th>
-                          <th className="px-5 py-2.5 text-right">VAT (15%)</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {rows.map((row) => (
-                          <tr key={row.label}>
-                            <td className="px-5 py-3">
-                              <span className="flex items-center gap-3">
-                                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${row.tint}`}>
-                                  <row.icon size={15} />
-                                </span>
-                                <span>
-                                  <span className="block font-medium text-slate-700">{row.label}</span>
-                                  <span className="block text-[10px] text-slate-400">
-                                    {row.hint} · <span dir="rtl">{row.labelAr}</span>
-                                  </span>
-                                </span>
-                              </span>
-                            </td>
-                            <td className="px-5 py-3 text-right">
-                              {loading ? <Skeleton /> : <SarAmount value={row.amount} className="text-slate-700" />}
-                            </td>
-                            <td className="px-5 py-3 text-right">
-                              {loading ? (
-                                <Skeleton w="w-16" />
-                              ) : (
-                                <SarAmount
-                                  value={row.neg ? -Math.abs(row.vat || 0) : row.vat}
-                                  className={row.neg ? "text-rose-600" : "font-semibold text-slate-900"}
-                                />
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                        <tr className="vat-print-exact bg-slate-100">
-                          <td className="px-5 py-3.5 font-semibold text-slate-900">
-                            Total payable VAT
-                            <span className="block text-[10px] font-normal text-slate-500">
-                              Sales VAT − Purchases VAT
-                            </span>
-                          </td>
-                          <td />
-                          <td className="px-5 py-3.5 text-right">
-                            {loading ? <Skeleton w="w-20" /> : <SarAmount value={payableVat} className="text-base font-bold text-slate-900" />}
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                  {!loading && !report && !error && (
-                    <p className="flex items-center gap-2 px-5 py-4 text-xs text-amber-600">
-                      <Info size={14} /> No data for this period.
-                    </p>
-                  )}
-                  <p className="px-5 pb-4 pt-3 text-[11px] text-slate-400">
-                    Exclusive VAT: 15% added on top of the net and selling totals.
-                  </p>
-                </div>
+                {/* Sales — total per route type, each with its 15% */}
+                <VatRouteSection
+                  title="Sales"
+                  titleAr="المبيعات"
+                  amountLabel="Total sales"
+                  vatLabel="VAT (15%)"
+                  amountKey="totalSell"
+                  vatKey="sellVat"
+                  routes={r.routes}
+                  totalAmount={r.totalSell}
+                  totalVat={r.sellingVat}
+                  loading={loading}
+                />
 
-                {/* Zero-VAT route sales — a subset of the sales counted above */}
-                <div className="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200/80">
-                  <div className="flex items-center justify-between px-5 pt-5">
-                    <h2 className="flex items-center gap-2 text-[15px] font-semibold text-slate-900">
-                      <Globe2 size={16} className="text-slate-600" /> Zero-VAT route sales
-                      <span className="text-xs font-normal text-slate-400">· route type ZERO_VAT (non-KSA)</span>
-                    </h2>
-                    <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
-                      {loading ? "…" : `${zeroVat.count} sale${zeroVat.count === 1 ? "" : "s"}`}
+                {/* Purchases — total net per route type, each with its 15% */}
+                <VatRouteSection
+                  title="Purchases"
+                  titleAr="المشتريات"
+                  amountLabel="Total net"
+                  vatLabel="VAT (15%)"
+                  amountKey="totalNet"
+                  vatKey="netVat"
+                  routes={r.routes}
+                  totalAmount={r.totalNet}
+                  totalVat={r.purchasingVat}
+                  loading={loading}
+                />
+
+                {/* How the payable VAT is reached */}
+                <div className="vat-print-exact flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-slate-100 px-5 py-4 ring-1 ring-slate-200">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-600">
+                    <span>
+                      Output VAT <span className="font-semibold text-slate-900">{loading ? "…" : money(r.sellingVat)}</span>
                     </span>
+                    <span className="text-slate-400">−</span>
+                    <span>
+                      Input VAT <span className="font-semibold text-slate-900">{loading ? "…" : money(r.purchasingVat)}</span>
+                    </span>
+                    <span className="text-slate-400">=</span>
                   </div>
-                  <div className="mt-4 grid grid-cols-1 gap-3 px-5 pb-5 sm:grid-cols-3">
-                    <div className="rounded-xl bg-slate-50 px-4 py-3 ring-1 ring-slate-100">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Total sales</p>
-                      <p className="mt-0.5 text-lg font-bold text-slate-900">
-                        {loading ? <Skeleton w="w-24" /> : <SarAmount value={zeroVat.totalSell} size={15} />}
-                      </p>
-                    </div>
-                    <div className="rounded-xl bg-slate-50 px-4 py-3 ring-1 ring-slate-100">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Total net</p>
-                      <p className="mt-0.5 text-lg font-bold text-slate-900">
-                        {loading ? <Skeleton w="w-24" /> : <SarAmount value={zeroVat.totalNet} size={15} />}
-                      </p>
-                    </div>
-                    <div className="rounded-xl bg-slate-50 px-4 py-3 ring-1 ring-slate-100">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Share of all sales</p>
-                      <p className="mt-0.5 text-lg font-bold text-slate-900">{loading ? <Skeleton w="w-16" /> : `${zeroShare.toFixed(1)}%`}</p>
-                    </div>
+                  <div className="text-right">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Total payable VAT</p>
+                    <p className="text-xl font-bold text-slate-900">
+                      {loading ? <Skeleton w="w-28" /> : <SarAmount value={payableVat} size={17} />}
+                    </p>
                   </div>
                 </div>
+                {!loading && !report && !error && (
+                  <p className="flex items-center gap-2 px-1 text-xs text-amber-600">
+                    <Info size={14} /> No data for this period.
+                  </p>
+                )}
+                <p className="px-1 text-[11px] text-slate-400">
+                  Exclusive VAT: 15% added on top of the selling and net totals. Each route's VAT is rounded so the routes add up exactly to the totals.
+                </p>
 
                 {/* Optional breakdown tables */}
                 {showBreakdown && report && !loading && (
@@ -430,6 +360,7 @@ export default function VatReport() {
                                 <TableHead>Invoice #</TableHead>
                                 <TableHead>Document #</TableHead>
                                 <TableHead>Vendor</TableHead>
+                                <TableHead>Route</TableHead>
                                 <TableHead>Payment</TableHead>
                                 <TableHead className="text-right">Net</TableHead>
                                 <TableHead className="text-right">Sell</TableHead>
@@ -446,6 +377,7 @@ export default function VatReport() {
                                   <TableCell className="max-w-[140px] truncate text-xs" title={s.vendorName}>
                                     {s.vendorName || "—"}
                                   </TableCell>
+                                  <TableCell className="text-xs text-slate-500">{ROUTE_LABEL[s.routeType] || "—"}</TableCell>
                                   <TableCell>{getPaymentBadge(s.paymentType)}</TableCell>
                                   <TableCell className="text-right text-xs font-medium tabular-nums">{money(s.netPrice)}</TableCell>
                                   <TableCell className="text-right text-xs font-medium tabular-nums">{money(s.sellPrice)}</TableCell>
