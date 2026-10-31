@@ -14,13 +14,13 @@ const NotApplicable = () => (
 );
 
 const HEADINGS = [
-  { label: "Route", align: "left" },
-  { label: "Total Sales" },
-  // { label: "Sales VAT (15%)" },
-  { label: "Total Purchases" },
-  // { label: "Purchases VAT (15%)" },
-  { label: "Profit" },
-  // { label: "Profit VAT (15%)" },
+  { label: "Route", ar: "المسار", align: "left" },
+  { label: "Total Sales", ar: "إجمالي المبيعات" },
+  // { label: "Sales VAT (15%)", ar: "ضريبة المبيعات (15%)" },
+  { label: "Total Purchases", ar: "إجمالي المشتريات" },
+  // { label: "Purchases VAT (15%)", ar: "ضريبة المشتريات (15%)" },
+  { label: "Profit", ar: "الربح" },
+  // { label: "Profit VAT (15%)", ar: "ضريبة الربح (15%)" },
 ];
 
 /** The single Submit-VAT table: one row per route type, plus a Total row. `table` comes from buildVatTable(). */
@@ -39,6 +39,9 @@ export default function VatRouteTable({ table, loading }) {
               {HEADINGS.map((h) => (
                 <th key={h.label} className={`px-4 py-3 ${h.align === "left" ? "text-left" : "text-right"}`}>
                   {h.label}
+                  <span className="block text-[10px] font-normal normal-case tracking-normal text-slate-400" dir="rtl">
+                    {h.ar}
+                  </span>
                 </th>
               ))}
             </tr>
@@ -48,8 +51,13 @@ export default function VatRouteTable({ table, loading }) {
             {rows.map((r) => (
               <tr key={r.key}>
                 <td className="px-4 py-3.5">
-                  <span className="block font-medium text-slate-800">{r.label}</span>
-                  {r.zero && <span className="block text-[10px] text-slate-400">VAT on profit only</span>}
+                  <span className="flex items-baseline justify-between gap-3">
+                    <span className="font-medium text-slate-800">{r.label}</span>
+                    <span className="text-[11px] text-slate-400" dir="rtl">
+                      {r.labelAr}
+                    </span>
+                  </span>
+                  {r.zero && <span className="block text-[10px] text-slate-400">Zero-VAT VAT on profit only</span>}
                 </td>
                 <td className="px-4 py-3.5 text-right">{cell(r.totalSales)}</td>
                 {/* <td className="px-4 py-3.5 text-right">{r.zero ? <NotApplicable /> : cell(r.salesVat, "text-slate-600")}</td> */}
@@ -69,7 +77,14 @@ export default function VatRouteTable({ table, loading }) {
 
           <tfoot>
             <tr className="vat-print-exact border-t-2 border-slate-300 bg-slate-100 text-slate-900">
-              <td className="px-4 py-3.5 font-semibold">Total</td>
+              <td className="px-4 py-3.5 font-semibold">
+                <span className="flex items-baseline justify-between gap-3">
+                  Total
+                  <span className="text-[11px] font-normal text-slate-500" dir="rtl">
+                    الإجمالي
+                  </span>
+                </span>
+              </td>
               <td className="px-4 py-3.5 text-right">{cell(totals.totalSales, "font-bold")}</td>
               {/* <td className="px-4 py-3.5 text-right">{cell(totals.salesVat, "font-bold")}</td> */}
               <td className="px-4 py-3.5 text-right">{cell(totals.totalPurchases, "font-bold")}</td>

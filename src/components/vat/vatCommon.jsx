@@ -13,7 +13,7 @@ export function SarAmount({ value, className = "", size = 14 }) {
 }
 
 /** Print-only letterhead (hidden on screen). */
-export function PrintLetterhead({ title, periodLabel }) {
+export function PrintLetterhead({ title, titleAr, periodLabel }) {
   return (
     <div className="hidden print:block mb-4 border-b-2 border-gray-900 pb-4">
       <div className="flex justify-between items-start gap-8">
@@ -37,7 +37,14 @@ export function PrintLetterhead({ title, periodLabel }) {
           </div>
         </div>
         <div className="text-right">
-          <div className="bg-gray-800 text-white px-4 py-2 rounded font-bold text-lg mb-1 uppercase">{title}</div>
+          <div className="bg-gray-800 text-white px-4 py-2 rounded font-bold text-lg mb-1 uppercase">
+            {title}
+            {titleAr && (
+              <span className="block text-sm font-bold normal-case" dir="rtl">
+                {titleAr}
+              </span>
+            )}
+          </div>
           <div className="text-xs text-gray-600">Period: {periodLabel}</div>
           <div className="text-xs text-gray-600">Generated: {format(new Date(), "dd MMM yyyy, HH:mm")}</div>
         </div>

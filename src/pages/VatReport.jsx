@@ -121,8 +121,11 @@ export default function VatReport() {
   const table = std.routeTable;
   const payableVat = std.payableVat;
   // Sales on a ZERO_VAT route (non-KSA) — a subset of the sales above
-  const zeroVatSales = (report?.sales || []).filter((s) => s.routeType === "ZERO_VAT");
-  const zeroVat = r.zeroVat || { count: 0, totalSell: 0, totalNet: 0 };
+  const zeroVatSales = (report?.sales || []).filter((s) => s.routeType === "ZERO_VAT" || s.routeType === "MIXED");
+  const zeroVat = {
+    totalSell: zeroVatSales.reduce((a, s) => a + Math.round((Number(s.sellPrice) || 0) * 100), 0) / 100,
+    totalNet: zeroVatSales.reduce((a, s) => a + Math.round((Number(s.netPrice) || 0) * 100), 0) / 100,
+  };
 
   return (
     <div className="min-h-screen print:min-h-0">
@@ -151,15 +154,23 @@ export default function VatReport() {
               <FileBarChart2 size={20} />
             </span>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">Submit VAT Report</h1>
+              <h1 className="flex flex-wrap items-baseline gap-x-3 text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">
+                Submit VAT Report
+                <span className="text-lg font-semibold text-slate-400" dir="rtl">
+                  تقديم تقرير ضريبة القيمة المضافة
+                </span>
+              </h1>
               <p className="text-sm text-slate-500">
                 Output VAT, input VAT and net VAT payable for your ZATCA return.
+              </p>
+              <p className="text-xs text-slate-400" dir="rtl">
+                ضريبة المخرجات وضريبة المدخلات وصافي ضريبة القيمة المضافة المستحقة لإقرارك الضريبي
               </p>
             </div>
           </div>
         </div>
 
-        <PrintLetterhead title="VAT Report" periodLabel={periodLabel} />
+        <PrintLetterhead title="VAT Report" titleAr="تقرير ضريبة القيمة المضافة" periodLabel={periodLabel} />
 
         <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[360px_1fr] print:block">
           {/* Settings */}
@@ -204,7 +215,7 @@ export default function VatReport() {
             {ready && (
               <>
                 {/* Headline */}
-                <div className="vat-print-exact relative overflow-hidden rounded-2xl bg-gradient-to-tl from-gray-700 to-gray-900 p-6 text-white shadow-lg print:rounded-lg print:shadow-none">
+                <div className="vat-print-exact relative overflow-hidden rounded-2xl bg-gradient-to-tl from-gray-700 to-gray-900 p-6 text-white shadow-lg print:hidden">
                   <div className="pointer-events-none absolute -right-12 -top-12 h-48 w-48 rounded-full bg-white/10 blur-2xl print:hidden" />
                   <div className="relative flex flex-wrap items-start justify-between gap-3">
                     <div>
@@ -241,13 +252,16 @@ export default function VatReport() {
                   </div>
                   <div className="relative mt-5 grid grid-cols-1 gap-2 text-xs sm:grid-cols-2 xl:grid-cols-4">
                     {[
-                      ["Output VAT · standard rated sales", std.sales.vat],
-                      ["Input VAT · domestic purchases", std.purchases.rows.find((x) => x.key === "DOMESTIC")?.vat ?? 0],
-                      ["Input VAT · returnable expenses", returnable?.vat ?? 0],
-                      ["Input VAT · Tabby / Tamara fees", r.tabby?.vat ?? 0],
-                    ].map(([l, v]) => (
+                      ["Output VAT · standard rated sales", "ضريبة المخرجات · المبيعات الخاضعة للنسبة الأساسية", std.sales.vat],
+                      ["Input VAT · domestic purchases", "ضريبة المدخلات · المشتريات المحلية", std.purchases.rows.find((x) => x.key === "DOMESTIC")?.vat ?? 0],
+                      ["Input VAT · returnable expenses", "ضريبة المدخلات · المصروفات القابلة للاسترداد", returnable?.vat ?? 0],
+                      ["Input VAT · Tabby / Tamara fees", "ضريبة المدخلات · رسوم تابي / تمارا", r.tabby?.vat ?? 0],
+                    ].map(([l, ar, v]) => (
                       <div key={l} className="rounded-xl bg-white/10 px-3 py-2.5">
                         <p className="text-gray-300">{l}</p>
+                        <p className="text-[10px] text-gray-400" dir="rtl">
+                          {ar}
+                        </p>
                         <p className="mt-0.5 text-sm font-semibold tabular-nums">{loading ? "…" : money(v)}</p>
                       </div>
                     ))}
@@ -257,6 +271,9 @@ export default function VatReport() {
                 {/* The route-by-route table (routes only — Returnable VAT expenses are not in it) */}
                 <h2 className="px-1 pt-2 text-[15px] font-semibold text-slate-900">
                   Route breakdown <span className="text-xs font-normal text-slate-400">· sales routes only</span>
+                  <span className="ms-3 text-xs font-normal text-slate-400" dir="rtl">
+                    تفصيل المسارات · مسارات المبيعات فقط
+                  </span>
                 </h2>
                 <VatRouteTable table={table} loading={loading} />
 
@@ -265,6 +282,7 @@ export default function VatReport() {
                   title="Standard Rated Sales"
                   titleAr="المبيعات الخاضعة للنسبة الأساسية"
                   totalLabel="Total Standard Rated Sales"
+                  totalLabelAr="إجمالي المبيعات الخاضعة للنسبة الأساسية"
                   data={std.sales}
                   loading={loading}
                 />
@@ -272,6 +290,7 @@ export default function VatReport() {
                   title="Standard Rated Purchases"
                   titleAr="المشتريات الخاضعة للنسبة الأساسية"
                   totalLabel="Total Standard Rated Purchases"
+                  totalLabelAr="إجمالي المشتريات الخاضعة للنسبة الأساسية"
                   data={std.purchases}
                   loading={loading}
                 />
@@ -288,16 +307,21 @@ export default function VatReport() {
                 <div className="vat-print-exact flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-slate-100 px-5 py-4 ring-1 ring-slate-200">
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-600">
                     <span>
-                      Output VAT (sales) <span className="font-semibold text-slate-900">{loading ? "…" : money(std.sales.vat)}</span>
+                      Output VAT (sales) <span className="text-[11px] text-slate-400" dir="rtl">ضريبة المخرجات</span>{" "}
+                      <span className="font-semibold text-slate-900">{loading ? "…" : money(std.sales.vat)}</span>
                     </span>
                     <span className="text-slate-400">−</span>
                     <span>
-                      Input VAT (purchases) <span className="font-semibold text-slate-900">{loading ? "…" : money(std.purchases.vat)}</span>
+                      Input VAT (purchases) <span className="text-[11px] text-slate-400" dir="rtl">ضريبة المدخلات</span>{" "}
+                      <span className="font-semibold text-slate-900">{loading ? "…" : money(std.purchases.vat)}</span>
                     </span>
                     <span className="text-slate-400">=</span>
                   </div>
                   <div className="text-right">
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Total payable VAT</p>
+                    <p className="text-[11px] text-slate-400" dir="rtl">
+                      إجمالي ضريبة القيمة المضافة المستحقة
+                    </p>
                     <p className="text-xl font-bold text-slate-900">
                       {loading ? <Skeleton w="w-28" /> : <SarAmount value={payableVat} size={17} />}
                     </p>
@@ -308,10 +332,6 @@ export default function VatReport() {
                     <Info size={14} /> No data for this period.
                   </p>
                 )}
-                <p className="px-1 text-[11px] text-slate-400">
-                  Exclusive VAT: 15% added on top of the sales and purchases totals. Zero-VAT and Mixed routes count their profit only.
-                  Returnable VAT expenses and Tabby / Tamara fees count at their net (excl. VAT) amount, with the VAT paid on them.
-                </p>
 
                 
 
@@ -321,7 +341,11 @@ export default function VatReport() {
                     <div className="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200/80">
                       <h3 className="flex items-center gap-2 px-5 pt-5 text-[15px] font-semibold text-slate-900">
                         <Globe2 size={16} className="text-slate-600" /> Zero-VAT route sales
+                        <span className="text-xs font-normal text-slate-400">· incl. Mixed routes</span>
                         <span className="text-xs font-normal text-slate-400">({zeroVatSales.length})</span>
+                        <span className="ms-auto text-xs font-normal text-slate-400" dir="rtl">
+                          مبيعات المسارات ذات النسبة الصفرية
+                        </span>
                       </h3>
                       {zeroVatSales.length === 0 ? (
                         <p className="py-10 text-center text-sm text-gray-500">No Zero-VAT route sales in this period.</p>
@@ -334,6 +358,7 @@ export default function VatReport() {
                                 <TableHead>Invoice #</TableHead>
                                 <TableHead>Document #</TableHead>
                                 <TableHead>Vendor</TableHead>
+                                <TableHead>Route</TableHead>
                                 <TableHead>Payment</TableHead>
                                 <TableHead className="text-right">Net</TableHead>
                                 <TableHead className="text-right">Sell</TableHead>
@@ -350,13 +375,14 @@ export default function VatReport() {
                                   <TableCell className="max-w-[140px] truncate text-xs" title={s.vendorName}>
                                     {s.vendorName || "—"}
                                   </TableCell>
+                                  <TableCell className="text-xs text-slate-500">{ROUTE_LABEL[s.routeType] || "—"}</TableCell>
                                   <TableCell>{getPaymentBadge(s.paymentType)}</TableCell>
                                   <TableCell className="text-right text-xs font-medium tabular-nums">{money(s.netPrice)}</TableCell>
                                   <TableCell className="text-right text-xs font-medium tabular-nums">{money(s.sellPrice)}</TableCell>
                                 </TableRow>
                               ))}
                               <TableRow className="vat-print-exact bg-slate-100 hover:bg-slate-100">
-                                <TableCell colSpan={5} className="text-xs font-semibold text-slate-900">
+                                <TableCell colSpan={6} className="text-xs font-semibold text-slate-900">
                                   Total · {zeroVatSales.length} sale{zeroVatSales.length === 1 ? "" : "s"}
                                 </TableCell>
                                 <TableCell className="text-right text-xs font-semibold tabular-nums text-slate-900">{money(zeroVat.totalNet)}</TableCell>
@@ -372,6 +398,9 @@ export default function VatReport() {
                       <h3 className="flex items-center gap-2 px-5 pt-5 text-[15px] font-semibold text-slate-900">
                         <FileBarChart2 size={16} className="text-slate-600" /> Contributing sales
                         <span className="text-xs font-normal text-slate-400">({report.sales.length})</span>
+                        <span className="ms-auto text-xs font-normal text-slate-400" dir="rtl">
+                          المبيعات المشمولة
+                        </span>
                       </h3>
                       {report.sales.length === 0 ? (
                         <p className="py-10 text-center text-sm text-gray-500">No sales in this period.</p>
@@ -417,6 +446,9 @@ export default function VatReport() {
                       <h3 className="flex items-center gap-2 px-5 pt-5 text-[15px] font-semibold text-slate-900">
                         <Undo2 size={16} className="text-rose-600" /> Contributing refunds
                         <span className="text-xs font-normal text-slate-400">({report.refunds.length})</span>
+                        <span className="ms-auto text-xs font-normal text-slate-400" dir="rtl">
+                          المرتجعات المشمولة
+                        </span>
                       </h3>
                       {report.refunds.length === 0 ? (
                         <p className="py-10 text-center text-sm text-gray-500">No refunds in this period.</p>
