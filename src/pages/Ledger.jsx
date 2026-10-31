@@ -698,12 +698,21 @@ function LedgerRow({ entry }) {
 					)}
 				</TableCell>
 
-				{/* Balance (running, if available)
-				<TableCell className="py-3 text-right">
-					<span className="text-sm font-semibold text-slate-700">
-						{entry.balanceAfter != null ? <Money value={entry.balanceAfter} size={13} /> : "—"}
-					</span>
-				</TableCell> */}
+				{/* Balance — the account's remaining balance right after this entry */}
+					<TableCell className="py-3 text-right">
+						{entry.balanceAfter != null ? (
+							<span
+								className={cn(
+									"text-sm font-semibold",
+									entry.balanceAfter < 0 ? "text-rose-600" : "text-slate-800",
+								)}
+							>
+								<Money value={entry.balanceAfter} size={13} />
+							</span>
+						) : (
+							<span className="text-gray-300 text-sm">—</span>
+						)}
+					</TableCell>
 
 				{/* Expand toggle */}
 				<TableCell className="py-3 w-8 text-center">
@@ -718,7 +727,7 @@ function LedgerRow({ entry }) {
 			{/* Expanded Detail Row */}
 			{expanded && detailSections && detailSections.length > 0 && (
 				<TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
-					<TableCell colSpan={8} className="py-0">
+					<TableCell colSpan={9} className="py-0">
 						<div className="py-3 px-4 space-y-3">
 							{detailSections.map((sec, i) => (
 								<div key={i} className={cn("rounded-lg border p-3", sec.color)}>
@@ -821,6 +830,7 @@ export default function LedgerComponent() {
 	const [entries, setEntries]           = useState([]);
 	const [vendors, setVendors]           = useState([]);
 	const [customers, setCustomers]       = useState([]);
+	const [banks, setBanks]               = useState([]);
 
 	// `draft` is what the filter controls are bound to (edited freely, no
 	// network effect). `applied` is the last submitted snapshot — fetchLedger
@@ -831,6 +841,7 @@ export default function LedgerComponent() {
 		entryTypes: [], // [] = All Entries
 		vendorId: "all",
 		customerId: "all",
+		bankId: "all",
 		dateRange: { from: null, to: null },
 	});
 	const [draft, setDraft] = useState(defaultDraftFilters);
@@ -859,11 +870,13 @@ export default function LedgerComponent() {
 	// Server-computed totals for the FULL filtered set (all pages), from
 	// GET /api/ledger?...&includeSummary=true → { overall, byAccount }
 	const [summary, setSummary] = useState(null);
+	const [balanceDrift, setBalanceDrift] = useState([]);
 
 	/* ---------- Master data ---------- */
 	useEffect(() => {
 		apiRequest("/api/vendors").then((r) => setVendors(r.data || [])).catch(console.error);
 		apiRequest("/api/customers").then((r) => setCustomers(r.data || [])).catch(console.error);
+		apiRequest("/api/banks").then((r) => setBanks(r.data || [])).catch(console.error);
 	}, []);
 
 	/* ---------- Fetch ledger — driven entirely by `applied`.
@@ -875,6 +888,7 @@ export default function LedgerComponent() {
 				setEntries([]);
 				setTotal(0);
 				setSummary(null);
+				setBalanceDrift([]);
 				return;
 			}
 
@@ -888,6 +902,7 @@ export default function LedgerComponent() {
 			if (applied.entryTypes.length > 0) params.set("entryType", applied.entryTypes.join(","));
 			if (applied.accountType === "VENDOR"   && applied.vendorId   !== "all") params.set("vendorId", applied.vendorId);
 			if (applied.accountType === "CUSTOMER" && applied.customerId !== "all") params.set("customerId", applied.customerId);
+			if (applied.accountType === "BANK"     && applied.bankId     !== "all") params.set("bankId", applied.bankId);
 
 			// Send plain local calendar dates (no time/Z) — the backend's
 			// localDayRangeToUtc converts these using the timezone below,
@@ -902,6 +917,7 @@ export default function LedgerComponent() {
 			setEntries(res.data || []);
 			setTotal(res.meta?.total || 0);
 			setSummary(res.summary || null);
+			setBalanceDrift(res.meta?.balanceDrift || []);
 		} catch (e) {
 			console.error(e);
 			appToast.error(e.message);
@@ -945,6 +961,7 @@ export default function LedgerComponent() {
 	const selectedReferenceId =
 		applied.accountType === "VENDOR"   && applied.vendorId   !== "all" ? applied.vendorId :
 		applied.accountType === "CUSTOMER" && applied.customerId !== "all" ? applied.customerId :
+		applied.accountType === "BANK"     && applied.bankId     !== "all" ? applied.bankId :
 		null;
 
 	const singleAccountSummary = selectedReferenceId
@@ -968,13 +985,13 @@ export default function LedgerComponent() {
 
 	const hasActiveFilters =
 		draft.accountType !== "SELECT" || draft.entryTypes.length > 0 ||
-		draft.vendorId !== "all" || draft.customerId !== "all" ||
+		draft.vendorId !== "all" || draft.customerId !== "all" || draft.bankId !== "all" ||
 		!!draft.dateRange?.from || !!draft.dateRange?.to;
 
 	/* ---------- Export ---------- */
 	const exportCSV = () => {
 		const rows = [
-			["Date", "Account", "Account Type", "Entry Type", "PNR", "Passenger", "Debit", "Credit", "Remarks"],
+			["Date", "Account", "Account Type", "Entry Type", "PNR", "Passenger", "Debit", "Credit", "Balance", "Remarks"],
 			...entries.map((e) => [
 				format(new Date(e.transactionDate), "yyyy-MM-dd"),
 				e.account?.name || "",
@@ -984,6 +1001,7 @@ export default function LedgerComponent() {
 				e.details?.sale?.paxName || "",
 				e.debit  || "",
 				e.credit || "",
+				e.balanceAfter ?? "",
 				e.remarks || "",
 			]),
 		];
@@ -1115,7 +1133,7 @@ export default function LedgerComponent() {
 							<label className="text-xs font-medium text-gray-500">Account Type</label>
 							<Select
 								value={draft.accountType}
-								onValueChange={(v) => setDraft((d) => ({ ...d, accountType: v, vendorId: "all", customerId: "all" }))}
+								onValueChange={(v) => setDraft((d) => ({ ...d, accountType: v, vendorId: "all", customerId: "all", bankId: "all" }))}
 							>
 								<SelectTrigger size="sm" className="w-full"><SelectValue /></SelectTrigger>
 								<SelectContent>
@@ -1190,6 +1208,24 @@ export default function LedgerComponent() {
 									<SelectContent>
 										<SelectItem value="all">All Customers</SelectItem>
 										{customers.map((c) => <SelectItem key={c.id} value={c.id}>{c.customerName}</SelectItem>)}
+									</SelectContent>
+								</Select>
+							</div>
+						)}
+
+						{/* Bank */}
+						{draft.accountType === "BANK" && (
+							<div className="space-y-1">
+								<label className="text-xs font-medium text-gray-500">Bank</label>
+								<Select value={draft.bankId} onValueChange={(v) => setDraftField("bankId", v)}>
+									<SelectTrigger size="sm" className="w-full"><SelectValue placeholder="All Banks" /></SelectTrigger>
+									<SelectContent>
+										<SelectItem value="all">All Banks</SelectItem>
+										{banks.map((b) => (
+											<SelectItem key={b.id} value={b.id}>
+												{b.bankName}{b.accountNumber ? ` — ${b.accountNumber}` : ""}
+											</SelectItem>
+										))}
 									</SelectContent>
 								</Select>
 							</div>
@@ -1277,9 +1313,22 @@ export default function LedgerComponent() {
 				</CardHeader>
 
 				<CardContent className="p-0">
-					<div className="overflow-x-auto">
-						<Table>
-							<TableHeader>
+						{!isLoading && balanceDrift.length > 0 && (
+							<div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
+								<span className="font-semibold">Balance mismatch:</span> the running balance below is the total of
+								each account's ledger entries, but the balance stored on the account differs for{" "}
+								{balanceDrift
+									.map(
+										(d) =>
+											`${d.name} (ledger ${moneyText(d.ledgerBalance)} vs stored ${moneyText(d.storedBalance)}, difference ${moneyText(d.difference)})`,
+									)
+									.join("; ")}
+								.
+							</div>
+						)}
+						<div className="overflow-x-auto">
+							<Table>
+								<TableHeader>
 								<TableRow className="bg-gray-50 hover:bg-gray-50 border-b border-gray-200">
 									<TableHead className="text-xs font-bold text-gray-500 uppercase tracking-wide py-3 pl-4">Date</TableHead>
 									<TableHead className="text-xs font-bold text-gray-500 uppercase tracking-wide py-3 pl-4">Doc#</TableHead>
@@ -1288,7 +1337,12 @@ export default function LedgerComponent() {
 									<TableHead className="text-xs font-bold text-gray-500 uppercase tracking-wide py-3">Reference</TableHead>
 									<TableHead className="text-xs font-bold text-gray-500 uppercase tracking-wide py-3 text-right">Debit</TableHead>
 									<TableHead className="text-xs font-bold text-gray-500 uppercase tracking-wide py-3 text-right">Credit</TableHead>
-									{/* <TableHead className="text-xs font-bold text-gray-500 uppercase tracking-wide py-3 text-right">Balance</TableHead> */}
+									<TableHead
+										className="text-xs font-bold text-gray-500 uppercase tracking-wide py-3 text-right"
+										title="Remaining balance of the account after this entry"
+									>
+										Balance
+									</TableHead>
 									<TableHead className="w-8 py-3" />
 								</TableRow>
 							</TableHeader>
@@ -1296,7 +1350,7 @@ export default function LedgerComponent() {
 							<TableBody>
 								{isLoading ? (
 									<TableRow>
-										<TableCell colSpan={8} className="text-center py-16">
+										<TableCell colSpan={9} className="text-center py-16">
 											<div className="flex flex-col items-center gap-3">
 												<RefreshCw className="w-6 h-6 animate-spin text-slate-400" />
 												<p className="text-sm text-gray-500">Loading ledger entries…</p>
@@ -1305,7 +1359,7 @@ export default function LedgerComponent() {
 									</TableRow>
 								) : entries.length === 0 ? (
 									<TableRow>
-										<TableCell colSpan={8} className="text-center py-16">
+										<TableCell colSpan={9} className="text-center py-16">
 											<div className="flex flex-col items-center gap-2">
 												<BookOpen className="w-10 h-10 text-gray-200" />
 												<p className="text-gray-500 font-medium">

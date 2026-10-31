@@ -850,8 +850,8 @@ export default function ReportPage() {
             />
             <KpiCard
               label="Total VAT"
-              value={money(t.totalVat)}
-              sub={`Pax ${money(t.totalPaxVat)} · Other ${money(t.totalVatAmount)} (informational)`}
+              value={money(t.totalProfitVat)}
+              sub="15% of total sales profit"
               icon={Percent}
               tone="sky"
             />
@@ -894,11 +894,11 @@ export default function ReportPage() {
               tone="cyan"
             /> */}
             <KpiCard
-              label="POS Net Received"
-              value={money(t.totalPosNetAmount)}
-              sub="Order amount after commission"
-              icon={Terminal}
-              tone="cyan"
+              label="Total Refunded VAT"
+              value={money(t.totalRefundVat)}
+              sub={`15% of ${money(t.totalRefundedProfit)} refunded profit · ${t.refundsCount || 0} refund${t.refundsCount === 1 ? "" : "s"}`}
+              icon={Undo2}
+              tone="amber"
             />
             {/* <KpiCard
               label="POS Deducted Amount"
@@ -922,13 +922,24 @@ export default function ReportPage() {
       {/* POS stats by card type — only when the period has POS sales */}
       {t.posByCardType?.length > 0 && (
         <Card className="border-slate-200 py-5 gap-3">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Terminal className="h-4 w-4 text-cyan-600" /> POS Sales by Card Type
-            </CardTitle>
-            <CardDescription>
-              Original order amount, commission and net received for POS and split-POS payments
-            </CardDescription>
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-1.5">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Terminal className="h-4 w-4 text-cyan-600" /> POS Sales by Card Type
+              </CardTitle>
+              <CardDescription>
+                Original order amount, commission and net received for POS and split-POS payments
+              </CardDescription>
+            </div>
+            <div className="rounded-xl border border-cyan-200 bg-cyan-50/70 px-4 py-2 sm:text-right shrink-0">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-cyan-700">
+                POS Net Received
+              </p>
+              <p className="text-xl font-bold tabular-nums text-cyan-900">
+                {money(t.totalPosNetAmount)}
+              </p>
+              <p className="text-[11px] text-cyan-700/70">Order amount after commission</p>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
