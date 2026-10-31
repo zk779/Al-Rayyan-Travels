@@ -86,6 +86,11 @@ const FIELD_GROUPS = [
       { key: "netPrice", label: "Net Price", money: true },
       { key: "sellPrice", label: "Sell Price", money: true },
       { key: "profit", label: "Profit", money: true },
+      // PAX VAT only exists for DOMESTIC routes (same rule as New Sale): it is the
+      // 15% already included in the net price. Blank for every other route.
+      { key: "paxVat", label: "PAX VAT (domestic only)", get: (s) => (isDomesticRoute(s) ? moneyOrBlank(s.paxVat) : "") },
+      // Our VAT: 15% of the profit, charged on every sale regardless of route.
+      { key: "vatAmount", label: "Our VAT (15% of profit)", get: (s) => moneyOrBlank(s.vatAmount) },
       { key: "paidAmount", label: "Paid Amount", money: true },
       { key: "dueAmount", label: "Due Amount", money: true },
     ],
@@ -166,12 +171,14 @@ const FIELD_GROUPS = [
 // Sensible default selection — mirrors what the old plain CSV export showed.
 const DEFAULT_KEYS = new Set([
   "date", "invoiceNo", "airlineCode", "documentNo", "vendorName", "customerName",
-  "createdByName", "paymentType", "paymentStatus", "sellPrice", "status", "remarks",
+  "createdByName", "paymentType", "paymentStatus", "sellPrice", "paxVat", "vatAmount", "status", "remarks",
 ]);
 
 const ALL_FIELDS = FIELD_GROUPS.flatMap((g) => g.fields);
 
 const moneyOrBlank = (v) => (v == null ? "" : Number(v).toFixed(2));
+
+const isDomesticRoute = (sale) => String(sale.routeType || "").toUpperCase() === "DOMESTIC";
 
 const isRefundedRow = (sale) => sale.status?.toUpperCase() === "REFUNDED" || !!sale.refund;
 

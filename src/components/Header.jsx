@@ -59,7 +59,7 @@ const Header = () => {
 
   return (
     <TooltipProvider>
-      <header className="sticky top-0 z-50 hidden md:block w-full border-b bg-white/95 backdrop-blur">
+      <header className="sticky top-0 z-50 hidden md:block print:hidden w-full border-b bg-white/95 backdrop-blur">
         <div className="flex h-20 items-center justify-between px-4 lg:px-6">
           {/* Left - Search */}
           <div className="flex items-center gap-4 flex-1">

@@ -1,32 +1,27 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import {
-  Percent,
-  FileBarChart,
-  TrendingDown,
-  SaudiRiyal,
+  FileBarChart2,
   Printer,
-  Search,
-  Loader2,
-  Receipt,
-  Wallet,
+  TrendingUp,
   ShoppingCart,
-  Filter,
-  AlertCircle,
+  Undo2,
+  Landmark,
+  Loader2,
+  Info,
   ArrowLeft,
+  AlertCircle,
+  Receipt,
+  SaudiRiyal,
+  ListTree,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 
-import { Button } from "../../shadcn/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "../../shadcn/components/ui/card";
+import { Badge } from "../../shadcn/components/ui/badge";
+import { Checkbox } from "../../shadcn/components/ui/checkbox";
+import { Label } from "../../shadcn/components/ui/label";
 import {
   Table,
   TableBody,
@@ -35,59 +30,15 @@ import {
   TableHeader,
   TableRow,
 } from "../../shadcn/components/ui/table";
-import { Badge } from "../../shadcn/components/ui/badge";
-import { Checkbox } from "../../shadcn/components/ui/checkbox";
-import { Label } from "../../shadcn/components/ui/label";
-import DateRangeInputs from "../components/DateRangeInputs";
+import VatPeriodPicker from "../components/vat/VatPeriodPicker";
+import { PrintLetterhead, SarAmount } from "../components/vat/vatCommon";
+import { money } from "../components/vat/vatFormat";
+import { rangeParams, useVatPeriod } from "../components/vat/vatPeriod";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 const authHeaders = () => ({
   Authorization: `Bearer ${localStorage.getItem("token")}`,
 });
-
-// Same bilingual company letterhead used on the invoice pages — printed
-// version of this report carries it exactly the same way.
-const companyData = {
-  name: "AlMadaar Limited Company",
-  nameArabic: "شركة المدار ليميتد",
-  trn: "314713818300003",
-  trnArabic: "٣١٤٧١٣٨١٨٣٠٠٠٠٣",
-  crNumber: "7053982455",
-  crNumberArabic: "٧٠٥٣٩٨٢٤٥٥",
-  address:
-    "GGDC6349, Al Mutalla Street 3140, Ar Rawdah Distt, Building No. 6349, Jazan, Kingdom of Saudi Arabia",
-  addressArabic:
-    "GGDC6349, شارع المطلعة 3140, حي الروضة مبنى رقم 6349, جازان, المملكة العربية السعودية",
-  phone: "+966 17 3226260",
-  phoneArabic: "+٩٦٦ ١٧ ٣٢٢٦٢٦٠",
-  email: "agency@al-madaar.com",
-  website: "www.al-madaar.com",
-};
-
-function StatCard({ label, labelAr, value, color, icon: Icon, sub }) {
-  return (
-    <div className={`bg-white rounded-2xl p-4 shadow-sm border border-${color}-200`}>
-      <div className={`flex items-center gap-2 text-xs text-${color}-600 mb-1.5 font-semibold`}>
-        <span className={`h-7 w-7 rounded-lg bg-${color}-50 flex items-center justify-center shrink-0`}>
-          <Icon className="h-3.5 w-3.5" />
-        </span>
-        <span className="leading-tight">
-          {label}
-          {labelAr && (
-            <span className="block text-[10px] font-normal text-slate-400" dir="rtl">
-              {labelAr}
-            </span>
-          )}
-        </span>
-      </div>
-      <div className={`flex items-center gap-1 text-2xl font-bold text-${color}-700`}>
-        <SaudiRiyal size={16} />
-        {Number(value || 0).toFixed(2)}
-      </div>
-      {sub && <div className="text-[11px] text-slate-400 mt-0.5">{sub}</div>}
-    </div>
-  );
-}
 
 const getPaymentBadge = (type) => {
   const map = {
@@ -104,381 +55,380 @@ const getPaymentBadge = (type) => {
   );
 };
 
+const Skeleton = ({ w = "w-20" }) => <span className={`inline-block h-4 ${w} animate-pulse rounded bg-slate-100`} />;
+
+/** Submit VAT Report — output VAT, input VAT, refund VAT and net VAT payable for the ZATCA return. */
 export default function VatReport() {
-  const navigate = useNavigate();
-  const [range, setRange] = useState({ from: null, to: null });
-  const [loading, setLoading] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
+  const period = useVatPeriod();
+  const { range, ready, label: periodLabel } = period;
+
   const [report, setReport] = useState(null);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showBreakdown, setShowBreakdown] = useState(false);
 
-  const fetchReport = useCallback(async () => {
+  // Live preview: reloads whenever the period changes
+  const fromKey = range.from ? range.from.getTime() : null;
+  const toKey = range.to ? range.to.getTime() : null;
+  useEffect(() => {
+    if (!ready) {
+      setReport(null);
+      setError("");
+      return undefined;
+    }
+    const ctrl = new AbortController();
     setLoading(true);
     setError("");
-    try {
-      const params = new URLSearchParams();
-      if (range.from) params.set("dateFrom", format(range.from, "yyyy-MM-dd"));
-      if (range.to) params.set("dateTo", format(range.to, "yyyy-MM-dd"));
-      params.set("tz", Intl.DateTimeFormat().resolvedOptions().timeZone);
-
-      const res = await fetch(`${API_BASE}/api/sales/vat-report?${params.toString()}`, {
-        headers: authHeaders(),
+    const qs = new URLSearchParams(rangeParams(range)).toString();
+    fetch(`${API_BASE}/api/sales/vat-report?${qs}`, { headers: authHeaders(), signal: ctrl.signal })
+      .then(async (res) => {
+        const json = await res.json();
+        if (!res.ok || !json.success) throw new Error(json.error || "Failed to generate VAT report");
+        setReport(json.data);
+      })
+      .catch((err) => {
+        if (err.name === "AbortError") return;
+        setReport(null);
+        setError(err.message);
+      })
+      .finally(() => {
+        if (!ctrl.signal.aborted) setLoading(false);
       });
-      const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(json.error || "Failed to generate VAT report");
-      setReport(json.data);
-      setHasSearched(true);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [range]);
+    return () => ctrl.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromKey, toKey, ready]);
 
-  const periodLabel =
-    range.from && range.to
-      ? `${format(range.from, "dd MMM yyyy")} – ${format(range.to, "dd MMM yyyy")}`
-      : range.from
-        ? `From ${format(range.from, "dd MMM yyyy")}`
-        : range.to
-          ? `Up to ${format(range.to, "dd MMM yyyy")}`
-          : "All time";
+  const r = report || {};
+  const rows = [
+    {
+      label: "Sales",
+      labelAr: "المبيعات",
+      icon: TrendingUp,
+      tint: "bg-slate-100 text-slate-700",
+      amount: r.totalSell,
+      vat: r.sellingVat,
+      hint: "Sell × 15%",
+    },
+    {
+      label: "Sales returns (refunded profit)",
+      labelAr: "المبالغ المستردة",
+      icon: Undo2,
+      tint: "bg-rose-50 text-rose-600",
+      amount: r.totalRefund,
+      vat: r.refundVat,
+      neg: true,
+      hint: `${r.refundCount ?? 0} refunded sale${r.refundCount === 1 ? "" : "s"} · Profit × 15%`,
+    },
+    {
+      label: "Purchases",
+      labelAr: "المشتريات",
+      icon: ShoppingCart,
+      tint: "bg-slate-100 text-slate-600",
+      amount: r.totalNet,
+      vat: r.purchasingVat,
+      neg: true,
+      hint: "Net × 15%",
+    },
+  ];
 
   return (
-    <div className="min-h-screen bg-gray-50 print:bg-white print:min-h-0">
-      <style>
-        {`
-          @media print {
-            body { background: white !important; }
-          }
-        `}
-      </style>
+    <div className="min-h-screen print:min-h-0">
+      <style>{`
+        @page { size: A4; margin: 10mm; }
+        @media print {
+          body { background: white !important; }
+          /* the on-screen horizontal scroll must not clip the printed tables */
+          [data-slot="table-container"] { overflow: visible !important; }
+          table { min-width: 0 !important; width: 100% !important; }
+          .vat-print-exact, .vat-print-exact * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+      `}</style>
 
-      {/* This page is a bare, sidebar-less route (see Layout.jsx) so it can
-          print cleanly with no app chrome — needs its own back link and
-          page padding that Layout would normally provide. */}
-      <div className="print:hidden px-6 pt-4">
-        <Button variant="outline" size="sm" onClick={() => navigate(-1)} className="gap-1.5">
-          <ArrowLeft className="h-4 w-4" /> Go Back
-        </Button>
-      </div>
-
-      <div className="p-6 space-y-6">
-      {/* Print-only letterhead */}
-      {report && (
-        <div className="hidden print:block mb-4 border-b-2 border-gray-900 pb-4">
-          <div className="flex justify-between items-start gap-8">
-            <div className="flex-1">
-              <div className="text-lg font-bold text-gray-900 uppercase tracking-wide">
-                {companyData.name}
-              </div>
-              <div className="text-base font-bold text-gray-900 mb-2" dir="rtl">
-                {companyData.nameArabic}
-              </div>
-              <div className="text-[11px] text-gray-600 space-y-0.5">
-                <p>{companyData.address}</p>
-                <p dir="rtl">{companyData.addressArabic}</p>
-                <p>{companyData.phone} | {companyData.email}</p>
-                <p>TRN/الرقم الضريبي: {companyData.trn} / {companyData.trnArabic}</p>
-                <p>CR Number/رقم السجل التجاري: {companyData.crNumber} / {companyData.crNumberArabic}</p>
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="bg-gray-800 text-white px-4 py-2 rounded font-bold text-lg mb-1">
-                VAT REPORT
-              </div>
-              <div className="text-xs text-gray-600">Period: {periodLabel}</div>
-              <div className="text-xs text-gray-600">
-                Generated: {format(new Date(), "dd MMM yyyy, HH:mm")}
-              </div>
+      <div className="mx-auto w-full pb-10">
+        {/* Header */}
+        <div className="print:hidden">
+          <Link
+            to="/vat"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-800"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" /> VAT
+          </Link>
+          <div className="mt-2 flex items-center gap-3">
+            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-primary text-white shadow-md shadow-slate-900/25">
+              <FileBarChart2 size={20} />
+            </span>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">Submit VAT Report</h1>
+              <p className="text-sm text-slate-500">
+                Output VAT, input VAT and net VAT payable for your ZATCA return.
+              </p>
             </div>
           </div>
         </div>
-      )}
 
-      {/* Filters + actions (screen only) */}
-      <Card className="print:hidden">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Percent className="h-5 w-5 text-indigo-600" /> VAT Report
-          </CardTitle>
-          <CardDescription>
-            Purchasing and selling totals with their exclusive 15% VAT, refunds
-            for the period, and the resulting payable VAT.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <DateRangeInputs from={range.from} to={range.to} onChange={setRange} disabled={loading} />
-            <div className="flex items-center gap-4">
-              {report && (
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="showBreakdown"
-                    checked={showBreakdown}
-                    onCheckedChange={(v) => setShowBreakdown(!!v)}
-                  />
-                  <Label htmlFor="showBreakdown" className="text-sm text-slate-600 cursor-pointer">
-                    Include sales breakdown
-                  </Label>
-                </div>
-              )}
-              <Button onClick={fetchReport} disabled={loading} className="bg-gradient-primary text-white gap-2">
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                Generate Report
-              </Button>
-              {report && (
-                <Button variant="outline" onClick={() => window.print()} className="gap-2">
-                  <Printer className="h-4 w-4" /> Print
-                </Button>
-              )}
+        <PrintLetterhead title="VAT Report" periodLabel={periodLabel} />
+
+        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[360px_1fr] print:block">
+          {/* Settings */}
+          <section className="h-fit rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200/80 md:p-6 lg:sticky lg:top-6 print:hidden">
+            <VatPeriodPicker period={period} disabled={loading} />
+
+            <div className="mt-6 flex items-center gap-2">
+              <Checkbox id="showBreakdown" checked={showBreakdown} onCheckedChange={(v) => setShowBreakdown(!!v)} />
+              <Label htmlFor="showBreakdown" className="cursor-pointer text-sm text-slate-600">
+                Include sales &amp; refunds breakdown
+              </Label>
             </div>
-          </div>
-          {error && (
-            <div className="mt-3 flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-              <AlertCircle className="h-4 w-4 shrink-0" /> {error}
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
-      {!hasSearched && !loading && (
-        <Card className="border-dashed border-gray-200 print:hidden">
-          <CardContent className="py-16 flex flex-col items-center text-center gap-2">
-            <div className="p-3 rounded-full bg-indigo-50">
-              <Filter className="h-5 w-5 text-indigo-500" />
-            </div>
-            <p className="text-sm font-medium text-gray-700">
-              Pick a date range (or leave blank for all time) and generate the report
-            </p>
-          </CardContent>
-        </Card>
-      )}
+            <button
+              type="button"
+              onClick={() => window.print()}
+              disabled={!report || loading}
+              className="mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary text-sm font-semibold text-white shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Printer size={17} /> Print report
+            </button>
+            <p className="mt-2 text-center text-[11px] text-slate-400">Prints exactly what you see on the right</p>
+          </section>
 
-      {loading && (
-        <Card className="print:hidden">
-          <CardContent className="py-20 flex flex-col items-center justify-center gap-4">
-            <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
-            <p className="text-gray-600 font-medium">Crunching the numbers...</p>
-          </CardContent>
-        </Card>
-      )}
-
-      {report && !loading && (
-        <>
-          {/* Report period — visible on screen too, not just print */}
-          <div className="flex items-center gap-2 text-sm text-slate-500 print:hidden">
-            <Receipt className="h-4 w-4" />
-            Period: <span className="font-medium text-slate-700">{periodLabel}</span>
-            <span className="text-slate-300">•</span>
-            {report.saleCount} sale{report.saleCount === 1 ? "" : "s"}
-          </div>
-
-          {/* Purchasing */}
-          <div>
-            <h3 className="text-sm font-semibold text-slate-600 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-              <ShoppingCart className="h-4 w-4" /> Purchasing (Net)
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <StatCard
-                label="Total Net / Purchasing Amount"
-                labelAr="إجمالي صافي الشراء"
-                value={report.totalNet}
-                color="blue"
-                icon={ShoppingCart}
-              />
-              <StatCard
-                label="Purchasing VAT (15%, exclusive)"
-                labelAr="ضريبة الشراء ١٥٪"
-                value={report.purchasingVat}
-                color="cyan"
-                icon={Percent}
-                sub="Net × 15%, added on top"
-              />
-            </div>
-          </div>
-
-          {/* Selling */}
-          <div>
-            <h3 className="text-sm font-semibold text-slate-600 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-              <Wallet className="h-4 w-4" /> Selling
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <StatCard
-                label="Total Selling Amount"
-                labelAr="إجمالي المبيعات"
-                value={report.totalSell}
-                color="purple"
-                icon={Receipt}
-              />
-              <StatCard
-                label="Selling VAT (15%, exclusive)"
-                labelAr="ضريبة المبيعات ١٥٪"
-                value={report.sellingVat}
-                color="indigo"
-                icon={Percent}
-                sub="Sell × 15%, added on top"
-              />
-            </div>
-          </div>
-
-          {/* Refunds */}
-          <div>
-            <h3 className="text-sm font-semibold text-slate-600 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-              <TrendingDown className="h-4 w-4" /> Refunds
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <StatCard
-                label="Total Refunded Profit"
-                labelAr="إجمالي ربح المبيعات المستردة"
-                value={report.totalRefund}
-                color="rose"
-                icon={TrendingDown}
-                sub={`Original profit of ${report.refundCount} refunded sale${report.refundCount === 1 ? "" : "s"}`}
-              />
-              <StatCard
-                label="Refund VAT (15%, exclusive)"
-                labelAr="ضريبة المبالغ المستردة ١٥٪"
-                value={report.refundVat}
-                color="rose"
-                icon={Percent}
-                sub="Refund × 15%"
-              />
-            </div>
-          </div>
-
-          {/* Payable VAT — the headline result */}
-          <div className="rounded-2xl bg-gradient-to-tl from-gray-700 to-gray-900 text-white p-6 shadow-lg">
-            <div className="flex items-center justify-between flex-wrap gap-3">
-              <div>
-                <div className="text-xs uppercase tracking-wide opacity-80 font-semibold">
-                  Total Payable VAT
-                  <span className="block text-[11px] font-normal opacity-70" dir="rtl">
-                    إجمالي ضريبة القيمة المضافة المستحقة
-                  </span>
-                </div>
-                <div className="text-[11px] opacity-60 mt-1">
-                  Selling VAT − Purchasing VAT − Refund VAT
-                </div>
+          {/* Preview */}
+          <section className="space-y-4 min-w-0">
+            {error && (
+              <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600 print:hidden">
+                <AlertCircle className="h-4 w-4 shrink-0" /> {error}
               </div>
-              <div className="flex items-center gap-1 text-4xl font-bold">
-                <SaudiRiyal size={26} />
-                {Number(report.payableVat || 0).toFixed(2)}
+            )}
+
+            {!ready && (
+              <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-slate-300 bg-white py-16 text-center print:hidden">
+                <span className="rounded-full bg-slate-100 p-3 text-slate-500">
+                  <FileBarChart2 className="h-5 w-5" />
+                </span>
+                <p className="text-sm font-medium text-slate-700">Pick a start and/or end date to see the report</p>
               </div>
-            </div>
-          </div>
+            )}
 
-          {/* Breakdown tables — optional, toggled via "Include sales
-              breakdown" above; when off, only the stat cards (and the
-              payable VAT headline) show, on both screen and print. */}
-          {showBreakdown && (
-            <div className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <FileBarChart className="h-4 w-4" /> Contributing Sales
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {report.sales.length === 0 ? (
-                    <div className="text-center py-10 text-sm text-gray-500">
-                      No sales in this period.
+            {ready && (
+              <>
+                {/* Headline */}
+                <div className="vat-print-exact relative overflow-hidden rounded-2xl bg-gradient-to-tl from-gray-700 to-gray-900 p-6 text-white shadow-lg print:rounded-lg print:shadow-none">
+                  <div className="pointer-events-none absolute -right-12 -top-12 h-48 w-48 rounded-full bg-white/10 blur-2xl print:hidden" />
+                  <div className="relative flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-gray-300">
+                        <Landmark size={14} /> Total payable VAT
+                        <span className="normal-case text-[11px] opacity-70" dir="rtl">
+                          · إجمالي ضريبة القيمة المضافة المستحقة
+                        </span>
+                      </p>
+                      <p className="mt-2 flex items-center gap-2 text-4xl font-bold tabular-nums">
+                        {loading ? (
+                          <Loader2 className="animate-spin" size={30} />
+                        ) : (
+                          <>
+                            <SaudiRiyal size={28} />
+                            {money(r.payableVat)}
+                          </>
+                        )}
+                      </p>
+                      <p className="mt-1 text-[11px] text-gray-400">Selling VAT − Purchasing VAT − Refund VAT</p>
                     </div>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="bg-gray-50">
-                            <TableHead>Date</TableHead>
-                            <TableHead>Invoice #</TableHead>
-                            <TableHead>Document #</TableHead>
-                            <TableHead>Vendor</TableHead>
-                            <TableHead>Payment</TableHead>
-                            <TableHead className="text-right">Net</TableHead>
-                            <TableHead className="text-right">Sell</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {report.sales.map((s) => (
-                            <TableRow key={s.id}>
-                              <TableCell className="whitespace-nowrap text-xs">
-                                {s.saleDate ? format(new Date(s.saleDate), "dd MMM yyyy") : "—"}
-                              </TableCell>
-                              <TableCell className="font-mono text-xs">{s.invoiceNo || "—"}</TableCell>
-                              <TableCell className="font-mono text-xs">{s.documentNo || "—"}</TableCell>
-                              <TableCell className="text-xs max-w-[140px] truncate" title={s.vendorName}>
-                                {s.vendorName || "—"}
-                              </TableCell>
-                              <TableCell>{getPaymentBadge(s.paymentType)}</TableCell>
-                              <TableCell className="text-right text-xs font-medium">
-                                {s.netPrice.toFixed(2)}
-                              </TableCell>
-                              <TableCell className="text-right text-xs font-medium">
-                                {s.sellPrice.toFixed(2)}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+                    <div className="flex flex-col items-end gap-1.5">
+                      <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold">VAT rate 15%</span>
+                      <span className="flex items-center gap-1.5 text-xs text-gray-200">
+                        <Receipt size={13} /> {periodLabel}
+                        {report && (
+                          <>
+                            <span className="opacity-40">•</span>
+                            {r.saleCount} sale{r.saleCount === 1 ? "" : "s"}
+                          </>
+                        )}
+                      </span>
                     </div>
-                  )}
-                </CardContent>
-              </Card>
+                  </div>
+                  <div className="relative mt-5 grid grid-cols-3 gap-2 text-xs">
+                    {[
+                      ["Output VAT (sales)", r.sellingVat],
+                      ["Refund VAT", r.refundVat],
+                      ["Input VAT (purchases)", r.purchasingVat],
+                    ].map(([l, v]) => (
+                      <div key={l} className="rounded-xl bg-white/10 px-3 py-2.5">
+                        <p className="text-gray-300">{l}</p>
+                        <p className="mt-0.5 text-sm font-semibold tabular-nums">{loading ? "…" : money(v)}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <TrendingDown className="h-4 w-4" /> Contributing Refunds
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {report.refunds.length === 0 ? (
-                    <div className="text-center py-10 text-sm text-gray-500">
-                      No refunds in this period.
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="bg-gray-50">
-                            <TableHead>Refund Date</TableHead>
-                            <TableHead>Invoice #</TableHead>
-                            <TableHead>Document #</TableHead>
-                            <TableHead>Reason</TableHead>
-                            <TableHead className="text-right">Paid to Customer</TableHead>
-                            <TableHead className="text-right">Original Profit</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {report.refunds.map((r) => (
-                            <TableRow key={r.id}>
-                              <TableCell className="whitespace-nowrap text-xs">
-                                {r.refundDate ? format(new Date(r.refundDate), "dd MMM yyyy") : "—"}
-                              </TableCell>
-                              <TableCell className="font-mono text-xs">{r.invoiceNo || "—"}</TableCell>
-                              <TableCell className="font-mono text-xs">{r.documentNo || "—"}</TableCell>
-                              <TableCell className="text-xs max-w-[180px] truncate" title={r.refundReason}>
-                                {r.refundReason || "—"}
-                              </TableCell>
-                              <TableCell className="text-right text-xs text-slate-500">
-                                {r.netRefundToCustomer.toFixed(2)}
-                              </TableCell>
-                              <TableCell className="text-right text-xs font-semibold text-rose-700">
-                                {r.originalProfit.toFixed(2)}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
+                {/* Breakdown */}
+                <div className="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200/80">
+                  <div className="flex items-center justify-between px-5 pt-5">
+                    <h2 className="flex items-center gap-2 text-[15px] font-semibold text-slate-900">
+                      <ListTree size={16} className="text-slate-600" /> Breakdown
+                    </h2>
+                    <span className="text-xs text-slate-400">{periodLabel}</span>
+                  </div>
+                  <div className="mt-3 overflow-x-auto">
+                    <table className="w-full min-w-[480px] text-sm">
+                      <thead>
+                        <tr className="border-y border-slate-100 bg-slate-50/70 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                          <th className="px-5 py-2.5 text-left">Category</th>
+                          <th className="px-5 py-2.5 text-right">Amount</th>
+                          <th className="px-5 py-2.5 text-right">VAT (15%)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {rows.map((row) => (
+                          <tr key={row.label}>
+                            <td className="px-5 py-3">
+                              <span className="flex items-center gap-3">
+                                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${row.tint}`}>
+                                  <row.icon size={15} />
+                                </span>
+                                <span>
+                                  <span className="block font-medium text-slate-700">{row.label}</span>
+                                  <span className="block text-[10px] text-slate-400">
+                                    {row.hint} · <span dir="rtl">{row.labelAr}</span>
+                                  </span>
+                                </span>
+                              </span>
+                            </td>
+                            <td className="px-5 py-3 text-right">
+                              {loading ? <Skeleton /> : <SarAmount value={row.amount} className="text-slate-700" />}
+                            </td>
+                            <td className="px-5 py-3 text-right">
+                              {loading ? (
+                                <Skeleton w="w-16" />
+                              ) : (
+                                <SarAmount
+                                  value={row.neg ? -Math.abs(row.vat || 0) : row.vat}
+                                  className={row.neg ? "text-rose-600" : "font-semibold text-slate-900"}
+                                />
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                        <tr className="vat-print-exact bg-slate-100">
+                          <td className="px-5 py-3.5 font-semibold text-slate-900">
+                            Total payable VAT
+                            <span className="block text-[10px] font-normal text-slate-500">
+                              Sales VAT − Returns VAT − Purchases VAT
+                            </span>
+                          </td>
+                          <td />
+                          <td className="px-5 py-3.5 text-right">
+                            {loading ? <Skeleton w="w-20" /> : <SarAmount value={r.payableVat} className="text-base font-bold text-slate-900" />}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  {!loading && !report && !error && (
+                    <p className="flex items-center gap-2 px-5 py-4 text-xs text-amber-600">
+                      <Info size={14} /> No data for this period.
+                    </p>
                   )}
-                </CardContent>
-              </Card>
-            </div>
-          )}
-        </>
-      )}
+                  <p className="px-5 pb-4 pt-3 text-[11px] text-slate-400">
+                    Exclusive VAT: 15% added on top of the net and selling totals. Refund VAT is 15% of the original profit of each refunded sale.
+                  </p>
+                </div>
+
+                {/* Optional breakdown tables */}
+                {showBreakdown && report && !loading && (
+                  <div className="space-y-4">
+                    <div className="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200/80">
+                      <h3 className="flex items-center gap-2 px-5 pt-5 text-[15px] font-semibold text-slate-900">
+                        <FileBarChart2 size={16} className="text-slate-600" /> Contributing sales
+                        <span className="text-xs font-normal text-slate-400">({report.sales.length})</span>
+                      </h3>
+                      {report.sales.length === 0 ? (
+                        <p className="py-10 text-center text-sm text-gray-500">No sales in this period.</p>
+                      ) : (
+                        <div className="mt-3 overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow className="bg-slate-50/70">
+                                <TableHead>Date</TableHead>
+                                <TableHead>Invoice #</TableHead>
+                                <TableHead>Document #</TableHead>
+                                <TableHead>Vendor</TableHead>
+                                <TableHead>Payment</TableHead>
+                                <TableHead className="text-right">Net</TableHead>
+                                <TableHead className="text-right">Sell</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {report.sales.map((s) => (
+                                <TableRow key={s.id}>
+                                  <TableCell className="whitespace-nowrap text-xs">
+                                    {s.saleDate ? format(new Date(s.saleDate), "dd MMM yyyy") : "—"}
+                                  </TableCell>
+                                  <TableCell className="font-mono text-xs">{s.invoiceNo || "—"}</TableCell>
+                                  <TableCell className="font-mono text-xs">{s.documentNo || "—"}</TableCell>
+                                  <TableCell className="max-w-[140px] truncate text-xs" title={s.vendorName}>
+                                    {s.vendorName || "—"}
+                                  </TableCell>
+                                  <TableCell>{getPaymentBadge(s.paymentType)}</TableCell>
+                                  <TableCell className="text-right text-xs font-medium tabular-nums">{money(s.netPrice)}</TableCell>
+                                  <TableCell className="text-right text-xs font-medium tabular-nums">{money(s.sellPrice)}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200/80">
+                      <h3 className="flex items-center gap-2 px-5 pt-5 text-[15px] font-semibold text-slate-900">
+                        <Undo2 size={16} className="text-rose-600" /> Contributing refunds
+                        <span className="text-xs font-normal text-slate-400">({report.refunds.length})</span>
+                      </h3>
+                      {report.refunds.length === 0 ? (
+                        <p className="py-10 text-center text-sm text-gray-500">No refunds in this period.</p>
+                      ) : (
+                        <div className="mt-3 overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow className="bg-slate-50/70">
+                                <TableHead>Refund date</TableHead>
+                                <TableHead>Invoice #</TableHead>
+                                <TableHead>Document #</TableHead>
+                                <TableHead>Reason</TableHead>
+                                <TableHead className="text-right">Paid to customer</TableHead>
+                                <TableHead className="text-right">Original profit</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {report.refunds.map((rf) => (
+                                <TableRow key={rf.id}>
+                                  <TableCell className="whitespace-nowrap text-xs">
+                                    {rf.refundDate ? format(new Date(rf.refundDate), "dd MMM yyyy") : "—"}
+                                  </TableCell>
+                                  <TableCell className="font-mono text-xs">{rf.invoiceNo || "—"}</TableCell>
+                                  <TableCell className="font-mono text-xs">{rf.documentNo || "—"}</TableCell>
+                                  <TableCell className="max-w-[180px] truncate text-xs" title={rf.refundReason}>
+                                    {rf.refundReason || "—"}
+                                  </TableCell>
+                                  <TableCell className="text-right text-xs tabular-nums text-slate-500">
+                                    {money(rf.netRefundToCustomer)}
+                                  </TableCell>
+                                  <TableCell className="text-right text-xs font-semibold tabular-nums text-rose-700">
+                                    {money(rf.originalProfit)}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </section>
+        </div>
       </div>
     </div>
   );

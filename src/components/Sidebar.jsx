@@ -109,7 +109,7 @@ const Sidebar = () => {
     if (permission && !hasPermission(permission)) return null;
     if (any && !any.some((p) => hasPermission(p))) return null;
 
-    const active = activePath === to;
+    const active = activePath === to || activePath.startsWith(`${to}/`);
     // ...rest stays exactly the same
 
     const handleClick = () => {
@@ -298,9 +298,9 @@ const Sidebar = () => {
             permission="REPORT_READ"
           />
         <NavItem
-          to="/vat-report"
+          to="/vat"
           icon={Percent}
-          label={t("vatReport")}
+          label={t("vat")}
           permission="REPORT_READ"
         />
       </Collapsible>
@@ -366,12 +366,12 @@ const Sidebar = () => {
   const MobileSidebar = () => (
     <>
       <div
-        className="fixed inset-0 bg-black/50 z-40 backdrop-blur-sm"
+        className="fixed inset-0 bg-black/50 z-40 backdrop-blur-sm print:hidden"
         onClick={() => setMobileOpen(false)}
       />
       <aside
         dir={isRTL ? "rtl" : "ltr"}
-        className={`fixed top-0 left-0 z-50 h-screen w-64 transform transition-transform duration-300 ${
+        className={`print:hidden fixed top-0 left-0 z-50 h-screen w-64 transform transition-transform duration-300 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         } ${isDarkMode ? darkBg : lightBg} ${isDarkMode ? darkText : lightText} ${isDarkMode ? darkBorder : lightBorder} rounded-r-2xl`}
       >
@@ -419,7 +419,7 @@ const Sidebar = () => {
       <>
         <button
           onClick={() => setMobileOpen(true)}
-          className={`md:hidden fixed top-4 left-4 z-50 p-2.5 rounded-xl ${
+          className={`md:hidden print:hidden fixed top-4 left-4 z-50 p-2.5 rounded-xl ${
             isDarkMode
               ? "bg-gradient-to-r from-slate-700 to-slate-600 shadow-lg shadow-slate-900/40"
               : "bg-slate-800 shadow-lg shadow-slate-400/50"
@@ -437,7 +437,7 @@ const Sidebar = () => {
       {/* Mobile Toggle */}
       <button
         onClick={() => setMobileOpen(true)}
-        className={`md:hidden fixed top-4 left-4 z-50 p-2.5 rounded-xl ${
+        className={`md:hidden print:hidden fixed top-4 left-4 z-50 p-2.5 rounded-xl ${
           isDarkMode
             ? "bg-gradient-to-t from-slate-800 to-gray-600 shadow-lg shadow-slate-900/40"
             : "bg-slate-800 shadow-lg shadow-slate-400/50"
@@ -449,7 +449,7 @@ const Sidebar = () => {
       {/* Desktop Sidebar */}
       <aside
         dir={isRTL ? "rtl" : "ltr"}
-        className={`hidden md:block fixed h-screenshot transition-all duration-300 ${
+        className={`hidden md:block print:hidden fixed h-screenshot transition-all duration-300 ${
           isCollapsed ? "w-18" : "w-62"
         } ${isDarkMode ? darkBg : lightBg} ${
           isDarkMode ? darkText : lightText

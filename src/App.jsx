@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import Layout from "./components/Layout";
 import Home from "./pages/Home";
 import { SidebarProvider } from "./context/SidebarContext";
@@ -19,7 +19,9 @@ import BalanceAdjustment from "./pages/BalanceAdjustment";
 import NewHotelBooking from "./pages/NewHotelBooking";
 import EditHotelBooking from "./pages/EditHotelBooking";
 import ReportPage from "./pages/ReportPage";
+import VatHome from "./pages/VatHome";
 import VatReport from "./pages/VatReport";
+import ReturnableVat from "./pages/ReturnableVat";
 import LoginPage from "./pages/Login";
 import ProtectedRoutes from "./ProtectedRoutes";
 import PermissionRoute from "./PermissionRoute"; // ✅ ADD THIS
@@ -182,13 +184,31 @@ function App() {
 										}
 									/>
 									<Route
-										path="vat-report"
+										path="vat"
+										element={
+											<PermissionRoute permission="REPORT_READ">
+												<VatHome />
+											</PermissionRoute>
+										}
+									/>
+									<Route
+										path="vat/submit"
 										element={
 											<PermissionRoute permission="REPORT_READ">
 												<VatReport />
 											</PermissionRoute>
 										}
 									/>
+									<Route
+										path="vat/return"
+										element={
+											<PermissionRoute permission="REPORT_READ">
+												<ReturnableVat />
+											</PermissionRoute>
+										}
+									/>
+									{/* Old address — keep bookmarks working */}
+									<Route path="vat-report" element={<Navigate to="/vat" replace />} />
 									<Route
 										path="new-payments"
 										element={
