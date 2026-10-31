@@ -57,7 +57,7 @@ const getPaymentBadge = (type) => {
 
 const Skeleton = ({ w = "w-20" }) => <span className={`inline-block h-4 ${w} animate-pulse rounded bg-slate-100`} />;
 
-/** Submit VAT Report — output VAT, input VAT, refund VAT and net VAT payable for the ZATCA return. */
+/** Submit VAT Report — output VAT, input VAT and net VAT payable for the ZATCA return. */
 export default function VatReport() {
   const period = useVatPeriod();
   const { range, ready, label: periodLabel } = period;
@@ -99,6 +99,9 @@ export default function VatReport() {
   }, [fromKey, toKey, ready]);
 
   const r = report || {};
+  // Payable VAT = selling VAT − purchasing VAT (worked out here, not by the API).
+  // Refund VAT is neither subtracted nor displayed on this page.
+  const payableVat = Math.round(((r.sellingVat || 0) - (r.purchasingVat || 0) + Number.EPSILON) * 100) / 100;
   const rows = [
     {
       label: "Sales",
@@ -108,16 +111,6 @@ export default function VatReport() {
       amount: r.totalSell,
       vat: r.sellingVat,
       hint: "Sell × 15%",
-    },
-    {
-      label: "Sales returns (refunded profit)",
-      labelAr: "المبالغ المستردة",
-      icon: Undo2,
-      tint: "bg-rose-50 text-rose-600",
-      amount: r.totalRefund,
-      vat: r.refundVat,
-      neg: true,
-      hint: `${r.refundCount ?? 0} refunded sale${r.refundCount === 1 ? "" : "s"} · Profit × 15%`,
     },
     {
       label: "Purchases",
@@ -227,11 +220,11 @@ export default function VatReport() {
                         ) : (
                           <>
                             <SaudiRiyal size={28} />
-                            {money(r.payableVat)}
+                            {money(payableVat)}
                           </>
                         )}
                       </p>
-                      <p className="mt-1 text-[11px] text-gray-400">Selling VAT − Purchasing VAT − Refund VAT</p>
+                      <p className="mt-1 text-[11px] text-gray-400">Selling VAT − Purchasing VAT</p>
                     </div>
                     <div className="flex flex-col items-end gap-1.5">
                       <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold">VAT rate 15%</span>
@@ -246,10 +239,9 @@ export default function VatReport() {
                       </span>
                     </div>
                   </div>
-                  <div className="relative mt-5 grid grid-cols-3 gap-2 text-xs">
+                  <div className="relative mt-5 grid grid-cols-2 gap-2 text-xs">
                     {[
                       ["Output VAT (sales)", r.sellingVat],
-                      ["Refund VAT", r.refundVat],
                       ["Input VAT (purchases)", r.purchasingVat],
                     ].map(([l, v]) => (
                       <div key={l} className="rounded-xl bg-white/10 px-3 py-2.5">
@@ -312,12 +304,12 @@ export default function VatReport() {
                           <td className="px-5 py-3.5 font-semibold text-slate-900">
                             Total payable VAT
                             <span className="block text-[10px] font-normal text-slate-500">
-                              Sales VAT − Returns VAT − Purchases VAT
+                              Sales VAT − Purchases VAT
                             </span>
                           </td>
                           <td />
                           <td className="px-5 py-3.5 text-right">
-                            {loading ? <Skeleton w="w-20" /> : <SarAmount value={r.payableVat} className="text-base font-bold text-slate-900" />}
+                            {loading ? <Skeleton w="w-20" /> : <SarAmount value={payableVat} className="text-base font-bold text-slate-900" />}
                           </td>
                         </tr>
                       </tbody>
@@ -329,7 +321,7 @@ export default function VatReport() {
                     </p>
                   )}
                   <p className="px-5 pb-4 pt-3 text-[11px] text-slate-400">
-                    Exclusive VAT: 15% added on top of the net and selling totals. Refund VAT is 15% of the original profit of each refunded sale.
+                    Exclusive VAT: 15% added on top of the net and selling totals.
                   </p>
                 </div>
 

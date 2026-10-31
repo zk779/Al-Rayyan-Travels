@@ -24,7 +24,7 @@ export default function VatHome() {
     const vatQs = new URLSearchParams(rangeParams(range)).toString();
     fetch(`${API_BASE}/api/sales/vat-report?${vatQs}`, { headers: authHeaders(), signal: ctrl.signal })
       .then((r) => r.json())
-      .then((j) => j.success && setSnap((s) => ({ ...s, payable: j.data.payableVat })))
+      .then((j) => j.success && setSnap((s) => ({ ...s, payable: Math.round(((j.data.sellingVat || 0) - (j.data.purchasingVat || 0) + Number.EPSILON) * 100) / 100 })))
       .catch(() => {});
 
     const expQs = new URLSearchParams({
