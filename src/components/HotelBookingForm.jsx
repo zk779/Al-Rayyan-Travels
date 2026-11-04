@@ -43,8 +43,6 @@ import PaymentDialog from "./PaymentDialog";
 import EditPaymentDialog from "./EditPaymentDialog";
 import { appToast } from "../../shadcn/components/ui/appToast";
 import { computePaymentBreakdown } from "./paymentBreakdown";
-import VendorNetFields from "./VendorNetFields";
-import { applyVendorParts, isVendorPart, fareNet, vendorChargesPayload, withVendorParts } from "./vendorCharges";
 import { toStayISO, fromStayISO, nightsBetween } from "../utils/stayDates";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
@@ -97,9 +95,6 @@ const emptyRow = () => ({
   vendorId: "",
   customerId: "",
   netPrice: "",
-  baseNet: "",
-  vendorServiceCharge: "",
-  vendorVat: "",
   sellPrice: "",
   paidAmount: "",
   paymentType: "",
@@ -131,13 +126,20 @@ const calcPaxVAT = (netPrice) => {
   return n > 0 ? (n - n / 1.15).toFixed(2) : "0.00";
 };
 
+// The vendor's VAT on a hotel is already INSIDE the net amount that is typed, so it is worked
+// out from it (683.79 -> 89.19) — never added on top.
+const calcVendorVat = (netPrice) => {
+  const n = Number(netPrice) || 0;
+  return n > 0 ? Math.round((n - n / 1.15 + Number.EPSILON) * 100) / 100 : 0;
+};
+
 // Re-applies the VAT conditions for the chosen hotel type (same rules as the
 // DOMESTIC / ZERO_VAT flight routes, see HOTEL_KINDS above).
 const applyHotelEffects = (item, icao) => {
   const routeType = HOTEL_KINDS[icao]?.routeType || "";
   const updated = { ...item, routeType };
   if (routeType === "DOMESTIC") {
-    updated.paxVat = calcPaxVAT(fareNet(item));
+    updated.paxVat = calcPaxVAT(item.netPrice);
     updated.miscCharges = "";
   } else {
     updated.paxVat = "";
@@ -248,7 +250,7 @@ export default function HotelBookingForm({ invoiceId = null }) {
         if (inv.saleDate) setSaleDate(new Date(inv.saleDate));
         originalNet.current = Object.fromEntries((inv.sales || []).map((s) => [s.id, Number(s.netPrice) || 0]));
         setUiSales(
-          (inv.sales || []).map((raw) => withVendorParts(raw)).map((s) => ({
+          (inv.sales || []).map((s) => ({
             ...s,
             hotelName: s.hotelName || "",
             checkInDate: fromStayISO(s.checkInDate),
@@ -335,15 +337,21 @@ export default function HotelBookingForm({ invoiceId = null }) {
 
   useEffect(() => () => Object.values(docNoCheckTimers.current).forEach(clearTimeout), []);
 
-  /* ── City search (same endpoint as flight destinations) ── */
+  /* ── City search: every city and town of the world (by any spelling — Makkah / Mecca), not only
+        places with an airport ── */
   const loadCityOptions = useCallback(
     (inputValue) => {
       if (!inputValue || inputValue.length < 2) return Promise.resolve([]);
-      return fetch(`${API_BASE}/api/destinations/search?q=${encodeURIComponent(inputValue)}&limit=20`, { headers })
+      return fetch(`${API_BASE}/api/destinations/cities?q=${encodeURIComponent(inputValue)}&limit=20`, { headers })
         .then((r) => r.json())
         .then((j) =>
           j.success && j.data
-            ? j.data.map((a) => ({ value: a.iata, label: `${a.iata} - ${a.city}, ${a.country}`, airport: a }))
+            ? j.data.map((c) => ({
+                value: `geo-${c.id}`,
+                label: `${c.city}${c.alsoKnownAs ? ` (${c.alsoKnownAs})` : ""}, ${c.countryName}`,
+                // same shape as an airport entry, so everything that shows a booking's city keeps working
+                airport: { iata: null, city: c.city, country: c.country, countryName: c.countryName, lat: c.lat, lng: c.lng },
+              }))
             : [],
         )
         .catch(() => []);
@@ -366,21 +374,10 @@ export default function HotelBookingForm({ invoiceId = null }) {
       return next.length || isEdit ? next : [emptyRow()];
     });
 
-  const updateSale = (id, fieldArg, valueArg) =>
+  const updateSale = (id, field, value) =>
     setUiSales((prev) =>
-      prev.map((orig) => {
-        if (orig.id !== id) return orig;
-
-        // Net and Vendor charges are typed separately; the row's netPrice is their sum
-        // (plus the 15% VAT on the charges) and goes through the same checks as before.
-        let field = fieldArg;
-        let value = valueArg;
-        let item = orig;
-        if (isVendorPart(fieldArg)) {
-          item = { ...orig, ...applyVendorParts(orig, fieldArg, valueArg) };
-          field = "netPrice";
-          value = item.netPrice;
-        }
+      prev.map((item) => {
+        if (item.id !== id) return item;
 
         if (field === "netPrice") {
           const vendor = vendorMap[item.vendorId];
@@ -395,7 +392,7 @@ export default function HotelBookingForm({ invoiceId = null }) {
                 appToast.warning("Low Balance!", `Insufficient vendor balance.\n\nAvailable: ${balance}\nEntered: ${net}`);
                 lastToastValue.current = key;
               }
-              return orig;
+              return item;
             }
           }
           lastToastValue.current = null;
@@ -405,7 +402,7 @@ export default function HotelBookingForm({ invoiceId = null }) {
           if (sell > 0 && net > sell) {
             if (!isAdmin) {
               appToast.warning("Not Allowed", "Net price cannot exceed Sell price. Only Admins can override this.");
-              return orig;
+              return item;
             }
             appToast.warning("Warning", "Net price is higher than Sell price. This will result in a loss.");
           }
@@ -435,7 +432,7 @@ export default function HotelBookingForm({ invoiceId = null }) {
 
         if (field === "netPrice" || field === "sellPrice") {
           const updated = { ...item, [field]: value };
-          if (updated.routeType === "DOMESTIC") updated.paxVat = calcPaxVAT(fareNet(updated));
+          if (updated.routeType === "DOMESTIC") updated.paxVat = calcPaxVAT(updated.netPrice);
           updated.vatAmount = calcVAT(Number(updated.sellPrice || 0) - Number(updated.netPrice || 0));
           return updated;
         }
@@ -580,7 +577,9 @@ export default function HotelBookingForm({ invoiceId = null }) {
       paxName: s.paxName || null,
       destinations: s.destinations || [],
       netPrice: Number(s.netPrice),
-      ...vendorChargesPayload(s),
+      // the typed net already includes the vendor's VAT; no separate vendor charges on a hotel
+      vendorServiceCharge: 0,
+      vendorVat: calcVendorVat(s.netPrice),
       sellPrice: Number(s.sellPrice),
       vatAmount: Number(s.vatAmount || 0),
       paxVat: Number(s.paxVat || 0),
@@ -944,16 +943,30 @@ export default function HotelBookingForm({ invoiceId = null }) {
                     <Calculator className="h-3.5 w-3.5" /> Pricing &amp; Payment
                   </div>
                   <div className={`grid grid-cols-2 gap-3 ${item.routeType === "DOMESTIC" ? "md:grid-cols-4 xl:grid-cols-9" : "md:grid-cols-4 xl:grid-cols-8"}`}>
-                    {/* Net (the net amount) + the vendor's service charges; the row's net price is their sum with the VAT on the charges */}
-                  <VendorNetFields
-                    item={item}
-                    onChange={(f, v) => updateSale(item.id, f, v)}
-                    size="md"
-                    netRequired
-                    netInvalid={!item.netPrice}
-                  />
+                    <div className="space-y-1">
+                      <FieldLabel required>
+                        Net <SaudiRiyal size={13} />
+                      </FieldLabel>
+                      <Input
+                        type="tel"
+                        value={item.netPrice}
+                        onChange={(e) => updateSale(item.id, "netPrice", e.target.value)}
+                        placeholder="0.00"
+                        className={inputClass(!item.netPrice)}
+                      />
+                    </div>
 
-                  {item.routeType === "DOMESTIC" && (
+                    {/* The vendor's VAT, worked out from the net (which already includes it) */}
+                    <div className="space-y-1">
+                      <Label className="flex items-center gap-1 text-xs font-medium text-slate-600">
+                        Vendor VAT 15% <SaudiRiyal size={13} />
+                      </Label>
+                      <div className="flex h-9 items-center gap-1 rounded-[10px] border border-slate-200 bg-slate-100 px-2.5 text-xs font-semibold text-slate-700" data-testid="vendor-vat">
+                        <Calculator className="h-3 w-3" /> {calcVendorVat(item.netPrice).toFixed(2)}
+                      </div>
+                    </div>
+
+                    {item.routeType === "DOMESTIC" && (
                       <div className="space-y-1">
                         <Label className="flex items-center gap-1 text-xs font-medium text-orange-700">
                           PAX VAT 15% <SaudiRiyal size={13} />

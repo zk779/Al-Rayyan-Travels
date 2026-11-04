@@ -111,7 +111,8 @@ const MoneyField = ({ label, value, tone = "slate" }) => (
 
 const formatDestinations = (destinations) => {
   if (!destinations || destinations.length === 0) return null;
-  return destinations.map((d) => d.value).join(" → ");
+  // an airport destination shows its code (JED); a hotel city (no airport needed) shows its name
+  return destinations.map((d) => (d.airport?.iata || !d.airport?.city ? d.value : d.airport.city)).join(" → ");
 };
 
 const formatDate = (d) => (d ? format(new Date(d), "MMM dd, yyyy") : "N/A");

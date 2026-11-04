@@ -208,7 +208,7 @@ export default function HotelStayDialog({
                   loadOptions={loadCityOptions}
                   value={null}
                   onChange={addCity}
-                  placeholder="Search a city (e.g. Jeddah, Dubai, Istanbul)…"
+                  placeholder="Search any city (e.g. Makkah, Madinah, Dubai, Istanbul)…"
                   styles={selectStyles}
                   noOptionsMessage={({ inputValue }) =>
                     inputValue.length < 2 ? "Type 2+ characters" : "No cities found"
@@ -245,7 +245,7 @@ export default function HotelStayDialog({
                             )}
                           </div>
                           <p className="truncate text-xs text-slate-500">
-                            {c.airport?.country || ""} · {c.value}
+                            {[c.airport?.countryName || c.airport?.country, c.airport?.iata ? c.value : null].filter(Boolean).join(" · ")}
                           </p>
                         </div>
                         <Button
