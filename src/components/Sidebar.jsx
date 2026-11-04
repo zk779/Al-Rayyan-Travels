@@ -280,12 +280,6 @@ const Sidebar = () => {
           permission="SALE_CREATE"
         />
         <NavItem
-          to="/new-hotel-booking"
-          icon={Hotel}
-          label={t("hotelBooking")}
-          permission="SALE_CREATE"
-        />
-        <NavItem
           to="/sales-report"
           icon={ScrollText}
           label={t("salesReport")}
