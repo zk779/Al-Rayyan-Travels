@@ -149,11 +149,20 @@ const FIELD_GROUPS = [
   {
     group: "Hotel Details",
     fields: [
-      { key: "saleType", label: "Sale Type", get: (s) => (s.saleType === "HOTEL" ? "Hotel" : "Airline") },
+      { key: "saleType", label: "Sale Type", get: (s) => (String(s.status).toUpperCase() === "VOID" ? "Void" : s.saleType === "HOTEL" ? "Hotel" : "Airline") },
       { key: "hotelName", label: "Hotel Name", get: (s) => s.hotelName || "" },
       { key: "checkInDate", label: "Check-in", get: (s) => (s.checkInDate ? formatStay(s.checkInDate, "yyyy-MM-dd") : "") },
       { key: "checkOutDate", label: "Check-out", get: (s) => (s.checkOutDate ? formatStay(s.checkOutDate, "yyyy-MM-dd") : "") },
       { key: "nights", label: "Nights", get: (s) => (s.checkInDate && s.checkOutDate ? storedNights(s.checkInDate, s.checkOutDate) : "") },
+    ],
+  },
+  {
+    group: "Void Details",
+    fields: [
+      { key: "vendorServiceCharge", label: "Vendor Service Charges", get: (s) => (String(s.status).toUpperCase() === "VOID" ? moneyOrBlank(s.vendorServiceCharge) : "") },
+      { key: "vendorVat", label: "Vendor VAT (15%)", get: (s) => (String(s.status).toUpperCase() === "VOID" ? moneyOrBlank(s.vendorVat) : "") },
+      { key: "voidCharges", label: "Additional / Void Charges", get: (s) => (String(s.status).toUpperCase() === "VOID" ? moneyOrBlank(s.voidCharges) : "") },
+      { key: "companyServiceCharge", label: "Company Service Charges", get: (s) => (String(s.status).toUpperCase() === "VOID" ? moneyOrBlank(s.companyServiceCharge) : "") },
     ],
   },
   {

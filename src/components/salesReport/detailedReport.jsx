@@ -239,7 +239,10 @@ export default function DetailedReportTab({
     setIsDeleting(true);
     try {
       const response = await fetch(
-        `${API_BASE}/api/sales/sale/${deleteTarget.id}`,
+        // a void has its own delete (it reverses the two vendor ledger entries)
+        deleteTarget.status?.toUpperCase() === "VOID"
+          ? `${API_BASE}/api/sales/void/${deleteTarget.id}`
+          : `${API_BASE}/api/sales/sale/${deleteTarget.id}`,
         {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
@@ -310,6 +313,7 @@ export default function DetailedReportTab({
       PENDING: "bg-yellow-100 text-yellow-800 border-yellow-200",
       REFUNDED: "bg-red-100 text-red-800 border-red-200",
       CANCELLED: "bg-gray-100 text-gray-800 border-gray-200",
+      VOID: "bg-slate-800 text-white border-slate-800",
     };
     const className =
       statusMap[status?.toUpperCase()] ||
@@ -509,6 +513,8 @@ export default function DetailedReportTab({
                     const isRefunded =
                       sale.status?.toUpperCase() === "REFUNDED";
                     const hasRefundOnOriginal = !isRefunded && !!sale.refund;
+                    // A void is only between us and the vendor — no customer, no payment
+                    const isVoid = sale.status?.toUpperCase() === "VOID";
                     const canRecordPayment =
                       canRecordPaymentPerm && // ✅ RBAC
                       !isRefunded &&
@@ -595,12 +601,14 @@ export default function DetailedReportTab({
                               {sale.vendorName || "-"}
                             </TableCell>
                             <TableCell
-                              className={`max-w-[140px] truncate ${sale.customerName ? "text-blue-600" : "text-emerald-600"}`}
+                              className={`max-w-[140px] truncate ${isVoid ? "text-slate-400" : sale.customerName ? "text-blue-600" : "text-emerald-600"}`}
                               title={sale.customerName}
                             >
-                              {sale.customerName
-                                ? sale.customerName
-                                : "Walkin Customer"}
+                              {isVoid
+                                ? "Vendor only"
+                                : sale.customerName
+                                  ? sale.customerName
+                                  : "Walkin Customer"}
                             </TableCell>
                             <TableCell
                               className="max-w-[120px] truncate"
@@ -610,12 +618,12 @@ export default function DetailedReportTab({
                             </TableCell>
                             <TableCell>
                               <div className="flex flex-col gap-1">
-                                {getPaymentMethodBadge(sale.paymentType)}
+                                {isVoid ? <span className="text-xs text-slate-400">—</span> : getPaymentMethodBadge(sale.paymentType)}
                                 {getRefundPayoutBadge(sale.refund)}
                               </div>
                             </TableCell>
                             <TableCell>
-                              {getPaymentStatusBadge(sale.paymentStatus)}
+                              {isVoid ? <span className="text-xs text-slate-400">—</span> : getPaymentStatusBadge(sale.paymentStatus)}
                             </TableCell>
                             <TableCell
                               className={`text-right font-semibold ${isRefunded ? "text-red-600" : ""}`}
@@ -730,14 +738,16 @@ export default function DetailedReportTab({
                                     <Printer className="mr-2 h-4 w-4" />
                                     Generate Invoice
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() =>
-                                      GenerateCustomerInvoice(sale.id)
-                                    }
-                                  >
-                                    <Printer className="mr-2 h-4 w-4" />
-                                    Customer Invoice
-                                  </DropdownMenuItem>
+                                  {!isVoid && (
+                                    <DropdownMenuItem
+                                      onClick={() =>
+                                        GenerateCustomerInvoice(sale.id)
+                                      }
+                                    >
+                                      <Printer className="mr-2 h-4 w-4" />
+                                      Customer Invoice
+                                    </DropdownMenuItem>
+                                  )}
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             </TableCell>
@@ -779,12 +789,20 @@ export default function DetailedReportTab({
           open={!!deleteTarget}
           onOpenChange={() => setDeleteTarget(null)}
           title="Delete Sale & Reverse Ledger?"
-          description={`Are you sure you want to delete this specific sale? This will:
+          description={
+            deleteTarget?.status?.toUpperCase() === "VOID"
+              ? `Are you sure you want to delete this void? This will:
+
+        - Permanently remove document ${deleteTarget?.documentNo}.
+        - Reverse its two entries (credit and debit) on the vendor's ledger.
+        - Delete the invoice with it.`
+              : `Are you sure you want to delete this specific sale? This will:
 
         - Permanently remove document ${deleteTarget?.documentNo}.
         - Reverse ${deleteTarget?.sellPrice} SAR from the customer's balance.
         - Reverse ${deleteTarget?.netPrice} SAR from the vendor's ledger.
-        - Automatically update the parent invoice totals.`}
+        - Automatically update the parent invoice totals.`
+          }
           onConfirm={handleConfirmDelete}
           loading={isDeleting}
           variant="danger"

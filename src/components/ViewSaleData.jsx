@@ -253,6 +253,29 @@ function buildSections(invoice, sale) {
     });
   }
 
+  // ── A void (ticket cancelled with the vendor): the vendor's two ledger figures, not a payment
+  if (sale.status?.toUpperCase() === "VOID") {
+    const credit = Number(sale.netPrice || 0) + Number(sale.vendorServiceCharge || 0) + Number(sale.vendorVat || 0);
+    sections.push({
+      key: "void",
+      label: "Void",
+      icon: Wallet,
+      tint: "emerald",
+      full: true,
+      content: (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <StatBlock label="Net" value={money(sale.netPrice)} />
+          <StatBlock label="Vendor charges" value={money(sale.vendorServiceCharge)} />
+          <StatBlock label="Vendor VAT" value={money(sale.vendorVat)} />
+          <StatBlock label="Credit entry" value={money(credit)} />
+          <StatBlock label="Void charges" value={money(sale.voidCharges)} tone={Number(sale.voidCharges) > 0 ? "rose" : undefined} />
+          <StatBlock label="Void amount (debit)" value={money(sale.sellPrice)} tone="emerald" />
+          <StatBlock label="Company charges (profit)" value={money(sale.companyServiceCharge)} tone="emerald" />
+          <StatBlock label="Company VAT" value={money(sale.vatAmount)} />
+        </div>
+      ),
+    });
+  } else {
   // ── Payment / Money summary — now includes Paid + Due, not just Net/Sell/Profit
   sections.push({
     key: "financial",
@@ -280,6 +303,8 @@ function buildSections(invoice, sale) {
       </div>
     ),
   });
+
+  }
 
   // ── Payment Legs — breakdown for PARTIAL sales
   if (hasLegs) {

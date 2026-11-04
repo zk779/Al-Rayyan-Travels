@@ -8,6 +8,7 @@ import { AuthProvider } from "./context/AuthContext";
 import AirlineCodesPage from "./pages/AirlinesCode";
 import VendorsPage from "./pages/Vendors";
 import NewServices from "./pages/NewServices";
+import { NewSalePage, NewRefundPage, NewVoidPage } from "./pages/NewServicePages";
 import LedgerComponent from "./pages/Ledger";
 import CustomersPage from "./pages/Customer";
 import UsersPage from "./pages/Users";
@@ -74,8 +75,32 @@ function App() {
 									<Route
 										path="new-services"
 										element={
-											<PermissionRoute permission="SALE_CREATE">
+											<PermissionRoute any={["SALE_CREATE", "REFUND_CREATE"]}>
 												<NewServices />
+											</PermissionRoute>
+										}
+									/>
+									<Route
+										path="new-services/sale"
+										element={
+											<PermissionRoute permission="SALE_CREATE">
+												<NewSalePage />
+											</PermissionRoute>
+										}
+									/>
+									<Route
+										path="new-services/refund"
+										element={
+											<PermissionRoute permission="REFUND_CREATE">
+												<NewRefundPage />
+											</PermissionRoute>
+										}
+									/>
+									<Route
+										path="new-services/void"
+										element={
+											<PermissionRoute permission="SALE_CREATE">
+												<NewVoidPage />
 											</PermissionRoute>
 										}
 									/>

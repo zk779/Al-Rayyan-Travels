@@ -12,12 +12,6 @@ const Ar = ({ children, className = "" }) => (
   </span>
 );
 
-/**
- * One side of the VAT return: Standard Rated Sales or Standard Rated Purchases.
- * `data` is `sales` / `purchases` from buildStandardRated(). When the rows carry a
- * `totalSales` (the sales side) an extra "Total Sales" column shows every route's full
- * sales next to the amount that is actually counted.
- */
 export default function VatStandardTable({ title, titleAr, totalLabel, totalLabelAr, data, loading }) {
   const withTotalSales = data.rows.some((r) => r.totalSales != null);
   const cell = (value, className = "text-slate-700") =>

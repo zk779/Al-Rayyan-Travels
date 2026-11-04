@@ -49,7 +49,7 @@ const defaultFilters = () => ({
   searchBy: "all",
   agent: "all",
   branch: "all",
-  saleType: "all", // all | AIRLINE | HOTEL
+  saleType: "all", // all | AIRLINE | HOTEL | VOID
   order: "desc", // desc = newest first
 });
 
@@ -718,9 +718,10 @@ export default function SalesReport() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All (Airline &amp; Hotel)</SelectItem>
+                      <SelectItem value="all">All (Airline, Hotel &amp; Void)</SelectItem>
                       <SelectItem value="AIRLINE">Airline</SelectItem>
                       <SelectItem value="HOTEL">Hotel</SelectItem>
+                      <SelectItem value="VOID">Void</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

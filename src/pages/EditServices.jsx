@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import {
@@ -19,11 +19,30 @@ import {
 import { Button } from "../../shadcn/components/ui/button";
 
 import EditSalesTab from "../components/EditSaleTab";
+import VoidTabComponent from "../components/VoidTabComponent";
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
 export default function EditSaleComponent() {
   const { saleId } = useParams(); // This could be the Invoice ID or Sale ID depending on your routing
   const [activeTab, setActiveTab] = useState("sales");
   const navigate = useNavigate();
+
+  // A void is edited with its own form: look at the invoice first to see which one this is
+  const [kind, setKind] = useState("checking"); // "checking" | "sale" | "void"
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(`${API_BASE}/api/sales/${saleId}`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      signal: controller.signal,
+    })
+      .then((r) => r.json())
+      .then((j) => setKind((j.data?.sales || []).some((s) => s.status === "VOID") ? "void" : "sale"))
+      .catch((err) => {
+        if (err.name !== "AbortError") setKind("sale");
+      });
+    return () => controller.abort();
+  }, [saleId]);
 
   return (
     <div className="w-full">
@@ -57,12 +76,20 @@ export default function EditSaleComponent() {
             className="w-full"
           >
             <TabsList className="grid w-full grid-cols-1">
-              <TabsTrigger value="sales">Edit Sale</TabsTrigger>
+              <TabsTrigger value="sales">{kind === "void" ? "Edit Void" : "Edit Sale"}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="sales" className="mt-6">
               {/* This component will now handle its own fetch/update logic using saleId */}
-              <EditSalesTab saleId={saleId} />
+              {kind === "checking" ? (
+                <div className="flex items-center justify-center py-16">
+                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-500 border-t-transparent" />
+                </div>
+              ) : kind === "void" ? (
+                <VoidTabComponent invoiceId={saleId} />
+              ) : (
+                <EditSalesTab saleId={saleId} />
+              )}
             </TabsContent>
           </Tabs>
         </CardContent>
