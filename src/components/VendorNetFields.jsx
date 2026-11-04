@@ -22,7 +22,7 @@ export default function VendorNetFields({ item, onChange, size = "sm", netInvali
     <>
       <div className="space-y-1">
         <Label className={labelCls}>
-          Net {netRequired && <span className="text-rose-500">*</span>} <SaudiRiyal size={size === "md" ? 13 : 15} />
+          Basic Fare {netRequired && <span className="text-rose-500">*</span>} <SaudiRiyal size={size === "md" ? 13 : 15} />
         </Label>
         <Input
           type="tel"

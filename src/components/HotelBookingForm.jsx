@@ -964,6 +964,17 @@ export default function HotelBookingForm({ invoiceId = null }) {
                       <div className="flex h-9 items-center gap-1 rounded-[10px] border border-slate-200 bg-slate-100 px-2.5 text-xs font-semibold text-slate-700" data-testid="vendor-vat">
                         <Calculator className="h-3 w-3" /> {calcVendorVat(item.netPrice).toFixed(2)}
                       </div>
+                      {/* What is left of the net once the vendor's VAT is taken out */}
+                      {Number(item.netPrice) > 0 && (
+                        <p
+                          className="flex items-center justify-between gap-2 rounded-md bg-teal-50 px-2 py-1 text-[11px] text-teal-800 ring-1 ring-teal-100"
+                          data-testid="basic-amount"
+                          title={`${Number(item.netPrice).toFixed(2)} − ${calcVendorVat(item.netPrice).toFixed(2)}`}
+                        >
+                          <span>Basic amount</span>
+                          <span className="font-semibold tabular-nums">{(Math.round((Number(item.netPrice) - calcVendorVat(item.netPrice) + Number.EPSILON) * 100) / 100).toFixed(2)}</span>
+                        </p>
+                      )}
                     </div>
 
                     {item.routeType === "DOMESTIC" && (
