@@ -286,6 +286,9 @@ function buildSections(invoice, sale) {
     content: (
       <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
         <StatBlock label="Net" value={money(sale.netPrice)} />
+        {Number(sale.vendorServiceCharge) > 0 && (
+          <StatBlock label="Incl. vendor charges + VAT" value={money(Number(sale.vendorServiceCharge) + Number(sale.vendorVat || 0))} />
+        )}
         <StatBlock label="Sell" value={money(sale.sellPrice)} />
         <StatBlock label="Paid" value={money(sale.paidAmount)} tone="emerald" />
         <StatBlock

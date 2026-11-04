@@ -157,10 +157,11 @@ const FIELD_GROUPS = [
     ],
   },
   {
-    group: "Void Details",
+    group: "Vendor Charges / Void Details",
     fields: [
-      { key: "vendorServiceCharge", label: "Vendor Service Charges", get: (s) => (String(s.status).toUpperCase() === "VOID" ? moneyOrBlank(s.vendorServiceCharge) : "") },
-      { key: "vendorVat", label: "Vendor VAT (15%)", get: (s) => (String(s.status).toUpperCase() === "VOID" ? moneyOrBlank(s.vendorVat) : "") },
+      // on every sale that has them (the vendor's charges are already inside the Net price)
+      { key: "vendorServiceCharge", label: "Vendor Service Charges", get: (s) => (Number(s.vendorServiceCharge) ? moneyOrBlank(s.vendorServiceCharge) : "") },
+      { key: "vendorVat", label: "Vendor VAT (15%)", get: (s) => (Number(s.vendorVat) ? moneyOrBlank(s.vendorVat) : "") },
       { key: "voidCharges", label: "Additional / Void Charges", get: (s) => (String(s.status).toUpperCase() === "VOID" ? moneyOrBlank(s.voidCharges) : "") },
       { key: "companyServiceCharge", label: "Company Service Charges", get: (s) => (String(s.status).toUpperCase() === "VOID" ? moneyOrBlank(s.companyServiceCharge) : "") },
     ],

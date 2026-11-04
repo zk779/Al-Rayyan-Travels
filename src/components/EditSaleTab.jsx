@@ -41,6 +41,8 @@ import EditPaymentDialog from "./EditPaymentDialog";
 import { appToast } from "../../shadcn/components/ui/appToast";
 import { useAuth } from "../context/AuthContext";
 import { computePaymentBreakdown } from "./paymentBreakdown";
+import VendorNetFields from "./VendorNetFields";
+import { applyVendorParts, isVendorPart, fareNet, vendorChargesPayload, withVendorParts } from "./vendorCharges";
 import { HOTEL_ICAO } from "../utils/hotelText";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
@@ -74,7 +76,7 @@ const isOriginKSA = (destinations = []) =>
 const applyRouteEffects = (item, routeType) => {
   const u = { ...item, routeType };
   if (routeType === "DOMESTIC") {
-    u.paxVat = calcPaxVAT(item.netPrice);
+    u.paxVat = calcPaxVAT(fareNet(item));
     u.miscCharges = "";
   } else if (routeType === "ZERO_VAT") {
     u.paxVat = "";
@@ -156,7 +158,7 @@ export default function EditSalesTab({ saleId }) {
         const inv = body.data;
         setInvoiceNo(inv.invoiceNo || "");
         if (inv.saleDate) setSaleDate(new Date(inv.saleDate));
-        setUiSales((inv.sales || []).map((s) => ({ ...s })));
+        setUiSales((inv.sales || []).map((s) => withVendorParts({ ...s })));
       } catch (err) {
         if (err.name !== "AbortError") setFetchError(err.message);
       } finally {
@@ -243,7 +245,18 @@ export default function EditSalesTab({ saleId }) {
   );
 
   /* ── Update sale row ── */
-  const updateSale = (id, field, value) => {
+  const updateSale = (id, fieldArg, valueArg) => {
+    // Net and Vendor charges are typed separately; the row's netPrice is their sum
+    // (plus the 15% VAT on the charges) and goes through the same checks as before.
+    let field = fieldArg;
+    let value = valueArg;
+    let parts = null;
+    if (isVendorPart(fieldArg)) {
+      parts = applyVendorParts(uiSales.find((s) => s.id === id) || {}, fieldArg, valueArg);
+      field = "netPrice";
+      value = parts.netPrice;
+    }
+
     // Vendor balance guard for netPrice
     if (field === "netPrice") {
       const item = uiSales.find((s) => s.id === id);
@@ -263,8 +276,9 @@ export default function EditSalesTab({ saleId }) {
     }
 
     setUiSales((prev) =>
-      prev.map((item) => {
-        if (item.id !== id) return item;
+            prev.map((orig) => {
+        if (orig.id !== id) return orig;
+        const item = parts ? { ...orig, ...parts } : orig;
 
         // Payment dialog result: { paymentType, paymentMeta, customerId, bankId, paidAmount, paxName }
         // Payment dialog result: { paymentType, paymentMeta, customerId, bankId, paidAmount, paxName }
@@ -315,7 +329,7 @@ export default function EditSalesTab({ saleId }) {
           const profit =
             Number(updated.sellPrice || 0) - Number(updated.netPrice || 0);
           if (updated.routeType === "DOMESTIC") {
-            updated.paxVat = calcPaxVAT(updated.netPrice);
+            updated.paxVat = calcPaxVAT(fareNet(updated));
           }
           // VAT 15% always applies, regardless of route type.
           updated.vatAmount = calcVAT(profit);
@@ -437,6 +451,7 @@ export default function EditSalesTab({ saleId }) {
         paxName: s.paxName || null,
         destinations: s.destinations || [],
         netPrice: Number(s.netPrice),
+        ...vendorChargesPayload(s),
         sellPrice: Number(s.sellPrice),
         vatAmount: Number(s.vatAmount || 0),
         paxVat: Number(s.paxVat || 0),
@@ -828,24 +843,17 @@ export default function EditSalesTab({ saleId }) {
                 <div
                   className={`grid grid-cols-2 ${
                     item.routeType === "DOMESTIC"
-                      ? "md:grid-cols-8"
-                      : "md:grid-cols-7"
+                      ? "md:grid-cols-9"
+                      : "md:grid-cols-8"
                   } gap-3`}
                 >
-                  <div className="space-y-1">
-                    <Label className="text-xs font-medium text-slate-600">
-                      Net <SaudiRiyal size={15} />
-                    </Label>
-                    <Input
-                      type="tel"
-                      value={item.netPrice || ""}
-                      onChange={(e) =>
-                        updateSale(item.id, "netPrice", e.target.value)
-                      }
-                      placeholder="0.00"
-                      className="h-8 text-sm"
-                    />
-                  </div>
+                  {/* Net (the net amount) + the vendor's service charges; the row's net price is their sum with the VAT on the charges */}
+                  <VendorNetFields
+                    item={item}
+                    onChange={(f, v) => updateSale(item.id, f, v)}
+                    size="sm"
+                    netRequired
+                  />
 
                   {item.routeType === "DOMESTIC" && (
                     <div className="space-y-1">

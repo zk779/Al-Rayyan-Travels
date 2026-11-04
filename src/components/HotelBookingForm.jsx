@@ -43,6 +43,8 @@ import PaymentDialog from "./PaymentDialog";
 import EditPaymentDialog from "./EditPaymentDialog";
 import { appToast } from "../../shadcn/components/ui/appToast";
 import { computePaymentBreakdown } from "./paymentBreakdown";
+import VendorNetFields from "./VendorNetFields";
+import { applyVendorParts, isVendorPart, fareNet, vendorChargesPayload, withVendorParts } from "./vendorCharges";
 import { toStayISO, fromStayISO, nightsBetween } from "../utils/stayDates";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
@@ -95,6 +97,9 @@ const emptyRow = () => ({
   vendorId: "",
   customerId: "",
   netPrice: "",
+  baseNet: "",
+  vendorServiceCharge: "",
+  vendorVat: "",
   sellPrice: "",
   paidAmount: "",
   paymentType: "",
@@ -132,7 +137,7 @@ const applyHotelEffects = (item, icao) => {
   const routeType = HOTEL_KINDS[icao]?.routeType || "";
   const updated = { ...item, routeType };
   if (routeType === "DOMESTIC") {
-    updated.paxVat = calcPaxVAT(item.netPrice);
+    updated.paxVat = calcPaxVAT(fareNet(item));
     updated.miscCharges = "";
   } else {
     updated.paxVat = "";
@@ -243,7 +248,7 @@ export default function HotelBookingForm({ invoiceId = null }) {
         if (inv.saleDate) setSaleDate(new Date(inv.saleDate));
         originalNet.current = Object.fromEntries((inv.sales || []).map((s) => [s.id, Number(s.netPrice) || 0]));
         setUiSales(
-          (inv.sales || []).map((s) => ({
+          (inv.sales || []).map((raw) => withVendorParts(raw)).map((s) => ({
             ...s,
             hotelName: s.hotelName || "",
             checkInDate: fromStayISO(s.checkInDate),
@@ -361,10 +366,21 @@ export default function HotelBookingForm({ invoiceId = null }) {
       return next.length || isEdit ? next : [emptyRow()];
     });
 
-  const updateSale = (id, field, value) =>
+  const updateSale = (id, fieldArg, valueArg) =>
     setUiSales((prev) =>
-      prev.map((item) => {
-        if (item.id !== id) return item;
+      prev.map((orig) => {
+        if (orig.id !== id) return orig;
+
+        // Net and Vendor charges are typed separately; the row's netPrice is their sum
+        // (plus the 15% VAT on the charges) and goes through the same checks as before.
+        let field = fieldArg;
+        let value = valueArg;
+        let item = orig;
+        if (isVendorPart(fieldArg)) {
+          item = { ...orig, ...applyVendorParts(orig, fieldArg, valueArg) };
+          field = "netPrice";
+          value = item.netPrice;
+        }
 
         if (field === "netPrice") {
           const vendor = vendorMap[item.vendorId];
@@ -379,7 +395,7 @@ export default function HotelBookingForm({ invoiceId = null }) {
                 appToast.warning("Low Balance!", `Insufficient vendor balance.\n\nAvailable: ${balance}\nEntered: ${net}`);
                 lastToastValue.current = key;
               }
-              return item;
+              return orig;
             }
           }
           lastToastValue.current = null;
@@ -389,7 +405,7 @@ export default function HotelBookingForm({ invoiceId = null }) {
           if (sell > 0 && net > sell) {
             if (!isAdmin) {
               appToast.warning("Not Allowed", "Net price cannot exceed Sell price. Only Admins can override this.");
-              return item;
+              return orig;
             }
             appToast.warning("Warning", "Net price is higher than Sell price. This will result in a loss.");
           }
@@ -419,7 +435,7 @@ export default function HotelBookingForm({ invoiceId = null }) {
 
         if (field === "netPrice" || field === "sellPrice") {
           const updated = { ...item, [field]: value };
-          if (updated.routeType === "DOMESTIC") updated.paxVat = calcPaxVAT(updated.netPrice);
+          if (updated.routeType === "DOMESTIC") updated.paxVat = calcPaxVAT(fareNet(updated));
           updated.vatAmount = calcVAT(Number(updated.sellPrice || 0) - Number(updated.netPrice || 0));
           return updated;
         }
@@ -564,6 +580,7 @@ export default function HotelBookingForm({ invoiceId = null }) {
       paxName: s.paxName || null,
       destinations: s.destinations || [],
       netPrice: Number(s.netPrice),
+      ...vendorChargesPayload(s),
       sellPrice: Number(s.sellPrice),
       vatAmount: Number(s.vatAmount || 0),
       paxVat: Number(s.paxVat || 0),
@@ -926,21 +943,17 @@ export default function HotelBookingForm({ invoiceId = null }) {
                   <div className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
                     <Calculator className="h-3.5 w-3.5" /> Pricing &amp; Payment
                   </div>
-                  <div className={`grid grid-cols-2 gap-3 ${item.routeType === "DOMESTIC" ? "md:grid-cols-4 xl:grid-cols-8" : "md:grid-cols-4 xl:grid-cols-7"}`}>
-                    <div className="space-y-1">
-                      <FieldLabel required>
-                        Net <SaudiRiyal size={13} />
-                      </FieldLabel>
-                      <Input
-                        type="tel"
-                        value={item.netPrice}
-                        onChange={(e) => updateSale(item.id, "netPrice", e.target.value)}
-                        placeholder="0.00"
-                        className={inputClass(!item.netPrice)}
-                      />
-                    </div>
+                  <div className={`grid grid-cols-2 gap-3 ${item.routeType === "DOMESTIC" ? "md:grid-cols-4 xl:grid-cols-9" : "md:grid-cols-4 xl:grid-cols-8"}`}>
+                    {/* Net (the net amount) + the vendor's service charges; the row's net price is their sum with the VAT on the charges */}
+                  <VendorNetFields
+                    item={item}
+                    onChange={(f, v) => updateSale(item.id, f, v)}
+                    size="md"
+                    netRequired
+                    netInvalid={!item.netPrice}
+                  />
 
-                    {item.routeType === "DOMESTIC" && (
+                  {item.routeType === "DOMESTIC" && (
                       <div className="space-y-1">
                         <Label className="flex items-center gap-1 text-xs font-medium text-orange-700">
                           PAX VAT 15% <SaudiRiyal size={13} />

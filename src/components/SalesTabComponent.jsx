@@ -40,6 +40,8 @@ import ManageDestinationsDialog from "./ManageDestinationsDialog";
 import PaymentDialog from "./PaymentDialog";
 import { appToast } from "../../shadcn/components/ui/appToast";
 import { computePaymentBreakdown } from "./paymentBreakdown";
+import VendorNetFields from "./VendorNetFields";
+import { applyVendorParts, isVendorPart, fareNet, vendorChargesPayload } from "./vendorCharges";
 import { HOTEL_ICAO } from "../utils/hotelText";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
@@ -53,6 +55,9 @@ const emptyRow = () => ({
   vendorId: "",
   customerId: "",
   netPrice: "",
+  baseNet: "",
+  vendorServiceCharge: "",
+  vendorVat: "",
   sellPrice: "",
   paidAmount: "",
   paymentType: "",
@@ -99,7 +104,7 @@ const isOriginKSA = (destinations = []) =>
 const applyRouteEffects = (item, routeType) => {
   const updated = { ...item, routeType };
   if (routeType === "DOMESTIC") {
-    updated.paxVat = calcPaxVAT(item.netPrice);
+    updated.paxVat = calcPaxVAT(fareNet(item));
     updated.miscCharges = "";
   } else if (routeType === "ZERO_VAT") {
     updated.paxVat = "";
@@ -333,10 +338,21 @@ export default function SalesTabComponent() {
       return next.length ? next : [emptyRow()];
     });
 
-  const updateSale = (id, field, value) =>
+  const updateSale = (id, fieldArg, valueArg) =>
     setUiSales((prev) =>
-      prev.map((item) => {
-        if (item.id !== id) return item;
+      prev.map((orig) => {
+        if (orig.id !== id) return orig;
+
+        // Net and Vendor charges are typed separately; the row's netPrice is their sum
+        // (plus the 15% VAT on the charges) and goes through the same checks as before.
+        let field = fieldArg;
+        let value = valueArg;
+        let item = orig;
+        if (isVendorPart(fieldArg)) {
+          item = { ...orig, ...applyVendorParts(orig, fieldArg, valueArg) };
+          field = "netPrice";
+          value = item.netPrice;
+        }
 
         if (field === "netPrice") {
           const vendor = vendorMap[item.vendorId];
@@ -354,7 +370,7 @@ export default function SalesTabComponent() {
                 );
                 lastToastValue.current = key;
               }
-              return item;
+              return orig;
             }
           }
           lastToastValue.current = null;
@@ -367,7 +383,7 @@ export default function SalesTabComponent() {
                 "Not Allowed",
                 "Net price cannot exceed Sell price. Only Admins can override this.",
               );
-              return item; // block non-admins
+              return orig; // block non-admins
             }
             // admin: allow but warn
             appToast.warning(
@@ -420,7 +436,7 @@ export default function SalesTabComponent() {
         if (field === "netPrice" || field === "sellPrice") {
           const updated = { ...item, [field]: value };
           if (updated.routeType === "DOMESTIC") {
-            updated.paxVat = calcPaxVAT(updated.netPrice);
+            updated.paxVat = calcPaxVAT(fareNet(updated));
           }
           // VAT 15% always applies, regardless of route type.
           updated.vatAmount = calcVAT(
@@ -576,6 +592,7 @@ export default function SalesTabComponent() {
         paxName: s.paxName || null,
         destinations: s.destinations || null,
         netPrice: Number(s.netPrice),
+        ...vendorChargesPayload(s),
         sellPrice: Number(s.sellPrice),
         vatAmount: Number(s.vatAmount || 0),
         paxVat: Number(s.paxVat || 0),
@@ -932,25 +949,18 @@ export default function SalesTabComponent() {
                 <div
                   className={`grid grid-cols-2 ${
                     item.routeType === "DOMESTIC"
-                      ? "md:grid-cols-8"
-                      : "md:grid-cols-7"
+                      ? "md:grid-cols-9"
+                      : "md:grid-cols-8"
                   } gap-3`}
                 >
-                  {/* ── CHANGE 3: Net — required ── */}
-                  <div className="space-y-1">
-                    <RequiredLabel>
-                      Net <SaudiRiyal size={15} />
-                    </RequiredLabel>
-                    <Input
-                      type="tel"
-                      value={item.netPrice}
-                      onChange={(e) =>
-                        updateSale(item.id, "netPrice", e.target.value)
-                      }
-                      placeholder="0.00"
-                      className={`h-8 text-sm ${!item.netPrice ? "border-red-300 focus-visible:ring-red-400" : ""}`}
-                    />
-                  </div>
+                  {/* Net (the net amount) + the vendor's service charges; the row's net price is their sum with the VAT on the charges */}
+                  <VendorNetFields
+                    item={item}
+                    onChange={(f, v) => updateSale(item.id, f, v)}
+                    size="sm"
+                    netRequired
+                    netInvalid={!item.netPrice}
+                  />
 
                   {item.routeType === "DOMESTIC" && (
                     <div className="space-y-1">
