@@ -48,6 +48,7 @@ import {
 	Plane,
 	Receipt,
 	Banknote,
+	Ban,
 	RotateCcw,
 	Hash,
 	User,
@@ -117,6 +118,7 @@ const ENTRY_CONFIG = {
 	REFUND:          { color: "bg-amber-50 text-amber-700 border-amber-200", icon: <RotateCcw className="w-3 h-3" /> },
 	EXPENSE:         { color: "bg-rose-50 text-rose-700 border-rose-200", icon: <Receipt className="w-3 h-3" /> },
 	ADJUSTMENT:      { color: "bg-gray-100 text-gray-700 border-gray-200", icon: <FileText className="w-3 h-3" /> },
+	VOID:            { color: "bg-slate-800 text-white border-slate-800", icon: <Ban className="w-3 h-3" /> },
 };
 
 const entryBadge = (type) => {
@@ -1019,6 +1021,7 @@ export default function LedgerComponent() {
 	{ value: "PAYMENT", label: "Payment" },
 	{ value: "REFUND", label: "Refund" },
 	{ value: "EXPENSE", label: "Expense" },
+	{ value: "VOID", label: "Void" },
 ];
 
 	/* ======================= UI ======================= */

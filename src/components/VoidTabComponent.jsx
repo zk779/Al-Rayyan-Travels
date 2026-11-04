@@ -76,7 +76,9 @@ const emptyForm = () => ({
 /**
  * A VOID: a ticket cancelled with the vendor inside its void window. It only involves the
  * vendor — two ledger entries, a credit for what the vendor bills us (net + their service
- * charge + 15% VAT on it) and a debit for what they give back (that minus the void charges).
+ * charge + 15% VAT on it) and a debit for what they give back (the net minus the void charges —
+ * the vendor's own charges and their VAT never come back). Our own service charge, if any,
+ * is profit and is credited to the cash account.
  *
  * `invoiceId` set -> edit that void; otherwise create a new one. (Voids are listed, edited and
  * deleted from the Sales Report like every other sale.)
@@ -157,7 +159,8 @@ export default function VoidTabComponent({ invoiceId = null }) {
   const vendorVat = round2(vendorCharge * VAT_RATE);
   const credit = round2(net + vendorCharge + vendorVat);
   const voidCharges = num(form.voidCharges);
-  const debit = round2(credit - voidCharges);
+  const notReturned = round2(vendorCharge + vendorVat); // the vendor's charges + VAT never come back
+  const debit = round2(net - voidCharges);
   const companyCharge = form.useCompanyCharge ? num(form.companyServiceCharge) : 0;
   const companyVat = round2(companyCharge * VAT_RATE);
 
@@ -166,7 +169,7 @@ export default function VoidTabComponent({ invoiceId = null }) {
     airline: !form.airlineId,
     net: !(net > 0),
     charges: vendorCharge < 0 || voidCharges < 0 || companyCharge < 0,
-    voidTooHigh: voidCharges > credit,
+    voidTooHigh: voidCharges > net,
   };
   const invalid = Object.values(errors).some(Boolean);
 
@@ -189,7 +192,7 @@ export default function VoidTabComponent({ invoiceId = null }) {
     e.preventDefault();
     setSubmitted(true);
     if (invalid) {
-      appToast.error("Check the form", errors.voidTooHigh ? "Void charges cannot be more than the vendor credit amount." : "Fill in the required fields.");
+      appToast.error("Check the form", errors.voidTooHigh ? "Void charges cannot be more than the net amount." : "Fill in the required fields.");
       return;
     }
     try {
@@ -368,9 +371,10 @@ export default function VoidTabComponent({ invoiceId = null }) {
                 placeholder="0.00"
                 className={inputClass(errors.voidTooHigh)}
               />
-              {errors.voidTooHigh && <p className="text-[11px] text-rose-500">Cannot be more than the credit amount.</p>}
+              {errors.voidTooHigh && <p className="text-[11px] text-rose-500">Cannot be more than the net amount.</p>}
             </div>
-            <Computed label="Void amount (sell) — debit entry" hint="credit − void charges: what the vendor gives back" value={debit} strong tone="emerald" />
+            <Computed label="Not returned" hint="vendor charges + their VAT" value={notReturned} tone="rose" />
+            <Computed label="Void amount (sell) — debit entry" hint="net − void charges: what the vendor gives back" value={debit} strong tone="emerald" />
           </div>
         </div>
 
@@ -379,7 +383,7 @@ export default function VoidTabComponent({ invoiceId = null }) {
           <div className="flex items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-semibold text-slate-800">My company service charges</h3>
-              <p className="text-xs text-slate-500">Optional. Our own charge — counted as profit, with its 15% VAT (excl.).</p>
+              <p className="text-xs text-slate-500">Optional. Our own charge — counted as profit and credited to the cash account, with its 15% VAT (excl.).</p>
             </div>
             <button
               type="button"
@@ -407,15 +411,20 @@ export default function VoidTabComponent({ invoiceId = null }) {
         {/* What gets posted */}
         <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-xs text-slate-600">
           <p className="mb-2 flex items-center gap-1.5 font-semibold text-slate-700">
-            <Info className="h-3.5 w-3.5" /> Vendor ledger
+            <Info className="h-3.5 w-3.5" /> What gets posted
           </p>
           <div className="grid gap-2 sm:grid-cols-2">
             <p>
               <span className="font-semibold text-emerald-700">1 · Credit</span> {money(credit)} — net {money(net)} + charges {money(vendorCharge)} + VAT {money(vendorVat)}
             </p>
             <p>
-              <span className="font-semibold text-rose-700">2 · Debit</span> {money(debit)} — credit {money(credit)} − void charges {money(voidCharges)}
+              <span className="font-semibold text-rose-700">2 · Debit</span> {money(debit)} — credit {money(credit)} − not returned {money(notReturned)} − void charges {money(voidCharges)}
             </p>
+            {companyCharge > 0 && (
+              <p className="sm:col-span-2">
+                <span className="font-semibold text-emerald-700">Cash account · Credit</span> {money(companyCharge)} — company service charges (profit)
+              </p>
+            )}
           </div>
         </div>
 
