@@ -301,12 +301,6 @@ const Sidebar = () => {
           any={["SALE_READ", "REFUND_READ"]}
         />
         <NavItem
-          to="/other-services"
-          icon={FileStack}
-          label={t("otherServices")}
-          permission="SALE_READ"
-        />
-        <NavItem
             to="/report"
             icon={PieChart}
             label={t("reports")}
@@ -352,6 +346,13 @@ const Sidebar = () => {
         icon={LandmarkIcon}
         label={t("ledger")}
         permission="LEDGER_READ"
+      />
+
+      <NavItem
+          to="/other-services"
+          icon={FileStack}
+          label={t("otherServices")}
+          permission="SALE_READ"
       />
 
       <NavItem
