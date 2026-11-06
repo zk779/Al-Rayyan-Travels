@@ -8,6 +8,7 @@ import {
   Store,
   Users2,
   HandCoins,
+  FileStack,
   ScrollText,
   PieChart,
   Percent,
@@ -22,14 +23,15 @@ import {
   LogOut,
   Menu,
   X,
-  ChevronLeft,
-  ChevronRight,
+  ChevronsLeft,
   ChevronDown,
   ChevronUp,
   Sun,
   Moon,
   Plus,
   Languages,
+  Palette,
+  Check,
 } from "lucide-react";
 
 import { useSidebar } from "../context/SidebarContext";
@@ -37,6 +39,8 @@ import { ThemeContext } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
 import { appToast } from "../../shadcn/components/ui/appToast";
+import { Popover, PopoverContent, PopoverTrigger } from "../../shadcn/components/ui/popover";
+import { SIDEBAR_THEMES, readSidebarTheme, saveSidebarTheme, sidebarUi, themeSwatch } from "./sidebarThemes";
 import LogoDark from "../assets/logo-dark-am.png";
 import LogoLight from "../assets/logo-light-am.png";
 
@@ -47,15 +51,7 @@ import LogoLight from "../assets/logo-light-am.png";
 const baseItem =
   "group flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-300 relative";
 
-// Sophisticated gradients - Clean slate theme
-const lightBg = "bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200";
-const darkBg = "bg-gradient-to-br from-slate-800 to-gray-600";
-
-const lightText = "text-slate-800";
-const darkText = "text-gray-200";
-
-const lightBorder = "border border-slate-300/60 shadow-xl shadow-slate-200/60";
-const darkBorder = "border border-white/5 shadow-2xl";
+// Colours come from the chosen sidebar theme — see sidebarThemes.js
 
 /* ======================================================
 	SIDEBAR
@@ -65,8 +61,16 @@ const Sidebar = () => {
   const { isCollapsed, setIsCollapsed, sidebarHidden, setSidebarHidden } =
     useSidebar();
   const { isDarkMode, toggleTheme } = useContext(ThemeContext);
+  // Sidebar theme (Classic follows light/dark; the others are palettes of their own)
+  const [sidebarThemeKey, setSidebarThemeKey] = useState(readSidebarTheme);
+  const chooseSidebarTheme = (key) => {
+    setSidebarThemeKey(key);
+    saveSidebarTheme(key);
+  };
+  const ui = sidebarUi(sidebarThemeKey, isDarkMode);
   const { hasPermission, logout } = useAuth(); // ✅ RBAC + proper logout
   const { language, toggleLanguage, t, isRTL } = useLanguage(); // ✅ EN/AR toggle
+  const flyoutSide = isRTL ? "right-full pr-3" : "left-full pl-3"; // pop-outs open away from the sidebar
   const navigate = useNavigate();
 
   const location = useLocation();
@@ -104,12 +108,14 @@ const Sidebar = () => {
   /* ======================================================
 		NAV LINK WITH MODERN ACTIVE INDICATOR
 	====================================================== */
-  const NavItem = ({ to, icon: Icon, label, onClick, permission, any }) => {
+  const NavItem = ({ to, icon: Icon, label, onClick, permission, any, flyout = false }) => {
     // ✅ RBAC check — single permission OR any-of-list
     if (permission && !hasPermission(permission)) return null;
     if (any && !any.some((p) => hasPermission(p))) return null;
 
     const active = activePath === to || activePath.startsWith(`${to}/`);
+    // Icon-only when the sidebar is collapsed — except inside a pop-out, which is always full size
+    const compact = isCollapsed && !flyout;
     // ...rest stays exactly the same
 
     const handleClick = () => {
@@ -125,34 +131,24 @@ const Sidebar = () => {
         onClick={handleClick}
         className={`
 					${baseItem}
-					${isDarkMode ? darkText : lightText}
-					${isCollapsed ? "justify-center px-2" : ""}
-					${active && !isDarkMode ? "bg-slate-800 text-white shadow-lg shadow-slate-400/30 scale-[1.01]" : ""}
-					${active && isDarkMode ? "bg-white/10 text-white" : ""}
-					${!active && !isDarkMode ? "hover:bg-slate-200/70 hover:scale-[1.01]" : ""}
-					${!active && isDarkMode ? "hover:bg-white/5" : ""}
+					${compact ? "justify-center px-2" : ""}
+					${active ? ui.activeItem : `${ui.text} ${ui.idleItem}`}
 					transition-all ml-1 cursor-pointer
 				`}
       >
         {/* Modern line indicator for active item */}
         {active && (
           <span
-            className={`absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 rounded-full ${
-              isDarkMode ? "bg-blue-400" : "bg-slate-500"
-            }`}
+            className={`absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 rounded-full ${ui.indicator}`}
           ></span>
         )}
 
         <Icon
           className={`w-5 h-5 shrink-0 transition-transform group-hover:scale-110 ${
-            active
-              ? "text-white"
-              : isDarkMode
-                ? "text-gray-300"
-                : "text-slate-600"
+            active ? ui.iconActive : ui.iconIdle
           }`}
         />
-        {!isCollapsed && (
+        {!compact && (
           <span
             className={`text-sm font-medium tracking-wide ${
               active ? "font-semibold" : ""
@@ -163,17 +159,26 @@ const Sidebar = () => {
         )}
 
         {/* Badge effect on hover */}
-        {!active && !isCollapsed && (
+        {!active && !compact && (
           <span
-            className={`absolute right-2 w-1.5 h-1.5 rounded-full transition-all opacity-0 group-hover:opacity-100 ${
-              isDarkMode ? "bg-blue-400" : "bg-slate-800"
-            }`}
+            className={`absolute right-2 w-1.5 h-1.5 rounded-full transition-all opacity-0 group-hover:opacity-100 ${ui.dot}`}
           ></span>
         )}
       </div>
     );
 
-    return onClick ? content : <Link to={to}>{content}</Link>;
+    const node = onClick ? content : <Link to={to}>{content}</Link>;
+
+    // Collapsed: hovering (or tabbing to) an icon pops its name out beside the sidebar
+    if (!compact) return node;
+    return (
+      <div className="relative group/nav">
+        {node}
+        <div className={`absolute top-1/2 z-[70] hidden -translate-y-1/2 group-hover/nav:block group-focus-within/nav:block ${flyoutSide}`}>
+          <div className={`whitespace-nowrap rounded-xl px-3 py-2 text-sm font-medium shadow-xl ring-1 ${ui.flyout}`}>{label}</div>
+        </div>
+      </div>
+    );
   };
 
   /* ======================================================
@@ -192,23 +197,21 @@ const Sidebar = () => {
     if (visibleChildren.length === 0) return null;
 
     return (
-      <div className="space-y-0 mb-0!">
+      <div className={`space-y-0 mb-0! ${isCollapsed ? "relative group/col" : ""}`}>
         <button
           onClick={() => toggleSection(id)}
           className={`
 						${baseItem}
-						${isDarkMode ? darkText : lightText}
+						${ui.text}
 						w-full justify-between
-						${isDarkMode ? "hover:bg-white/5" : "hover:bg-slate-200/70 hover:scale-[1.01]"}
+						${ui.groupHover}
 						transition-all ml-1
 						${isCollapsed ? "px-2" : ""}
 					`}
         >
           <div className="flex items-center gap-3">
             <Icon
-              className={`w-5 h-5 transition-transform group-hover:scale-110 ${
-                isDarkMode ? "text-gray-300" : "text-slate-600"
-              }`}
+              className={`w-5 h-5 transition-transform group-hover:scale-110 ${ui.iconIdle}`}
             />
             {!isCollapsed && (
               <span className="text-sm font-medium tracking-wide">{label}</span>
@@ -222,6 +225,18 @@ const Sidebar = () => {
             </div>
           )}
         </button>
+
+        {/* Collapsed: hovering (or tabbing into) the group's icon pops out its name and its pages */}
+        {isCollapsed && (
+          <div className={`absolute top-0 z-[70] hidden group-hover/col:block group-focus-within/col:block ${flyoutSide}`}>
+            <div className={`min-w-[210px] rounded-xl p-1.5 shadow-xl ring-1 ${ui.flyout}`}>
+              <p className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wider opacity-60">{label}</p>
+              <div className="space-y-0.5">
+                {visibleChildren.map((child) => React.cloneElement(child, { flyout: true }))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {!isCollapsed && (
           <div
@@ -286,6 +301,12 @@ const Sidebar = () => {
           any={["SALE_READ", "REFUND_READ"]}
         />
         <NavItem
+          to="/other-services"
+          icon={FileStack}
+          label={t("otherServices")}
+          permission="SALE_READ"
+        />
+        <NavItem
             to="/report"
             icon={PieChart}
             label={t("reports")}
@@ -342,7 +363,7 @@ const Sidebar = () => {
 
       {/* Divider before logout */}
       <div
-        className={`my-2 border-t ${isDarkMode ? "border-white/10" : "border-slate-300"}`}
+        className={`my-2 border-t ${ui.divider}`}
       ></div>
 
       <NavItem
@@ -367,24 +388,25 @@ const Sidebar = () => {
         dir={isRTL ? "rtl" : "ltr"}
         className={`print:hidden fixed top-0 left-0 z-50 h-screen w-64 transform transition-transform duration-300 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
-        } ${isDarkMode ? darkBg : lightBg} ${isDarkMode ? darkText : lightText} ${isDarkMode ? darkBorder : lightBorder} rounded-r-2xl`}
+        } ${ui.shell} rounded-r-2xl`}
+        style={ui.style}
       >
         <div
-          className={`p-5 flex justify-between items-center border-b ${isDarkMode ? "border-white/10" : "border-slate-300"}`}
+          className={`p-5 flex justify-between items-center border-b ${ui.divider}`}
         >
           <div className="flex items-center gap-3">
             <div
-              className={`w-10 h-10 rounded-xl ${isDarkMode ? "bg-white/10" : "bg-slate-800"} flex items-center justify-center p-1.5`}
+              className={`w-10 h-10 rounded-xl ${ui.logoTile} flex items-center justify-center p-1.5`}
             >
               <img
-                src={isDarkMode ? LogoDark : LogoLight}
+                src={ui.darkLogo ? LogoDark : LogoLight}
                 className="w-full h-full object-contain"
                 alt="logo"
               />
             </div>
             <div>
               <p
-                className={`font-bold text-sm ${isDarkMode ? "text-white" : "text-slate-800"}`}
+                className={`font-bold text-sm ${ui.brand}`}
               >
                 {t("brand")}
               </p>
@@ -392,7 +414,7 @@ const Sidebar = () => {
           </div>
           <button
             onClick={() => setMobileOpen(false)}
-            className={`p-2 rounded-xl ${isDarkMode ? "bg-white/10 hover:bg-white/20" : "bg-slate-200 hover:bg-slate-300"} transition-colors`}
+            className={`p-2 rounded-xl ${ui.closeBtn} transition-colors`}
           >
             <X className="w-5 h-5" />
           </button>
@@ -443,22 +465,34 @@ const Sidebar = () => {
       {/* Desktop Sidebar */}
       <aside
         dir={isRTL ? "rtl" : "ltr"}
-        className={`hidden md:block print:hidden fixed h-screenshot transition-all duration-300 ${
+        className={`hidden md:block print:hidden fixed z-[60] h-screenshot transition-all duration-300 ${
           isCollapsed ? "w-18" : "w-62"
-        } ${isDarkMode ? darkBg : lightBg} ${
-          isDarkMode ? darkText : lightText
-        } ${isDarkMode ? darkBorder : lightBorder} rounded-2xl ml-2 my-2`}
+        } ${ui.shell} rounded-2xl ml-2 my-2`}
+        style={ui.style}
       >
+        {/* Collapse / expand handle, on the sidebar's edge */}
+        <button
+          type="button"
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className={`absolute top-8 z-[70] flex h-6 w-6 cursor-pointer items-center justify-center rounded-full shadow-md ring-2 transition ${
+            isRTL ? "-left-3" : "-right-3"
+          } ${ui.handle}`}
+        >
+          <ChevronsLeft className={`h-3.5 w-3.5 transition-transform duration-300 ${isCollapsed !== isRTL ? "rotate-180" : ""}`} />
+        </button>
+
         <div className="flex flex-col h-full">
           {/* Header */}
           <div
-            className={`p-5 flex items-center gap-3 border-b ${isDarkMode ? "border-white/10" : "border-slate-300"}`}
+            className={`p-5 flex items-center gap-3 border-b ${ui.divider}`}
           >
             <div
-              className={`w-10 h-10 rounded-xl ${isDarkMode ? "bg-white/10" : "bg-slate-800"} flex items-center justify-center p-1.5 shadow-md`}
+              className={`w-10 h-10 rounded-xl ${ui.logoTile} flex items-center justify-center p-1.5 shadow-md`}
             >
               <img
-                src={isDarkMode ? LogoDark : LogoLight}
+                src={ui.darkLogo ? LogoDark : LogoLight}
                 className="w-full h-full object-contain"
                 alt="logo"
               />
@@ -466,14 +500,12 @@ const Sidebar = () => {
             {!isCollapsed && (
               <div>
                 <p
-                  className={`font-bold text-lg ${
-                    isDarkMode ? "text-white" : "text-slate-800"
-                  }`}
+                  className={`font-bold text-lg ${ui.brand}`}
                 >
                   {t("brand")}
                 </p>
                 <p
-                  className={`text-xs ${isDarkMode ? "text-gray-400" : "text-slate-500"}`}
+                  className={`text-xs ${ui.tagline}`}
                 >
                   {t("tagline")}
                 </p>
@@ -482,47 +514,80 @@ const Sidebar = () => {
           </div>
 
           {/* Menu */}
-          <nav className="flex-1 p-4 space-y-2 overflow-y-auto custom-scrollbar">
+          <nav className={`flex-1 p-4 space-y-2 custom-scrollbar ${isCollapsed ? "overflow-visible" : "overflow-y-auto"}`}>
             <MenuContent />
           </nav>
 
           {/* Footer Controls */}
           <div
-            className={`${isCollapsed ? "flex flex-col space-y-2" : "flex gap-2"} p-4 border-t ${isDarkMode ? "border-white/10" : "border-slate-300"}`}
+            className={`${isCollapsed ? "flex flex-col space-y-2" : "flex gap-2"} p-4 border-t ${ui.divider}`}
           >
             <button
               onClick={toggleTheme}
               className={`${baseItem} flex-1 justify-center ${
                 isCollapsed ? "px-2" : ""
-              } transition-all border ${
-                isDarkMode
-                  ? "border-white/10 bg-white/5 hover:bg-white/10"
-                  : "border-slate-300 bg-slate-200 hover:bg-slate-300 hover:scale-105 active:scale-95"
-              }`}
+              } transition-all border ${ui.btn}`}
             >
               {isDarkMode ? (
                 <Sun className="w-5 h-5 text-yellow-400" />
               ) : (
-                <Moon className="w-5 h-5 text-slate-700" />
+                <Moon className={`w-5 h-5 ${ui.moon}`} />
               )}
             </button>
 
-            <button
-              onClick={() => setIsCollapsed(!isCollapsed)}
-              className={`${baseItem} flex-1 justify-center ${
-                isCollapsed ? "px-2" : ""
-              } transition-all border ${
-                isDarkMode
-                  ? "border-white/10 bg-white/5 hover:bg-white/10"
-                  : "border-slate-300 bg-slate-200 hover:bg-slate-300 hover:scale-105 active:scale-95"
-              }`}
-            >
-              {isCollapsed ? (
-                <ChevronRight className="w-5 h-5" />
-              ) : (
-                <ChevronLeft className="w-5 h-5" />
-              )}
-            </button>
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Sidebar theme"
+                  title="Sidebar theme"
+                  className={`${baseItem} flex-1 justify-center ${
+                    isCollapsed ? "px-2" : ""
+                  } transition-all border ${ui.btn}`}
+                >
+                  <Palette className="w-5 h-5" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent side={isRTL ? "left" : "right"} align="end" sideOffset={18} collisionPadding={12} className="z-[80] w-72 p-3 shadow-xl">
+                <p className="mb-2 flex items-baseline justify-between text-sm font-semibold text-slate-800">
+                  Sidebar theme · {isDarkMode ? "Dark" : "Light"}
+                  <span className="text-xs font-normal text-slate-400" dir="rtl">
+                    ثيم القائمة
+                  </span>
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {SIDEBAR_THEMES.map((th) => {
+                    const on = th.key === sidebarThemeKey;
+                    return (
+                      <button
+                        key={th.key}
+                        type="button"
+                        onClick={() => chooseSidebarTheme(th.key)}
+                        aria-pressed={on}
+                        data-theme-key={th.key}
+                        className={`group relative overflow-hidden rounded-xl text-left ring-1 transition-all hover:-translate-y-0.5 hover:shadow-md ${
+                          on ? "ring-2 ring-slate-900" : "ring-slate-200"
+                        }`}
+                      >
+                        <span className="block h-14" style={{ background: themeSwatch(th, isDarkMode) }} />
+                        <span className="block bg-white px-2 py-1.5">
+                          <span className="block truncate text-[11px] font-semibold text-slate-800">{th.name}</span>
+                          <span className="block truncate text-[10px] text-slate-400" dir="rtl">
+                            {th.nameAr}
+                          </span>
+                        </span>
+                        {on && (
+                          <span className="absolute right-1.5 top-1.5 grid h-5 w-5 place-items-center rounded-full bg-white text-slate-900 shadow">
+                            <Check className="h-3 w-3" />
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </PopoverContent>
+            </Popover>
+
           </div>
         </div>
       </aside>

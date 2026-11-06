@@ -9,6 +9,9 @@ import AirlineCodesPage from "./pages/AirlinesCode";
 import VendorsPage from "./pages/Vendors";
 import NewServices from "./pages/NewServices";
 import { NewSalePage, NewRefundPage, NewVoidPage } from "./pages/NewServicePages";
+import OtherServices from "./pages/OtherServices";
+import OtherServiceInvoice from "./pages/OtherServiceInvoice";
+import { NewOtherService, EditOtherService } from "./pages/OtherServiceFormPages";
 import LedgerComponent from "./pages/Ledger";
 import CustomersPage from "./pages/Customer";
 import UsersPage from "./pages/Users";
@@ -101,6 +104,38 @@ function App() {
 										element={
 											<PermissionRoute permission="SALE_CREATE">
 												<NewVoidPage />
+											</PermissionRoute>
+										}
+									/>
+									<Route
+										path="other-services"
+										element={
+											<PermissionRoute permission="SALE_READ">
+												<OtherServices />
+											</PermissionRoute>
+										}
+									/>
+									<Route
+										path="other-services/new"
+										element={
+											<PermissionRoute permission="SALE_CREATE">
+												<NewOtherService />
+											</PermissionRoute>
+										}
+									/>
+									<Route
+										path="other-services/:id/edit"
+										element={
+											<PermissionRoute permission="SALE_EDIT">
+												<EditOtherService />
+											</PermissionRoute>
+										}
+									/>
+									<Route
+										path="other-services/:id"
+										element={
+											<PermissionRoute permission="SALE_READ">
+												<OtherServiceInvoice />
 											</PermissionRoute>
 										}
 									/>
