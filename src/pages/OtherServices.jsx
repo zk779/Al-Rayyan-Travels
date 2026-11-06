@@ -22,6 +22,7 @@ import { Button } from "../../shadcn/components/ui/button";
 import { Input } from "../../shadcn/components/ui/input";
 import { appToast } from "../../shadcn/components/ui/appToast";
 import CustomAlertDialog from "../components/CustomAlertDialog";
+import BackToServices from "../components/BackToServices";
 import { SERVICE_TYPES, serviceOf } from "../components/otherServices/serviceTypes";
 import { useAuth } from "../context/AuthContext";
 
@@ -131,6 +132,10 @@ export default function OtherServices() {
 
   return (
     <div className="mx-auto w-full space-y-6 pb-10">
+      <div className="flex justify-end">
+        <BackToServices />
+      </div>
+
       {/* Header */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-800 to-slate-900 p-6 text-white shadow-lg md:p-7">
         <div className="pointer-events-none absolute -right-14 -top-16 h-60 w-60 rounded-full bg-white/5 blur-3xl" />

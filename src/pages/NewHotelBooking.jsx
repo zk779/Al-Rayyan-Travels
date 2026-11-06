@@ -1,6 +1,7 @@
 "use client";
 
 import HotelBookingForm from "../components/HotelBookingForm";
+import BackToServices from "../components/BackToServices";
 import { useAuth } from "../context/AuthContext";
 import { Card, CardContent } from "../../shadcn/components/ui/card";
 
@@ -18,7 +19,10 @@ export default function NewHotelBooking() {
   }
 
   return (
-    <div className="w-full">
+    <div className="w-full space-y-3">
+      <div className="flex justify-end">
+        <BackToServices />
+      </div>
       <HotelBookingForm />
     </div>
   );

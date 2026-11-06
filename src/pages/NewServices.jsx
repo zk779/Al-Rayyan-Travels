@@ -1,12 +1,12 @@
 "use client";
 
 import { Link } from "react-router-dom";
-import { ArrowRight, Ban, Briefcase, Hotel, Receipt, ShieldCheck, Ticket, Undo2, Zap } from "lucide-react";
+import { ArrowRight, Ban, Briefcase, FileStack, Hotel, Receipt, ShieldCheck, Ticket, Undo2, Zap } from "lucide-react";
 import { Card, CardContent } from "../../shadcn/components/ui/card";
 import { useAuth } from "../context/AuthContext";
 
 // Deep, muted tones (the 800/900 shades, no bright colours): each service has its own — indigo, wine,
-// teal, slate — carried through its panel, tags, hover ring and button. Literal class names
+// teal, slate, amber — carried through its panel, tags, hover ring and button. Literal class names
 // throughout (Tailwind can't see built-up strings).
 const SERVICES = [
   {
@@ -85,6 +85,25 @@ const SERVICES = [
     cta: "group-hover:border-slate-900 group-hover:bg-slate-900",
     arrow: "bg-slate-200 text-slate-700",
   },
+  {
+    key: "other",
+    to: "/other-services",
+    no: "05",
+    title: "Other Services",
+    titleAr: "خدمات أخرى",
+    desc: "Invoices for everything beyond tickets and hotels — transportation, Umrah visa, NADRA — with the 15% VAT worked out for you.",
+    chips: ["Transportation", "Umrah visa", "NADRA", "VAT invoice"],
+    icon: FileStack,
+    permission: "SALE_READ",
+    panel: "from-amber-800 via-amber-900 to-slate-900",
+    iconTile: "bg-amber-200/15 text-amber-50 ring-amber-200/30",
+    line: "bg-amber-300/60",
+    dot: "bg-amber-500",
+    chip: "bg-amber-50/70 text-amber-800 ring-amber-100",
+    ring: "hover:ring-amber-300/70",
+    cta: "group-hover:border-amber-900 group-hover:bg-amber-900",
+    arrow: "bg-amber-100 text-amber-700",
+  },
 ];
 
 const TIPS = [
@@ -113,7 +132,7 @@ export default function NewServices() {
   return (
     <div className="mx-auto w-full pb-10">
       {/* Hero */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-800 to-slate-900 p-7 text-white shadow-lg md:p-9">
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-800 to-slate-900 p-5 text-white shadow-lg md:p-8">
         <div className="pointer-events-none absolute -right-16 -top-20 h-72 w-72 rounded-full bg-white/5 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-24 left-1/3 h-64 w-64 rounded-full bg-slate-400/10 blur-3xl" />
         <div className="pointer-events-none absolute right-10 top-8 hidden h-24 w-24 rotate-12 rounded-3xl border border-white/5 md:block" />
@@ -135,19 +154,20 @@ export default function NewServices() {
           <div className="max-w-md">
             <p className="text-base font-medium text-slate-100">What would you like to do?</p>
             <p className="mt-1 text-sm text-slate-400">
-              Pick a service to open its form — sales, refunds, hotel bookings and voids all live here.
+              Pick a service to open its form — sales, refunds, hotel bookings, voids and other services all live here.
             </p>
           </div>
         </div>
       </div>
 
       {/* Services */}
-      <div className="mt-7 grid grid-cols-1 gap-6 md:grid-cols-2 2xl:grid-cols-4">
+      {/* Three cards to a row; whatever is left over sits centred on the row below (flex-wrap + centre) */}
+      <div className="mt-7 flex flex-wrap justify-center gap-6">
         {allowed.map((s) => (
           <Link
             key={s.key}
             to={s.to}
-            className={`group relative flex flex-col overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-slate-200 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-slate-900/10 ${s.ring}`}
+            className={`group relative flex w-full flex-col overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-slate-200 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-slate-900/10 md:w-[calc((100%-1.5rem)/2)] xl:w-[calc((100%-3rem)/3)] ${s.ring}`}
           >
             {/* Panel: a deep, muted shade of the service's colour fading to slate */}
             <div className={`relative flex h-36 items-end justify-between overflow-hidden bg-gradient-to-br p-5 ${s.panel}`}>
