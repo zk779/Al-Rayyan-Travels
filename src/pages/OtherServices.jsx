@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import {
   ChevronLeft,
@@ -53,6 +53,8 @@ const Stat = ({ icon: Icon, label, labelAr, value, money: isMoney = true, tone }
 /** Other Services: invoices for transportation, Umrah visa, NADRA … (their own list, not sales). */
 export default function OtherServices() {
   const navigate = useNavigate();
+  // "← Services" only when we got here from the Services page (not from the sidebar)
+  const fromServices = !!useLocation().state?.fromServices;
   const { hasPermission } = useAuth();
   const canCreate = hasPermission("SALE_CREATE");
   const canEdit = hasPermission("SALE_EDIT");
@@ -132,9 +134,11 @@ export default function OtherServices() {
 
   return (
     <div className="mx-auto w-full space-y-6 pb-10">
-      <div className="flex justify-end">
-        <BackToServices />
-      </div>
+      {fromServices && (
+        <div className="flex justify-end">
+          <BackToServices />
+        </div>
+      )}
 
       {/* Header */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-800 to-slate-900 p-6 text-white shadow-lg md:p-7">

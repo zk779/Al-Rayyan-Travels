@@ -167,6 +167,7 @@ export default function NewServices() {
           <Link
             key={s.key}
             to={s.to}
+            state={{ fromServices: true }} // lets the page opened know it was reached from here
             className={`group relative flex w-full flex-col overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-slate-200 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-slate-900/10 md:w-[calc((100%-1.5rem)/2)] xl:w-[calc((100%-3rem)/3)] ${s.ring}`}
           >
             {/* Panel: a deep, muted shade of the service's colour fading to slate */}
