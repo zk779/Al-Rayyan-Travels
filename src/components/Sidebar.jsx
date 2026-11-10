@@ -348,12 +348,6 @@ const Sidebar = () => {
         permission="LEDGER_READ"
       />
 
-      <NavItem
-          to="/other-services"
-          icon={FileStack}
-          label={t("otherServices")}
-          permission="SALE_READ"
-      />
 
       <NavItem
         to="/users"
