@@ -153,7 +153,7 @@ export default function OtherServices() {
               <p className="text-sm text-slate-400" dir="rtl">
                 خدمات أخرى
               </p>
-              <p className="mt-0.5 text-xs text-slate-400">Invoices for transportation, Umrah visa, NADRA and more.</p>
+              <p className="mt-0.5 text-xs text-slate-400">Invoices for transportation, Umrah visa and more.</p>
             </div>
           </div>
           {canCreate && (

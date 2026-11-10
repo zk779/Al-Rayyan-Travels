@@ -41,6 +41,8 @@ import EditPaymentDialog from "./EditPaymentDialog";
 import { appToast } from "../../shadcn/components/ui/appToast";
 import { useAuth } from "../context/AuthContext";
 import { computePaymentBreakdown } from "./paymentBreakdown";
+import BranchPicker from "./BranchPicker";
+import { useIsAdmin } from "../utils/useIsAdmin";
 import VendorNetFields from "./VendorNetFields";
 import { applyVendorParts, isVendorPart, fareNet, vendorChargesPayload, withVendorParts } from "./vendorCharges";
 import { HOTEL_ICAO } from "../utils/hotelText";
@@ -118,6 +120,10 @@ export default function EditSalesTab({ saleId }) {
   const [uiSales, setUiSales] = useState([]);
   const [saleDate, setSaleDate] = useState(null);
   const [invoiceNo, setInvoiceNo] = useState("");
+  // ADMIN only: change which branch the invoice belongs to
+  const isAdminUser = useIsAdmin();
+  const [branchId, setBranchId] = useState("");
+  const [originalBranchId, setOriginalBranchId] = useState("");
   const [fetching, setFetching] = useState(true);
   const [fetchError, setFetchError] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -157,6 +163,8 @@ export default function EditSalesTab({ saleId }) {
 
         const inv = body.data;
         setInvoiceNo(inv.invoiceNo || "");
+        setBranchId(inv.branch?.id || inv.branchId || "");
+        setOriginalBranchId(inv.branch?.id || inv.branchId || "");
         if (inv.saleDate) setSaleDate(new Date(inv.saleDate));
         setUiSales((inv.sales || []).map((s) => withVendorParts({ ...s })));
       } catch (err) {
@@ -433,6 +441,7 @@ export default function EditSalesTab({ saleId }) {
     const payload = {
       invoiceNo,
       saleDate: saleDate ? saleDate.toISOString() : null,
+      ...(isAdminUser && branchId && branchId !== originalBranchId ? { branchId } : {}),
       sales: uiSales.map((s) => ({
         id: s.id,
         airlineId: s.airlineId,
@@ -556,7 +565,7 @@ export default function EditSalesTab({ saleId }) {
       {/* Invoice header */}
       <Card className="bg-slate-50 mb-2">
         <CardContent className="py-3">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className={`grid grid-cols-1 gap-4 ${isAdminUser ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
             <div className="space-y-2">
               <Label className="text-sm font-medium text-gray-700">
                 Invoice Number
@@ -622,6 +631,7 @@ export default function EditSalesTab({ saleId }) {
                 Date when this invoice was originally created
               </p>
             </div>
+            <BranchPicker value={branchId} onChange={setBranchId} allowDefault={false} />
           </div>
         </CardContent>
       </Card>

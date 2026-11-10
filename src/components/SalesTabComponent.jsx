@@ -40,6 +40,8 @@ import ManageDestinationsDialog from "./ManageDestinationsDialog";
 import PaymentDialog from "./PaymentDialog";
 import { appToast } from "../../shadcn/components/ui/appToast";
 import { computePaymentBreakdown } from "./paymentBreakdown";
+import BranchPicker from "./BranchPicker";
+import { useIsAdmin } from "../utils/useIsAdmin";
 import VendorNetFields from "./VendorNetFields";
 import { applyVendorParts, isVendorPart, fareNet, vendorChargesPayload } from "./vendorCharges";
 import { HOTEL_ICAO } from "../utils/hotelText";
@@ -152,6 +154,9 @@ const RequiredLabel = ({ children }) => (
 /* ─── Component ──────────────────────────────────────────── */
 export default function SalesTabComponent() {
   const [saleDate, setSaleDate] = useState(new Date());
+  // ADMIN only: put the sale in another branch ('' = the creator's own)
+  const isAdminUser = useIsAdmin();
+  const [branchId, setBranchId] = useState("");
   const [uiSales, setUiSales] = useState([]);
   const [destinationDialog, setDestinationDialog] = useState({
     open: false,
@@ -276,6 +281,14 @@ export default function SalesTabComponent() {
         )
           .then((r) => r.json())
           .then((data) => {
+            // a voided ticket can never be sold again (the server refuses it too)
+            if (data.success && data.voided) {
+              appToast.error(
+                "Voided Ticket",
+                `Document No "${docNo}" is VOID${data.voidInvoiceNo ? ` (invoice ${data.voidInvoiceNo})` : ""} — a new sale is not allowed.`,
+              );
+              return;
+            }
             if (data.success && data.exists) {
               appToast.warning(
                 "Duplicate Document No",
@@ -575,6 +588,7 @@ export default function SalesTabComponent() {
 
     const payload = {
       saleDate: saleDate.toISOString(),
+      ...(isAdminUser && branchId ? { branchId } : {}),
       sales: cleanedSales.map((s) => ({
         airlineId: s.airlineId,
         vendorId: s.vendorId,
@@ -640,8 +654,8 @@ export default function SalesTabComponent() {
   /* ─── Render ─────────────────────────────────────────────── */
   return (
     <div className="space-y-4">
-      {/* Date & Invoice */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* Date & Invoice (+ Branch for an admin) */}
+      <div className={`grid grid-cols-1 gap-4 ${isAdminUser ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
         <div className="space-y-2">
           <Label className="text-sm font-medium text-gray-700">
             Invoice Number
@@ -702,6 +716,7 @@ export default function SalesTabComponent() {
             </PopoverContent>
           </Popover>
         </div>
+        <BranchPicker value={branchId} onChange={setBranchId} />
       </div>
 
       {/* Header */}

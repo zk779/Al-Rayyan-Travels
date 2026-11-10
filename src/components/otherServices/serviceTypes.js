@@ -1,4 +1,4 @@
-import { Bus, FileCheck2, IdCard, Layers } from "lucide-react";
+import { Bus, FileCheck2, Layers } from "lucide-react";
 
 // The kinds of "other service" an invoice can be for. They are not fixed: a service is added,
 // renamed or dropped by editing this list — nothing in the backend needs to change (the invoice
@@ -32,18 +32,6 @@ export const SERVICE_TYPES = [
     notes: ["Passport Details", "Travel Dates", "Other Notes"],
     example: "Umrah visa",
     tone: { tile: "bg-teal-50 text-teal-700 ring-teal-200", on: "border-teal-500 bg-teal-50/70 ring-2 ring-teal-500/20", badge: "bg-teal-50 text-teal-700 ring-teal-200" },
-  },
-  {
-    key: "NADRA",
-    label: "NADRA Services",
-    labelAr: "خدمات نادرا",
-    hint: "CNIC, NICOP & documents",
-    icon: IdCard,
-    detailLabel: "Applicant / CNIC",
-    units: ["application", "service", "document", "pax"],
-    notes: ["Service Details", "Reference No.", "Other Notes"],
-    example: "NADRA service fee",
-    tone: { tile: "bg-rose-50 text-rose-700 ring-rose-200", on: "border-rose-500 bg-rose-50/70 ring-2 ring-rose-500/20", badge: "bg-rose-50 text-rose-700 ring-rose-200" },
   },
   {
     key: "OTHER",

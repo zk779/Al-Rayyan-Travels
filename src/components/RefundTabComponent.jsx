@@ -121,6 +121,14 @@ export default function RefundTabComponent() {
       return;
     }
 
+    // A ticket that has been voided (found by its document number) can never be refunded
+    if (sale.voided || sale.status === "VOID") {
+      setError(
+        `Ticket ${sale.documentNo} is VOID${sale.voidInvoiceNo ? ` (invoice ${sale.voidInvoiceNo})` : ""} — a voided ticket cannot be refunded.`,
+      );
+      return;
+    }
+
     setRefundForm({
       documentNumber: sale.documentNo,
       saleId: sale.id,
@@ -317,7 +325,7 @@ export default function RefundTabComponent() {
                   key={sale.id}
                   onClick={() => selectSale(sale)}
                   className={`px-4 py-3 text-sm cursor-pointer hover:bg-gray-50 border-b last:border-b-0 ${
-                    sale.status === "REFUNDED"
+                    sale.status === "REFUNDED" || sale.voided || sale.status === "VOID"
                       ? "text-red-500 bg-red-50 cursor-not-allowed"
                       : ""
                   }`}
@@ -330,7 +338,9 @@ export default function RefundTabComponent() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-xs font-medium">{sale.status}</div>
+                      <div className="text-xs font-medium">
+                        {sale.voided ? "VOID — refund not allowed" : sale.status}
+                      </div>
                       <div className="text-xs text-gray-500">
                         ${Number(sale.sellPrice || 0).toFixed(2)}
                       </div>

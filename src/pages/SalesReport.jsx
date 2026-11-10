@@ -50,7 +50,7 @@ const defaultFilters = () => ({
   agent: "all",
   branch: "all",
   saleType: "all", // all | AIRLINE | HOTEL | VOID
-  order: "desc", // desc = newest first
+  order: "desc", // desc = newest first | asc | invoice_asc / invoice_desc = by invoice number
 });
 
 // Lets a visit to Edit Sale / Edit Refund (via the row actions dropdown) come
@@ -209,7 +209,10 @@ export default function SalesReport() {
         params.set("branchId", filters.branch);
       if (filters.saleType && filters.saleType !== "all")
         params.set("saleType", filters.saleType);
-      params.set(orderKey, filters.order);
+      // Sort: by date (newest / oldest first) or by invoice number — the number order only applies to
+      // the sales list; the refunds list keeps its date order in the same direction
+      params.set(orderKey, filters.order.endsWith("asc") ? "asc" : "desc");
+      if (filters.order.startsWith("invoice_") && orderKey === "order") params.set("sortBy", "invoiceNo");
       params.set("tz", Intl.DateTimeFormat().resolvedOptions().timeZone);
       return params.toString();
     },
@@ -701,6 +704,8 @@ export default function SalesReport() {
                   <SelectContent>
                     <SelectItem value="desc">Newest first</SelectItem>
                     <SelectItem value="asc">Oldest first</SelectItem>
+                    <SelectItem value="invoice_asc">Invoice no. — lowest first</SelectItem>
+                    <SelectItem value="invoice_desc">Invoice no. — highest first</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

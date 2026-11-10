@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Select from "react-select";
+import AsyncSelect from "react-select/async";
 import { format } from "date-fns";
-import { Ban, CalendarIcon, Plane, SaudiRiyal, Send, Building2, Save, Info } from "lucide-react";
+import { Ban, CalendarIcon, Plane, SaudiRiyal, Send, Building2, Save, Info, MapPin } from "lucide-react";
 import { Button } from "../../shadcn/components/ui/button";
 import { Input } from "../../shadcn/components/ui/input";
 import { Label } from "../../shadcn/components/ui/label";
@@ -65,6 +66,7 @@ const emptyForm = () => ({
   paxName: "",
   vendorId: "",
   airlineId: "",
+  destinations: [],
   netPrice: "",
   vendorServiceCharge: "",
   voidCharges: "",
@@ -114,7 +116,28 @@ export default function VoidTabComponent({ invoiceId = null }) {
   }, [headers]);
 
   const vendorOptions = vendors.map((v) => ({ value: v.id, label: v.vendorName }));
-  const airlineOptions = airlines.map((a) => ({ value: a.id, label: `${a.airlineCode || a.iataName || ""} — ${a.airlineName}` }));
+  // "065 - SV" like the sale form, but searchable by the ticket code, the short code (SV, FZ …) or the name
+  const airlineOptions = airlines.map((a) => ({
+    value: a.id,
+    label: `${a.airlineCode} - ${a.iataName}`,
+    name: a.airlineName,
+    search: `${a.airlineCode} ${a.iataName} ${a.airlineName}`.toLowerCase(),
+  }));
+  const airlineFilter = (option, input) => option.data.search.includes(String(input || "").trim().toLowerCase());
+
+  /* ── destination search: the same airport search the sale form uses ── */
+  const loadDestinationOptions = useCallback(
+    (inputValue) => {
+      if (!inputValue || inputValue.length < 2) return Promise.resolve([]);
+      return fetch(`${API_BASE}/api/destinations/search?q=${encodeURIComponent(inputValue)}&limit=20`, { headers })
+        .then((r) => r.json())
+        .then((j) =>
+          j.success && j.data ? j.data.map((a) => ({ value: a.iata, label: `${a.iata} - ${a.city}, ${a.country}`, airport: a })) : [],
+        )
+        .catch(() => []);
+    },
+    [headers],
+  );
 
   /* ── existing void (edit view) ── */
   useEffect(() => {
@@ -137,6 +160,7 @@ export default function VoidTabComponent({ invoiceId = null }) {
           paxName: s.paxName || "",
           vendorId: s.vendor?.id || s.vendorId || "",
           airlineId: s.airline?.id || s.airlineId || "",
+          destinations: Array.isArray(s.destinations) ? s.destinations : [],
           netPrice: String(s.netPrice ?? ""),
           vendorServiceCharge: nz(s.vendorServiceCharge),
           voidCharges: nz(s.voidCharges),
@@ -152,6 +176,30 @@ export default function VoidTabComponent({ invoiceId = null }) {
     })();
     return () => controller.abort();
   }, [invoiceId, isEdit, headers]);
+
+  /* ── a ticket (document number) can only be voided once: check as it is typed ── */
+  const [dupVoid, setDupVoid] = useState(null); // { invoiceNo } when the typed ticket is already void
+  useEffect(() => {
+    const doc = form.documentNo.trim();
+    if (!doc || (isEdit && !saleId)) {
+      setDupVoid(null);
+      return undefined;
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      fetch(`${API_BASE}/api/sales/check-document?documentNo=${encodeURIComponent(doc)}${saleId ? `&excludeSaleId=${saleId}` : ""}`, {
+        headers,
+        signal: controller.signal,
+      })
+        .then((r) => r.json())
+        .then((d) => setDupVoid(d.success && d.voided ? { invoiceNo: d.voidInvoiceNo } : null))
+        .catch(() => {});
+    }, 450);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [form.documentNo, saleId, isEdit, headers]);
 
   /* ── the figures (the server works them out again and checks) ── */
   const net = num(form.netPrice);
@@ -170,6 +218,7 @@ export default function VoidTabComponent({ invoiceId = null }) {
     net: !(net > 0),
     charges: vendorCharge < 0 || voidCharges < 0 || companyCharge < 0,
     voidTooHigh: voidCharges > net,
+    duplicate: !!dupVoid,
   };
   const invalid = Object.values(errors).some(Boolean);
 
@@ -177,6 +226,7 @@ export default function VoidTabComponent({ invoiceId = null }) {
     status: "VOID",
     vendorId: form.vendorId,
     airlineId: form.airlineId,
+    destinations: form.destinations.map(({ value, label, airport }) => ({ value, label, airport })),
     documentNo: form.documentNo.trim(),
     pnr: form.pnr.trim(),
     paxName: form.paxName.trim(),
@@ -192,7 +242,14 @@ export default function VoidTabComponent({ invoiceId = null }) {
     e.preventDefault();
     setSubmitted(true);
     if (invalid) {
-      appToast.error("Check the form", errors.voidTooHigh ? "Void charges cannot be more than the net amount." : "Fill in the required fields.");
+      appToast.error(
+        "Check the form",
+        errors.duplicate
+          ? `Ticket ${form.documentNo.trim()} is already void${dupVoid?.invoiceNo ? ` (invoice ${dupVoid.invoiceNo})` : ""}.`
+          : errors.voidTooHigh
+            ? "Void charges cannot be more than the net amount."
+            : "Fill in the required fields.",
+      );
       return;
     }
     try {
@@ -295,7 +352,18 @@ export default function VoidTabComponent({ invoiceId = null }) {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-1">
               <FieldLabel>Document No</FieldLabel>
-              <Input value={form.documentNo} onChange={(e) => set("documentNo", e.target.value)} placeholder="Ticket number" className={inputClass(false)} />
+              <Input
+                value={form.documentNo}
+                onChange={(e) => set("documentNo", e.target.value.toUpperCase())}
+                placeholder="Ticket number"
+                className={inputClass(!!dupVoid)}
+                aria-invalid={!!dupVoid}
+              />
+              {dupVoid && (
+                <p className="text-[11px] font-medium text-rose-600" data-testid="dup-void">
+                  Already void{dupVoid.invoiceNo ? ` — invoice ${dupVoid.invoiceNo}` : ""}. A ticket can only be voided once.
+                </p>
+              )}
             </div>
             <div className="space-y-1">
               <FieldLabel>PNR</FieldLabel>
@@ -325,11 +393,42 @@ export default function VoidTabComponent({ invoiceId = null }) {
                 options={airlineOptions}
                 value={airlineChosen}
                 onChange={(o) => set("airlineId", o?.value || "")}
-                placeholder="Select airline"
+                filterOption={airlineFilter}
+                formatOptionLabel={(o, { context }) =>
+                  context === "menu" ? (
+                    <span>
+                      {o.label} <span className="text-slate-400">· {o.name}</span>
+                    </span>
+                  ) : (
+                    o.label
+                  )
+                }
+                placeholder="Search airline (e.g. SV, FZ, Saudia)"
                 menuPortalTarget={document.body}
                 styles={{
                   ...selectStyles,
                   control: (b, s) => ({ ...selectStyles.control(b, s), borderColor: submitted && errors.airline ? "#fda4af" : selectStyles.control(b, s).borderColor }),
+                }}
+              />
+            </div>
+            <div className="space-y-1 sm:col-span-2 lg:col-span-4" data-testid="destination-field">
+              <FieldLabel>
+                <MapPin className="h-3 w-3 text-slate-400" /> Destination(s)
+              </FieldLabel>
+              <AsyncSelect
+                isMulti
+                cacheOptions
+                loadOptions={loadDestinationOptions}
+                value={form.destinations}
+                onChange={(v) => set("destinations", v || [])}
+                placeholder="Search an airport code (e.g. JED, DXB, LHR)…"
+                noOptionsMessage={({ inputValue }) => (inputValue.length < 2 ? "Type 2+ characters" : "No airports found")}
+                menuPortalTarget={document.body}
+                styles={{
+                  ...selectStyles,
+                  control: (b, st) => ({ ...selectStyles.control(b, st), height: "auto", minHeight: 38 }),
+                  valueContainer: (b) => ({ ...b, height: "auto", padding: "2px 8px", gap: 2 }),
+                  indicatorsContainer: (b) => ({ ...b, height: "auto" }),
                 }}
               />
             </div>

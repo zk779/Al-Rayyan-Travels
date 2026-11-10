@@ -21,6 +21,7 @@ import {
   Receipt,
   TrendingUp,
   Filter,
+  Building2,
 } from "lucide-react";
 
 import {
@@ -72,6 +73,8 @@ import SalePayment from "../PaymentComponents/SalePayment";
 import { useNavigate } from "react-router-dom";
 import { appToast } from "../../../shadcn/components/ui/appToast";
 import { useAuth } from "../../context/AuthContext"; // ✅ ADD THIS — adjust relative path if needed
+import { useIsAdmin } from "../../utils/useIsAdmin";
+import MoveBranchDialog from "../MoveBranchDialog";
 import CopyableCell from "../copyAble";
 import ExportSalesReport from "./ExportSalesReport";
 
@@ -169,6 +172,9 @@ export default function DetailedReportTab({
   const { hasPermission } = useAuth();
   const canEditSale = hasPermission("SALE_EDIT");
   const canDeleteSale = hasPermission("SALE_DELETE");
+  // ADMIN only: push a sale to any branch
+  const isAdminUser = useIsAdmin();
+  const [moveTarget, setMoveTarget] = useState(null);
   const canRecordPaymentPerm = hasPermission("PAYMENT_CREATE");
 
   const [rows, setRows] = useState(salesData);
@@ -692,6 +698,15 @@ export default function DetailedReportTab({
                                     <HistoryIcon className="mr-2 h-4 w-4" />
                                     View History
                                   </DropdownMenuItem>
+                                  {/* ADMIN only — move this invoice (and every sale on it) to another branch */}
+                                  {isAdminUser && (
+                                    <DropdownMenuItem
+                                      onClick={() => setMoveTarget(sale)}
+                                    >
+                                      <Building2 className="mr-2 h-4 w-4" />
+                                      Move to Branch
+                                    </DropdownMenuItem>
+                                  )}
                                   {/* ✅ RBAC — Record Payment needs PAYMENT_CREATE (already folded into canRecordPayment) */}
                                   {canRecordPayment && (
                                     <DropdownMenuItem
@@ -807,6 +822,29 @@ export default function DetailedReportTab({
           loading={isDeleting}
           variant="danger"
           confirmText="Delete & Reverse"
+        />
+      )}
+
+      {isAdminUser && (
+        <MoveBranchDialog
+          sale={moveTarget}
+          open={!!moveTarget}
+          onOpenChange={(v) => {
+            if (!v) {
+              setMoveTarget(null);
+              releasePointerEventsLock();
+            }
+          }}
+          onMoved={(moved) =>
+            // every row of that invoice now shows the new branch
+            setRows((prev) =>
+              prev.map((r) =>
+                r.invoiceId === moveTarget?.invoiceId
+                  ? { ...r, branchId: moved.branchId, branchName: moved.branchName, branchCode: moved.branchCode }
+                  : r,
+              ),
+            )
+          }
         />
       )}
 

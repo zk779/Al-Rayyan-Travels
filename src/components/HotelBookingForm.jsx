@@ -327,6 +327,14 @@ export default function HotelBookingForm({ invoiceId = null }) {
         fetch(`${API_BASE}/api/sales/check-document?documentNo=${encodeURIComponent(docNo)}`, { headers })
           .then((r) => r.json())
           .then((data) => {
+            // a voided ticket can never be sold again (the server refuses it too)
+            if (data.success && data.voided) {
+              appToast.error(
+                "Voided Ticket",
+                `Document No "${docNo}" is VOID${data.voidInvoiceNo ? ` (invoice ${data.voidInvoiceNo})` : ""} — a new booking is not allowed.`,
+              );
+              return;
+            }
             if (data.success && data.exists)
               appToast.warning("Duplicate Document No", `Document No "${docNo}" already exists.`);
           })
