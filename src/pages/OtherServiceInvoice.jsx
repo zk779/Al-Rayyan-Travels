@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Pencil, Printer } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Pencil, Printer } from "lucide-react";
+import ConfirmPaymentDialog from "../components/otherServices/ConfirmPaymentDialog";
+import { StatusBadge } from "../components/otherServices/PaymentPicker";
+import { paymentLabel } from "../components/otherServices/paymentUtils";
 import ZATCAQRCode from "../components/ZATCAQRGenerator";
 import { companyData } from "../components/vat/vatFormat";
 import { serviceOf } from "../components/otherServices/serviceTypes";
@@ -47,6 +50,8 @@ export default function OtherServiceInvoice() {
   const [invoice, setInvoice] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -67,7 +72,7 @@ export default function OtherServiceInvoice() {
       }
     })();
     return () => controller.abort();
-  }, [id]);
+  }, [id, reloadKey]);
 
   if (loading) {
     return (
@@ -122,6 +127,8 @@ export default function OtherServiceInvoice() {
         `}
       </style>
 
+      <ConfirmPaymentDialog invoice={invoice} open={confirmOpen} onOpenChange={setConfirmOpen} onConfirmed={() => setReloadKey((k) => k + 1)} />
+
       <div className="invoice-container min-h-screen bg-gradient-to-b from-slate-100 to-slate-200 py-6 print:py-0">
         {/* Actions — screen only */}
         <div className="mx-auto mb-4 flex max-w-[210mm] items-center justify-between gap-3 print:hidden">
@@ -133,6 +140,21 @@ export default function OtherServiceInvoice() {
             <ArrowLeft className="h-4 w-4" /> Other Services
           </button>
           <div className="flex items-center gap-2">
+            <StatusBadge status={invoice.status} className="!py-1.5 !text-xs" />
+            {paymentLabel(invoice) && (
+              <span className="hidden text-xs font-medium text-slate-500 sm:inline" data-testid="payment-label">
+                Paid: {paymentLabel(invoice)}
+              </span>
+            )}
+            {invoice.status === "DRAFT" && hasPermission("SALE_EDIT") && (
+              <button
+                type="button"
+                onClick={() => setConfirmOpen(true)}
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700"
+              >
+                <CheckCircle2 className="h-4 w-4" /> Confirm &amp; receive payment
+              </button>
+            )}
             {hasPermission("SALE_EDIT") && (
               <Link
                 to={`/other-services/${invoice.id}/edit`}

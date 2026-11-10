@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
-import { useNavigationType } from "react-router-dom";
+import { Link, useNavigationType } from "react-router-dom";
+import { useIsAdmin } from "../utils/useIsAdmin";
 import { format } from "date-fns";
-import { Filter, Search, X, RefreshCw, Check, ChevronUp } from "lucide-react";
+import { Filter, Search, X, RefreshCw, Check, ChevronUp, Hash } from "lucide-react";
 
 import { Button } from "../../shadcn/components/ui/button";
 import {
@@ -92,6 +93,7 @@ function loadSavedState() {
 
 export default function SalesReport() {
   const { hasPermission } = useAuth();
+  const isAdmin = useIsAdmin();
   const canViewSales = hasPermission("SALE_READ");
   const canViewRefunds = hasPermission("REFUND_READ");
   const canViewAllBranches = hasPermission("SALE_VIEW_ALL");
@@ -492,6 +494,14 @@ export default function SalesReport() {
           <p className="text-gray-600">
             Comprehensive sales analytics.
           </p>
+          {isAdmin && (
+            <Link
+              to="/renumber-invoices"
+              className="mt-1.5 inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-900"
+            >
+              <Hash className="h-3.5 w-3.5" /> Renumber invoices in order
+            </Link>
+          )}
         </div>
 
         {/* Main filters — the ones adjusted most often live right in the

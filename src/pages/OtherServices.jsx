@@ -4,9 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import {
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Eye,
+  MoreVertical,
   FileStack,
   Pencil,
   Percent,
@@ -22,6 +24,17 @@ import { Button } from "../../shadcn/components/ui/button";
 import { Input } from "../../shadcn/components/ui/input";
 import { appToast } from "../../shadcn/components/ui/appToast";
 import CustomAlertDialog from "../components/CustomAlertDialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../../shadcn/components/ui/dropdown-menu";
+import ConfirmPaymentDialog from "../components/otherServices/ConfirmPaymentDialog";
+import { StatusBadge } from "../components/otherServices/PaymentPicker";
+import { paymentLabel } from "../components/otherServices/paymentUtils";
 import BackToServices from "../components/BackToServices";
 import { SERVICE_TYPES, serviceOf } from "../components/otherServices/serviceTypes";
 import { useAuth } from "../context/AuthContext";
@@ -63,12 +76,14 @@ export default function OtherServices() {
   const headers = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
 
   const [rows, setRows] = useState([]);
-  const [summary, setSummary] = useState({ count: 0, netAmount: 0, vatAmount: 0, total: 0 });
+  const [summary, setSummary] = useState({ count: 0, drafts: 0, netAmount: 0, vatAmount: 0, total: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   const [serviceType, setServiceType] = useState("all");
+  const [status, setStatus] = useState("all");
+  const [confirmTarget, setConfirmTarget] = useState(null);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
@@ -88,13 +103,14 @@ export default function OtherServices() {
         const qs = new URLSearchParams({ tz: Intl.DateTimeFormat().resolvedOptions().timeZone });
         if (debounced) qs.set("search", debounced);
         if (serviceType !== "all") qs.set("serviceType", serviceType);
+        if (status !== "all") qs.set("status", status);
         if (dateFrom) qs.set("dateFrom", dateFrom);
         if (dateTo) qs.set("dateTo", dateTo);
         const res = await fetch(`${API_BASE}/api/other-services?${qs}`, { headers, signal });
         const json = await res.json();
         if (!res.ok || !json.success) throw new Error(json.error || "Failed to load the invoices");
         setRows(json.data || []);
-        setSummary(json.summary || { count: 0, netAmount: 0, vatAmount: 0, total: 0 });
+        setSummary(json.summary || { count: 0, drafts: 0, netAmount: 0, vatAmount: 0, total: 0 });
         setPage(1);
       } catch (err) {
         if (err.name !== "AbortError") setError(err.message);
@@ -102,7 +118,7 @@ export default function OtherServices() {
         if (!signal?.aborted) setLoading(false);
       }
     },
-    [debounced, serviceType, dateFrom, dateTo, headers],
+    [debounced, serviceType, status, dateFrom, dateTo, headers],
   );
 
   useEffect(() => {
@@ -113,7 +129,7 @@ export default function OtherServices() {
 
   const totalPages = Math.max(Math.ceil(rows.length / PAGE_SIZE), 1);
   const paged = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const filtered = !!debounced || serviceType !== "all" || !!dateFrom || !!dateTo;
+  const filtered = !!debounced || serviceType !== "all" || status !== "all" || !!dateFrom || !!dateTo;
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
@@ -168,7 +184,7 @@ export default function OtherServices() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Stat icon={Receipt} label="Invoices" labelAr="الفواتير" value={summary.count} money={false} tone="bg-slate-100 text-slate-600" />
+        <Stat icon={Receipt} label={summary.drafts ? `Invoices (${summary.drafts} draft)` : "Invoices"} labelAr="الفواتير" value={summary.count} money={false} tone="bg-slate-100 text-slate-600" />
         <Stat icon={Wallet} label="Amount excl. VAT" labelAr="بدون الضريبة" value={summary.netAmount} tone="bg-indigo-50 text-indigo-600" />
         <Stat icon={Percent} label="VAT 15%" labelAr="الضريبة" value={summary.vatAmount} tone="bg-amber-50 text-amber-600" />
         <Stat icon={SaudiRiyal} label="Grand total" labelAr="الإجمالي" value={summary.total} tone="bg-emerald-50 text-emerald-600" />
@@ -198,6 +214,7 @@ export default function OtherServices() {
               onClick={() => {
                 setSearch("");
                 setServiceType("all");
+                setStatus("all");
                 setDateFrom("");
                 setDateTo("");
               }}
@@ -224,6 +241,27 @@ export default function OtherServices() {
               </button>
             );
           })}
+          <span className="mx-1 hidden h-6 w-px self-center bg-slate-200 sm:block" />
+          {[
+            { key: "all", label: "Any status" },
+            { key: "DRAFT", label: "Draft" },
+            { key: "CONFIRMED", label: "Confirmed" },
+          ].map((o) => {
+            const on = status === o.key;
+            return (
+              <button
+                key={o.key}
+                type="button"
+                onClick={() => setStatus(o.key)}
+                aria-pressed={on}
+                className={`rounded-full px-3.5 py-1.5 text-xs font-medium ring-1 transition-colors ${
+                  on ? "bg-slate-900 text-white ring-slate-900" : "bg-white text-slate-600 ring-slate-200 hover:bg-slate-50"
+                }`}
+              >
+                {o.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -238,7 +276,8 @@ export default function OtherServices() {
                 <th className="px-4 py-3 text-left">Invoice #</th>
                 <th className="px-4 py-3 text-left">Service</th>
                 <th className="px-4 py-3 text-left">Customer</th>
-                <th className="px-4 py-3 text-left">Reference</th>
+                <th className="px-4 py-3 text-left">Status</th>
+                <th className="px-4 py-3 text-left">Payment</th>
                 <th className="px-4 py-3 text-right">Excl. VAT</th>
                 <th className="px-4 py-3 text-right">VAT 15%</th>
                 <th className="px-4 py-3 text-right">Total</th>
@@ -249,14 +288,14 @@ export default function OtherServices() {
               {loading && rows.length === 0 &&
                 [0, 1, 2, 3].map((i) => (
                   <tr key={i}>
-                    <td colSpan={9} className="px-4 py-3">
+                    <td colSpan={10} className="px-4 py-3">
                       <div className="h-5 animate-pulse rounded bg-slate-100" />
                     </td>
                   </tr>
                 ))}
               {!loading && rows.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-16 text-center">
+                  <td colSpan={10} className="px-4 py-16 text-center">
                     <FileStack className="mx-auto h-9 w-9 text-slate-200" />
                     <p className="mt-2 text-sm font-medium text-slate-500">{filtered ? "No invoices match these filters" : "No invoices yet"}</p>
                     {!filtered && canCreate && (
@@ -285,24 +324,46 @@ export default function OtherServices() {
                       </p>
                       {r.customerPhone && <p className="truncate text-[11px] text-slate-400">{r.customerPhone}</p>}
                     </td>
-                    <td className="px-4 py-3 text-xs text-slate-500">{r.referenceNo || "—"}</td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={r.status} />
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-600">{paymentLabel(r) || "—"}</td>
                     <td className="px-4 py-3 text-right text-xs tabular-nums text-slate-600">{money(r.netAmount)}</td>
                     <td className="px-4 py-3 text-right text-xs tabular-nums text-slate-600">{money(r.vatAmount)}</td>
                     <td className="px-4 py-3 text-right text-sm font-semibold tabular-nums text-slate-900">{money(r.total)}</td>
                     <td className="whitespace-nowrap px-3 py-3 text-right">
-                      <button type="button" title="View / print" aria-label="View invoice" onClick={() => navigate(`/other-services/${r.id}`)} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900">
-                        <Eye className="h-4 w-4" />
-                      </button>
-                      {canEdit && (
-                        <button type="button" title="Edit" aria-label="Edit invoice" onClick={() => navigate(`/other-services/${r.id}/edit`)} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900">
-                          <Pencil className="h-4 w-4" />
-                        </button>
-                      )}
-                      {canDelete && (
-                        <button type="button" title="Delete" aria-label="Delete invoice" onClick={() => setDeleteTarget(r)} className="rounded-lg p-1.5 text-slate-500 hover:bg-rose-50 hover:text-rose-600">
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      )}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" aria-label="Actions">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => navigate(`/other-services/${r.id}`)}>
+                            <Eye className="mr-2 h-4 w-4" /> View / print
+                          </DropdownMenuItem>
+                          {canEdit && (
+                            <DropdownMenuItem onClick={() => navigate(`/other-services/${r.id}/edit`)}>
+                              <Pencil className="mr-2 h-4 w-4" /> Edit
+                            </DropdownMenuItem>
+                          )}
+                          {canEdit && r.status === "DRAFT" && (
+                            <DropdownMenuItem onClick={() => setConfirmTarget(r)}>
+                              <CheckCircle2 className="mr-2 h-4 w-4 text-emerald-600" /> Confirm &amp; receive payment
+                            </DropdownMenuItem>
+                          )}
+                          {canDelete && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => setDeleteTarget(r)} className="text-rose-600 focus:text-rose-600">
+                                <Trash2 className="mr-2 h-4 w-4" /> Delete
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </td>
                   </tr>
                 );
@@ -331,12 +392,14 @@ export default function OtherServices() {
         )}
       </div>
 
+      <ConfirmPaymentDialog invoice={confirmTarget} open={!!confirmTarget} onOpenChange={(o) => !o && setConfirmTarget(null)} onConfirmed={() => load()} />
+
       {canDelete && (
         <CustomAlertDialog
           open={!!deleteTarget}
           onOpenChange={() => setDeleteTarget(null)}
           title="Delete this invoice?"
-          description={`Invoice ${deleteTarget?.invoiceNo || ""} for ${deleteTarget?.customerName || ""} will be permanently removed. Its number is not reused.`}
+          description={`Invoice ${deleteTarget?.invoiceNo || ""} for ${deleteTarget?.customerName || ""} will be permanently removed${deleteTarget?.status === "CONFIRMED" ? " and its payment is taken back from the cash / bank ledger" : ""}. Its number is not reused.`}
           onConfirm={confirmDelete}
           loading={deleting}
           variant="danger"

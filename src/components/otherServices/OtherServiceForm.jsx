@@ -31,6 +31,7 @@ import { appToast } from "../../../shadcn/components/ui/appToast";
 import { amountInWords } from "../../utils/numberToWords";
 import { SERVICE_TYPES, serviceOf } from "./serviceTypes";
 import { computeTotals, lineAmount } from "./totals";
+import { PaymentPicker, StatusPicker } from "./PaymentPicker";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 const money = (n) => (Number(n) || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -81,7 +82,7 @@ const inputCls = (bad) => `h-10 rounded-xl text-sm ${bad ? "border-rose-300 focu
 /**
  * The invoice builder for "Other Services" (transportation, Umrah visa, NADRA …). `invoiceId`
  * set -> edit that invoice; otherwise create a new one. Customer details are typed here — they
- * are not linked to the Customers list — and nothing is posted to a ledger.
+ * are not linked to the Customers list. A CONFIRMED invoice posts its payment (Cash / Bank) to the ledger.
  */
 export default function OtherServiceForm({ invoiceId = null }) {
   const isEdit = !!invoiceId;
@@ -107,6 +108,9 @@ export default function OtherServiceForm({ invoiceId = null }) {
   const [notes, setNotes] = useState(noteRows(SERVICE_TYPES[0].notes));
   const [pricesIncludeVat, setPricesIncludeVat] = useState(true);
   const [discount, setDiscount] = useState("");
+  // DRAFT = saved only; CONFIRMED = the payment is received now (Cash, or a Bank account) and posted to the ledger
+  const [status, setStatus] = useState("CONFIRMED");
+  const [payment, setPayment] = useState({ method: "", bankId: "" });
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(isEdit);
   const [fetchError, setFetchError] = useState("");
@@ -163,6 +167,8 @@ export default function OtherServiceForm({ invoiceId = null }) {
         setNotes((d.notes || []).map((n) => ({ id: uid(), label: n.label, value: n.value })));
         setPricesIncludeVat(d.pricesIncludeVat !== false);
         setDiscount(d.discount ? String(d.discount) : "");
+        setStatus(d.status === "DRAFT" ? "DRAFT" : "CONFIRMED");
+        setPayment({ method: d.paymentMethod || "", bankId: d.bankId || "" });
       } catch (err) {
         if (err.name !== "AbortError") setFetchError(err.message);
       } finally {
@@ -200,13 +206,21 @@ export default function OtherServiceForm({ invoiceId = null }) {
     qty: !(Number(it.qty) > 0),
     rate: it.rate === "" || !(Number(it.rate) >= 0),
   });
+  const paymentMissing = status === "CONFIRMED" && (!payment.method || (payment.method === "BANK" && !payment.bankId));
   const invalid =
     !customer.customerName.trim() || items.some((it) => Object.values(lineErrors(it)).some(Boolean)) || discountTooHigh;
 
   const handleSave = async () => {
     setSubmitted(true);
-    if (invalid) {
-      appToast.error("Check the invoice", discountTooHigh ? "The discount is more than the invoice total." : "Fill in the customer name and every line.");
+    if (invalid || paymentMissing) {
+      appToast.error(
+        "Check the invoice",
+        invalid
+          ? discountTooHigh
+            ? "The discount is more than the invoice total."
+            : "Fill in the customer name and every line."
+          : "Choose how the payment was received (Cash or Bank), or save it as a draft.",
+      );
       return;
     }
     const payload = {
@@ -217,6 +231,9 @@ export default function OtherServiceForm({ invoiceId = null }) {
       ...meta,
       pricesIncludeVat,
       discount: Number(discount) || 0,
+      status,
+      paymentMethod: status === "CONFIRMED" ? payment.method : null,
+      bankId: status === "CONFIRMED" && payment.method === "BANK" ? payment.bankId : null,
       items: items.map((it) => ({
         description: it.description.trim(),
         detail: it.detail.trim(),
@@ -240,7 +257,12 @@ export default function OtherServiceForm({ invoiceId = null }) {
         }),
         {
           loading: isEdit ? "Updating invoice..." : "Saving invoice...",
-          success: (d) => (isEdit ? "Invoice updated successfully!" : `Invoice ${d?.data?.invoiceNo || ""} saved!`),
+          success: (d) =>
+            isEdit
+              ? "Invoice updated successfully!"
+              : d?.data?.status === "DRAFT"
+                ? `Invoice ${d?.data?.invoiceNo || ""} saved as a draft`
+                : `Invoice ${d?.data?.invoiceNo || ""} saved!`,
           error: (err) => err.message || "Failed to save the invoice",
         },
       );
@@ -574,6 +596,14 @@ export default function OtherServiceForm({ invoiceId = null }) {
             </p>
           </div>
 
+          {/* Status + payment */}
+          <div className="space-y-4 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200/80">
+            <StatusPicker status={status} onChange={setStatus} />
+            {status === "CONFIRMED" && (
+              <PaymentPicker method={payment.method} bankId={payment.bankId} onChange={setPayment} invalid={submitted && paymentMissing} />
+            )}
+          </div>
+
           <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200/80">
             {/* VAT switch */}
             <div className="flex items-start justify-between gap-3">
@@ -637,7 +667,7 @@ export default function OtherServiceForm({ invoiceId = null }) {
             <div className="mt-5 flex flex-col gap-2">
               <Button type="button" onClick={handleSave} disabled={loading} className="h-11 gap-2 rounded-xl">
                 <Save className="h-4 w-4" />
-                {loading ? "Saving..." : isEdit ? "Update invoice" : "Save invoice"}
+                {loading ? "Saving..." : status === "DRAFT" ? (isEdit ? "Update draft" : "Save as draft") : isEdit ? "Update invoice" : "Save & confirm"}
               </Button>
               <Button type="button" variant="outline" onClick={() => navigate(isEdit ? `/other-services/${invoiceId}` : "/other-services")} className="h-10 rounded-xl">
                 Cancel

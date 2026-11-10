@@ -16,6 +16,7 @@ import LedgerComponent from "./pages/Ledger";
 import CustomersPage from "./pages/Customer";
 import UsersPage from "./pages/Users";
 import SalesReport from "./pages/SalesReport";
+import RenumberInvoices from "./pages/RenumberInvoices";
 import ProfilePage from "./pages/Profile";
 import Dashboard from "./pages/Dashboard";
 import Expense from "./pages/Expense";
@@ -240,6 +241,14 @@ function App() {
 										element={
 											<PermissionRoute permission="REPORT_READ">
 												<SalesReport />
+											</PermissionRoute>
+										}
+									/>
+									<Route
+										path="renumber-invoices"
+										element={
+											<PermissionRoute permission="REPORT_READ">
+												<RenumberInvoices />
 											</PermissionRoute>
 										}
 									/>
