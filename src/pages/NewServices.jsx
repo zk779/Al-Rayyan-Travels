@@ -161,17 +161,20 @@ export default function NewServices() {
       </div>
 
       {/* Services */}
-      {/* Three cards to a row; whatever is left over sits centred on the row below (flex-wrap + centre) */}
-      <div className="mt-7 flex flex-wrap justify-center gap-6">
+      {/* All the services on ONE line on a desktop screen (one column per card); they stack on smaller screens */}
+      <div
+        className="mt-7 grid grid-cols-1 gap-4 md:grid-cols-2 lg:[grid-template-columns:repeat(var(--cols),minmax(0,1fr))]"
+        style={{ "--cols": Math.max(allowed.length, 1) }}
+      >
         {allowed.map((s) => (
           <Link
             key={s.key}
             to={s.to}
             state={{ fromServices: true }} // lets the page opened know it was reached from here
-            className={`group relative flex w-full flex-col overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-slate-200 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-slate-900/10 md:w-[calc((100%-1.5rem)/2)] xl:w-[calc((100%-3rem)/3)] ${s.ring}`}
+            className={`group relative flex w-full flex-col overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-slate-200 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-slate-900/10 ${s.ring}`}
           >
             {/* Panel: a deep, muted shade of the service's colour fading to slate */}
-            <div className={`relative flex h-36 items-end justify-between overflow-hidden bg-gradient-to-br p-5 ${s.panel}`}>
+            <div className={`relative flex h-32 items-end justify-between overflow-hidden bg-gradient-to-br p-5 ${s.panel}`}>
               <span className={`absolute inset-x-0 top-0 h-0.5 ${s.line}`} />
               <s.icon
                 size={140}
@@ -186,9 +189,9 @@ export default function NewServices() {
             </div>
 
             {/* Body */}
-            <div className="flex flex-1 flex-col p-6">
-              <div className="flex items-baseline justify-between gap-3">
-                <h2 className="text-xl font-bold text-slate-900">{s.title}</h2>
+            <div className="flex flex-1 flex-col p-5">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                <h2 className="text-lg font-bold text-slate-900">{s.title}</h2>
                 <span className="text-xs text-slate-400" dir="rtl">
                   {s.titleAr}
                 </span>
