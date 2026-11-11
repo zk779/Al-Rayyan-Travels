@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import {
   Search,
-  Bell,
   Settings,
   LogOut,
   User,
@@ -18,7 +17,6 @@ import {
   AvatarFallback,
   AvatarImage,
 } from "../../shadcn/components/ui/avatar";
-import { Badge } from "../../shadcn/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,12 +32,12 @@ import {
   TooltipTrigger,
 } from "../../shadcn/components/ui/tooltip";
 
+import NotificationBell from "./NotificationBell";
 import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
 
 const Header = () => {
   const [searchQuery, setSearchQuery] = useState("");
-  const [notificationCount] = useState(7);
 
   const { user, logout } = useAuth();
   const { language, toggleLanguage, t } = useLanguage();
@@ -95,23 +93,8 @@ const Header = () => {
               </TooltipContent>
             </Tooltip>
 
-            {/* Notifications */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="relative">
-                  <Bell className="h-6 w-6" />
-                  {notificationCount > 0 && (
-                    <Badge
-                      variant="destructive"
-                      className="absolute -top-0 -right-0 h-4 w-4 rounded-full p-0 text-xs flex items-center justify-center"
-                    >
-                      {notificationCount > 9 ? "9+" : notificationCount}
-                    </Badge>
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{t("notifications")}</TooltipContent>
-            </Tooltip>
+            {/* Notifications — admins only: the stored notifications + the push switch */}
+            <NotificationBell />
 
             {/* Settings */}
             <Tooltip>
