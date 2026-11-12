@@ -683,6 +683,20 @@ export default function DetailedReportTab({
                                 <DropdownMenuContent align="end">
                                   <DropdownMenuLabel>Actions</DropdownMenuLabel>
                                   <DropdownMenuSeparator />
+                                  {/* ✅ RBAC — Edit Invoice needs SALE_EDIT (first, with a separator under it) */}
+                                  {!isRefunded && canEditSale && (
+                                    <>
+                                      <DropdownMenuItem
+                                        onClick={() =>
+                                          handleEdit(sale.invoiceId, sale.saleType)
+                                        }
+                                      >
+                                        <Edit className="mr-2 h-4 w-4" />
+                                        Edit Invoice
+                                      </DropdownMenuItem>
+                                      <DropdownMenuSeparator />
+                                    </>
+                                  )}
                                   {/* ✅ View Invoice/History always visible — page access already implies SALE_READ */}
                                   <DropdownMenuItem
                                     onClick={() =>
@@ -718,17 +732,6 @@ export default function DetailedReportTab({
                                   )}
                                   {!isRefunded && (
                                     <>
-                                      {/* ✅ RBAC — Edit Invoice needs SALE_EDIT */}
-                                      {canEditSale && (
-                                        <DropdownMenuItem
-                                          onClick={() =>
-                                            handleEdit(sale.invoiceId, sale.saleType)
-                                          }
-                                        >
-                                          <Edit className="mr-2 h-4 w-4" />
-                                          Edit Invoice
-                                        </DropdownMenuItem>
-                                      )}
                                       {/* ✅ RBAC — Delete Sale needs SALE_DELETE */}
                                       {canDeleteSale && (
                                         <>

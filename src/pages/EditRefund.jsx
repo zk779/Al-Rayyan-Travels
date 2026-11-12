@@ -4,47 +4,24 @@ import { useState, useEffect } from "react";
 import { Button } from "../../shadcn/components/ui/button";
 import { Input } from "../../shadcn/components/ui/input";
 import { Label } from "../../shadcn/components/ui/label";
-import { Separator } from "../../shadcn/components/ui/separator";
 import { Textarea } from "../../shadcn/components/ui/textarea";
-import {
-  Loader2,
-  Save,
-  X,
-  Calendar as CalendarIcon,
-  AlertCircle,
-  AlertTriangle,
-  ArrowLeft,
-} from "lucide-react";
+import { Loader2, Save, X, Calendar as CalendarIcon, Lock, ArrowLeft, Receipt, NotebookPen, Wallet, RotateCcw } from "lucide-react";
 import { Calendar } from "../../shadcn/components/ui/calendar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "../../shadcn/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../../shadcn/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "../../shadcn/components/ui/popover";
 import { format } from "date-fns";
 import { useParams, useNavigate } from "react-router-dom";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "../../shadcn/components/ui/tabs";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "../../shadcn/components/ui/card";
+import { appToast } from "../../shadcn/components/ui/appToast";
+import { CalcCard, Facts, MoneyInput, Panel, PayoutPicker } from "../components/refund/RefundParts";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL; // Ensure this matches your .env variable name
+
+const nice = (v) => String(v || "").toLowerCase().replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+const STATUS_TONE = {
+  COMPLETED: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  APPROVED: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  PENDING: "bg-amber-50 text-amber-700 ring-amber-200",
+  REJECTED: "bg-rose-50 text-rose-700 ring-rose-200",
+};
 
 export default function EditRefundTab() {
   // 1. Initialize token safely
@@ -55,8 +32,9 @@ export default function EditRefundTab() {
   const [fetching, setFetching] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [tried, setTried] = useState(false);
   const [refundDate, setRefundDate] = useState(new Date());
-  const [activeTab, setActiveTab] = useState("refunds");
+  const [meta, setMeta] = useState(null); // read-only facts about the refund / sale
 
   // Form State
   const [refundForm, setRefundForm] = useState({
@@ -158,6 +136,15 @@ export default function EditRefundTab() {
           customerType: sale.customer?.customerType,
           customerName: sale.customer?.customerName,
         });
+        setMeta({
+          status: data.status,
+          invoiceNo: sale.invoice?.invoiceNo,
+          customerName: sale.customer?.customerName,
+          paxName: sale.paxName,
+          pnr: sale.pnr,
+          paymentType: sale.paymentType,
+          processedBy: data.processedBy?.fullName,
+        });
       } catch (err) {
         console.error(err);
         setError(err.message);
@@ -191,6 +178,7 @@ export default function EditRefundTab() {
       4. SUBMIT UPDATE
   ========================= */
   const handleSubmit = async () => {
+    setTried(true);
     const fee = Number(refundForm.refundFee) || 0;
     const service = Number(refundForm.serviceCharges) || 0;
 
@@ -218,22 +206,25 @@ export default function EditRefundTab() {
       setLoading(true);
       setError("");
 
-      const res = await fetch(`${API_BASE}/api/refunds/${refundId}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+      await appToast.promise(
+        fetch(`${API_BASE}/api/refunds/${refundId}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        }).then(async (res) => {
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || data.success === false) throw new Error(data.error || "Failed to update refund");
+          return data;
+        }),
+        {
+          loading: "Updating refund...",
+          success: "Refund updated successfully!",
+          error: (err) => err.message || "Failed to update refund",
         },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to update refund");
-      }
-
-      alert("Refund updated successfully!");
+      );
     } catch (err) {
       setError(err.message);
     } finally {
@@ -247,351 +238,185 @@ export default function EditRefundTab() {
   if (fetching) {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-3">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        <Loader2 className="h-8 w-8 animate-spin text-slate-500" />
         <p className="text-gray-500 text-sm">Loading refund details...</p>
       </div>
     );
   }
 
+  if (!meta) {
+    return (
+      <div className="mx-auto max-w-lg rounded-2xl bg-white p-8 text-center shadow-sm ring-1 ring-slate-200">
+        <p className="text-base font-semibold text-rose-600">Could not load the refund</p>
+        <p className="mt-1 text-sm text-slate-500">{error || "Refund not found."}</p>
+        <Button variant="outline" className="mt-4 gap-1.5" onClick={() => navigate(-1)}>
+          <ArrowLeft className="h-4 w-4" /> Go Back
+        </Button>
+      </div>
+    );
+  }
+
   return (
-    <div className="w-full">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between gap-3">
+    <div className="mx-auto w-full space-y-3 pb-8">
+      {/* Header */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-rose-700 via-rose-900 to-rose-950 p-4 text-white shadow-md md:px-5">
+        <div className="pointer-events-none absolute -right-14 -top-16 h-60 w-60 rounded-full bg-white/5 blur-3xl" />
+        <div className="relative flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/15">
+              <RotateCcw size={18} />
+            </span>
             <div>
-              <CardTitle className="text-2xl">Edit Services</CardTitle>
-              <CardDescription>
-                Update existing sales transactions or modify processed refunds
-              </CardDescription>
+              <h1 className="text-xl font-bold tracking-tight">Edit Refund</h1>
+              <p className="text-xs text-rose-200/80">
+                {refundForm.documentNumber}
+                {meta.invoiceNo ? ` · Invoice ${meta.invoiceNo}` : ""}
+              </p>
             </div>
-            {/* Returns to wherever this was opened from (e.g. Sales Report's
-                Refunds tab, with its search/filters/page intact). */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate(-1)}
-              className="gap-1.5 shrink-0"
-            >
-              <ArrowLeft className="h-4 w-4" /> Go Back
-            </Button>
+            {meta.status && (
+              <span className={`ml-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ${STATUS_TONE[meta.status] || "bg-slate-100 text-slate-600 ring-slate-200"}`}>{nice(meta.status)}</span>
+            )}
           </div>
-        </CardHeader>
+          {/* Returns to wherever this was opened from (e.g. Sales Report's
+              Refunds tab, with its search/filters/page intact). */}
+          <Button variant="outline" size="sm" onClick={() => navigate(-1)} className="gap-1.5 border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white">
+            <ArrowLeft className="h-4 w-4" /> Go Back
+          </Button>
+        </div>
+      </div>
 
-        <CardContent>
-          <Tabs
-            value={activeTab}
-            onValueChange={setActiveTab}
-            className="w-full"
+      {error && (
+        <div className="flex items-start justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700" role="alert">
+          <span>{error}</span>
+          <button type="button" onClick={() => setError("")} className="shrink-0 text-rose-400 hover:text-rose-600" aria-label="Dismiss">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="space-y-3">
+          <Panel
+            icon={Receipt}
+            title="Original sale"
+            titleAr="البيع الأصلي"
+            right={
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                <Lock className="h-3 w-3" /> Locked
+              </span>
+            }
           >
-            <TabsList className="grid w-full grid-cols-1">
-              <TabsTrigger value="refunds">Manage Refund</TabsTrigger>
-            </TabsList>
+            <Facts
+              items={[
+                { label: "Document no.", value: refundForm.documentNumber, mono: true },
+                { label: "Invoice", value: meta.invoiceNo, mono: true },
+                { label: "Airline", value: refundForm.airline },
+                { label: "Vendor", value: refundForm.vendorName },
+                { label: "Customer", value: meta.customerName },
+                { label: "Passenger", value: meta.paxName },
+                { label: "PNR", value: meta.pnr, mono: true },
+                { label: "Payment", value: nice(meta.paymentType) },
+                { label: "Processed by", value: meta.processedBy },
+                { label: "Net price", value: refundForm.netPrice, money: true },
+                { label: "Sell price", value: refundForm.sellPrice, money: true },
+              ]}
+            />
+            <p className="mt-3 text-[11px] text-slate-400">The sale itself can't be changed here — only the refund below.</p>
+          </Panel>
 
-            <TabsContent value="refunds" className="mt-6">
-              {/* This component will now handle its own fetch/update logic using saleId */}
-              <div className="space-y-6">
-                {/* Date Picker */}
-                <div className="bg-slate-50 p-4 rounded-lg border">
-                  <div className="flex items-center gap-3">
-                    <Label className="text-sm font-medium whitespace-nowrap">
-                      Refund Date:
-                    </Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className="justify-start text-left font-normal bg-white max-w-60 h-9"
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {format(refundDate, "PPP")}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0">
-                        <Calendar
-                          mode="single"
-                          selected={refundDate}
-                          onSelect={(d) => d && setRefundDate(d)}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                </div>
+          <Panel
+            icon={Wallet}
+            title="Refund details"
+            titleAr="تفاصيل الاسترداد"
+            right={
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button type="button" aria-label="Refund date" className="flex h-8 items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 text-[13px] text-slate-700 shadow-sm transition-colors hover:bg-slate-50">
+                    <CalendarIcon className="h-4 w-4 text-slate-400" />
+                    <span className="text-[11px] text-slate-400">Refund date</span>
+                    <span className="font-medium">{format(refundDate, "dd MMM yyyy")}</span>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="end">
+                  <Calendar mode="single" selected={refundDate} onSelect={(d) => d && setRefundDate(d)} initialFocus />
+                </PopoverContent>
+              </Popover>
+            }
+          >
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <MoneyInput label="Refund fee" hint="Taken by the vendor" value={refundForm.refundFee} onChange={(v) => updateField("refundFee", v)} />
+              <MoneyInput label="Service charges" hint="Kept by us" value={refundForm.serviceCharges} onChange={(v) => updateField("serviceCharges", v)} />
+            </div>
 
-                {/* Warning Banner */}
-                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-3">
-                  <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5" />
-                  <div>
-                    <h4 className="font-semibold text-blue-900 text-sm">
-                      Editing Existing Refund
-                    </h4>
-                    <p className="text-xs text-blue-700">
-                      Sale information (Document, Prices, Vendor) is locked. You
-                      are only modifying the refund parameters.
-                    </p>
-                  </div>
-                </div>
+            {/* Refund Payout Method — who/what actually receives the money.
+                Switching this reverses the old ledger entry/balance and
+                applies a fresh one on the newly selected account. */}
+            <div className="mt-3 border-t border-slate-100 pt-3">
+              <Label className="mb-1.5 block text-xs font-medium text-slate-600">Refund payout method</Label>
+              <PayoutPicker
+                refundType={refundType}
+                onType={setRefundType}
+                bankId={bankId}
+                onBank={setBankId}
+                banks={banks}
+                hasCreditCustomer={hasCreditCustomer}
+                isTabbyTamara={isTabbyTamara}
+                customerName={saleContext?.customerName}
+                bankInvalid={tried}
+              />
+              <p className="mt-2 text-[11px] text-slate-400">Changing the payout method moves the money: the old entry is reversed and a new one is posted on the account you choose.</p>
+            </div>
+          </Panel>
 
-                {error && (
-                  <div className="text-sm text-red-600 bg-red-50 border border-red-200 p-3 rounded-md flex items-center justify-between">
-                    {error}
-                    <button
-                      onClick={() => setError("")}
-                      className="text-red-400 hover:text-red-600"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                )}
-
-                {/* Details */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Left Column - Sale Details (Disabled) */}
-                  <div className="space-y-4">
-                    <div className="bg-gray-50 p-4 rounded-lg border space-y-3">
-                      <h3 className="font-semibold text-sm text-gray-700 mb-3">
-                        Original Sale Information
-                      </h3>
-
-                      <div className="space-y-1">
-                        <Label className="text-xs text-gray-600">
-                          Document Number
-                        </Label>
-                        <Input
-                          value={refundForm.documentNumber}
-                          disabled
-                          className="bg-gray-100 text-gray-500"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <Label className="text-xs text-gray-600">Airline</Label>
-                        <Input
-                          value={refundForm.airline}
-                          disabled
-                          className="bg-gray-100 text-gray-500"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <Label className="text-xs text-gray-600">Vendor</Label>
-                        <Input
-                          value={refundForm.vendorName}
-                          disabled
-                          className="bg-gray-100 text-gray-500"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                          <Label className="text-xs text-gray-600">
-                            Net Price
-                          </Label>
-                          <Input
-                            value={refundForm.netPrice}
-                            disabled
-                            className="bg-gray-100 text-gray-500"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs text-gray-600">
-                            Sell Price
-                          </Label>
-                          <Input
-                            value={refundForm.sellPrice}
-                            disabled
-                            className="bg-gray-100 text-gray-500"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Right Column - Editable Refund Details */}
-                  <div className="space-y-4">
-                    <div className="space-y-3">
-                      <div className="space-y-1">
-                        <Label className="text-sm font-medium">
-                          Refund Fee
-                        </Label>
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={refundForm.refundFee}
-                          onChange={(e) =>
-                            updateField("refundFee", e.target.value)
-                          }
-                          placeholder="0.00"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <Label className="text-sm font-medium">
-                          Service Charges
-                        </Label>
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={refundForm.serviceCharges}
-                          onChange={(e) =>
-                            updateField("serviceCharges", e.target.value)
-                          }
-                          placeholder="0.00"
-                        />
-                      </div>
-                    </div>
-
-                    <Separator />
-
-                    {/* Refund Payout Method — who/what actually receives the money.
-                        Switching this reverses the old ledger entry/balance and
-                        applies a fresh one on the newly selected account. */}
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium">Refund Payout Method</Label>
-                      <Select value={refundType} onValueChange={setRefundType}>
-                        <SelectTrigger className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="CUSTOMER_LEDGER" disabled={!hasCreditCustomer || isTabbyTamara}>
-                            Credit to Customer Ledger
-                          </SelectItem>
-                          <SelectItem value="CASH">Cash</SelectItem>
-                          <SelectItem value="BANK_TRANSFER">Bank Transfer</SelectItem>
-                        </SelectContent>
-                      </Select>
-
-                      {isTabbyTamara && (
-                        <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md p-2">
-                          <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                          <span>
-                            This ticket was booked through <strong>{saleContext?.customerName}</strong> —
-                            refunds must be paid out as Cash or Bank Transfer directly to the traveler.
-                          </span>
-                        </div>
-                      )}
-
-                      {refundType === "BANK_TRANSFER" && (
-                        <Select value={bankId} onValueChange={setBankId}>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select bank account" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {banks.map((b) => (
-                              <SelectItem key={b.id} value={b.id}>
-                                {b.bankName} — {b.accountNumber}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      )}
-                    </div>
-
-                    <Separator />
-
-                    {/* Calculation Summary */}
-                    <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-lg space-y-2">
-                      <h4 className="font-semibold text-sm text-blue-900 mb-2">
-                        Refund Calculation
-                      </h4>
-
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Net Price</span>
-                        <span className="font-medium">
-                          ${refundForm.netPrice || "0.00"}
-                        </span>
-                      </div>
-
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">- Refund Fee</span>
-                        <span className="font-medium text-red-600">
-                          -${refundForm.refundFee || "0.00"}
-                        </span>
-                      </div>
-
-                      <Separator />
-
-                      <div className="flex justify-between text-sm font-semibold">
-                        <span className="text-rose-700">Refund to Vendor</span>
-                        <span className="text-rose-700">${refundVendor}</span>
-                      </div>
-
-                      <Separator className="my-2" />
-
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">- Service Charges</span>
-                        <span className="font-medium text-red-600">
-                          -${refundForm.serviceCharges || "0.00"}
-                        </span>
-                      </div>
-
-                      <Separator />
-
-                      <div className="flex justify-between text-sm font-semibold">
-                        <span className="text-blue-700">
-                          {refundType === "CUSTOMER_LEDGER"
-                            ? "Credit to Customer Ledger"
-                            : refundType === "BANK_TRANSFER"
-                              ? "Refund Payout (Bank Transfer)"
-                              : "Refund Payout (Cash)"}
-                        </span>
-                        <span className="text-blue-700">${refundPax}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Refund Reason */}
-                <div className="space-y-1">
-                  <Label className="text-sm font-medium">Refund Reason</Label>
-                  <Input
-                    placeholder="e.g., Customer cancellation, Flight cancelled"
-                    value={refundForm.refundReason}
-                    onChange={(e) =>
-                      updateField("refundReason", e.target.value)
-                    }
-                  />
-                </div>
-
-                {/* Remarks */}
-                <div className="space-y-1">
-                  <Label className="text-sm font-medium">Remarks</Label>
-                  <Textarea
-                    placeholder="Additional notes..."
-                    value={refundForm.remarks}
-                    onChange={(e) => updateField("remarks", e.target.value)}
-                    rows={3}
-                    className="resize-none"
-                  />
-                </div>
-
-                {/* Actions */}
-                <div className="flex justify-end gap-3 pt-4">
-                  <Button
-                    onClick={handleSubmit}
-                    disabled={loading}
-                    className="bg-gradient-primary text-white h-11 px-8 text-base font-semibold gap-2"
-                  >
-                    {loading ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Updating...
-                      </>
-                    ) : (
-                      <>
-                        <Save className="h-4 w-4" />
-                        Update Refund
-                      </>
-                    )}
-                  </Button>
-                </div>
+          <Panel icon={NotebookPen} title="Reason & notes" titleAr="السبب والملاحظات">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-slate-600">Refund reason</Label>
+                <Input
+                  placeholder="e.g., Customer cancellation, Flight cancelled"
+                  value={refundForm.refundReason}
+                  onChange={(e) => updateField("refundReason", e.target.value)}
+                  className="h-9 rounded-lg"
+                />
               </div>
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-slate-600">Remarks</Label>
+                <Textarea
+                  placeholder="Additional notes..."
+                  value={refundForm.remarks}
+                  onChange={(e) => updateField("remarks", e.target.value)}
+                  rows={2}
+                  className="min-h-0 resize-none rounded-lg"
+                />
+              </div>
+            </div>
+          </Panel>
+        </div>
+
+        <aside className="h-fit space-y-3 xl:sticky xl:top-20">
+          <CalcCard
+            net={refundForm.netPrice}
+            fee={refundForm.refundFee}
+            vendorAmount={refundVendor}
+            service={refundForm.serviceCharges}
+            payout={refundPax}
+            refundType={refundType}
+          />
+          <Button onClick={handleSubmit} disabled={loading} className="h-10 w-full gap-2 rounded-lg bg-rose-600 text-base font-semibold text-white shadow-md shadow-rose-900/20 hover:bg-rose-700">
+            {loading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Updating...
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4" />
+                Update Refund
+              </>
+            )}
+          </Button>
+        </aside>
+      </div>
     </div>
   );
 }
