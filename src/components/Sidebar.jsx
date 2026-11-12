@@ -322,12 +322,6 @@ const Sidebar = () => {
           permission="PAYMENT_READ"
         />
         <NavItem
-          to="/refund-list"
-          icon={RotateCcwIcon}
-          label={t("refunds")}
-          permission="REFUND_READ"
-        />
-              <NavItem
         to="/expenses"
         icon={Wallet}
         label={t("expenses")}
@@ -381,9 +375,9 @@ const Sidebar = () => {
       />
       <aside
         dir={isRTL ? "rtl" : "ltr"}
-        className={`print:hidden fixed top-0 left-0 z-50 h-screen w-64 transform transition-transform duration-300 ${
-          mobileOpen ? "translate-x-0" : "-translate-x-full"
-        } ${ui.shell} rounded-r-2xl`}
+        className={`print:hidden fixed top-0 z-50 h-screen w-64 transform transition-transform duration-300 ${
+          isRTL ? "right-0 rounded-l-2xl" : "left-0 rounded-r-2xl"
+        } ${mobileOpen ? "translate-x-0" : isRTL ? "translate-x-full" : "-translate-x-full"} ${ui.shell}`}
         style={ui.style}
       >
         <div
@@ -430,7 +424,7 @@ const Sidebar = () => {
       <>
         <button
           onClick={() => setMobileOpen(true)}
-          className={`md:hidden print:hidden fixed top-4 left-4 z-50 p-2.5 rounded-xl ${
+          className={`md:hidden print:hidden fixed top-4 ${isRTL ? "right-4" : "left-4"} z-50 p-2.5 rounded-xl ${
             isDarkMode
               ? "bg-gradient-to-r from-slate-700 to-slate-600 shadow-lg shadow-slate-900/40"
               : "bg-slate-800 shadow-lg shadow-slate-400/50"
@@ -448,7 +442,7 @@ const Sidebar = () => {
       {/* Mobile Toggle */}
       <button
         onClick={() => setMobileOpen(true)}
-        className={`md:hidden print:hidden fixed top-4 left-4 z-50 p-2.5 rounded-xl ${
+        className={`md:hidden print:hidden fixed top-4 ${isRTL ? "right-4" : "left-4"} z-50 p-2.5 rounded-xl ${
           isDarkMode
             ? "bg-gradient-to-t from-slate-800 to-gray-600 shadow-lg shadow-slate-900/40"
             : "bg-slate-800 shadow-lg shadow-slate-400/50"
@@ -462,7 +456,7 @@ const Sidebar = () => {
         dir={isRTL ? "rtl" : "ltr"}
         className={`hidden md:block print:hidden fixed z-[60] h-screenshot transition-all duration-300 ${
           isCollapsed ? "w-18" : "w-62"
-        } ${ui.shell} rounded-2xl ml-2 my-2`}
+        } ${ui.shell} rounded-2xl my-2 ${isRTL ? "right-0 mr-2" : "ml-2"}`}
         style={ui.style}
       >
         {/* Collapse / expand handle, on the sidebar's edge */}

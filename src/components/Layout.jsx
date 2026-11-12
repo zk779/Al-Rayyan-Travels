@@ -3,11 +3,12 @@ import Header from "./Header";
 import { Outlet, useLocation } from "react-router-dom";
 import { useSidebar } from "../context/SidebarContext";
 import { ThemeContext } from "../context/ThemeContext";
-import { LanguageProvider } from "../context/LanguageContext";
+import { LanguageProvider, useLanguage } from "../context/LanguageContext";
 import { useContext } from "react";
 import FloatingCalculator from "./FloatingCalculator";
 
-const Layout = () => {
+const LayoutContent = () => {
+  const { isRTL } = useLanguage();
   const { isCollapsed, sidebarHidden } = useSidebar();
   const { isDarkMode } = useContext(ThemeContext);
   const location = useLocation();
@@ -20,14 +21,16 @@ const hideSidebarAndHeader =
   location.pathname.startsWith("/customer-invoice/") ||
   location.pathname.startsWith("/view-invoice/");
 
-  // Determine margin-left class based on sidebar state and current route
-  let sidebarMarginClass = hideSidebarAndHeader ? "ml-0" : "ml-64"; // Default expanded
+  // The page makes room on the side where the sidebar is: left in English, right in Arabic.
+  // (Whole class names, so Tailwind can see them.)
+  const M = isRTL ? { full: "mr-64", collapsed: "mr-20", none: "mr-0" } : { full: "ml-64", collapsed: "ml-20", none: "ml-0" };
+  let sidebarMarginClass = hideSidebarAndHeader ? M.none : M.full; // Default expanded
 
   if (!hideSidebarAndHeader) {
     if (sidebarHidden) {
-      sidebarMarginClass = "ml-0"; // Sidebar hidden on mobile
+      sidebarMarginClass = M.none; // Sidebar hidden on mobile
     } else if (isCollapsed) {
-      sidebarMarginClass = "ml-20"; // Sidebar collapsed
+      sidebarMarginClass = M.collapsed; // Sidebar collapsed
     }
   }
 
@@ -35,16 +38,13 @@ const hideSidebarAndHeader =
   const contentPaddingClass = hideSidebarAndHeader ? "p-0" : "p-6 print:p-0";
 
   return (
-    // ✅ LanguageProvider wraps Sidebar + Header so only they can consume
-    // the language toggle (rest of the app is untouched, as requested).
-    <LanguageProvider>
       <div className={`min-h-screen flex flex-col ${isDarkMode ? "dark" : ""}`}>
         {/* Sidebar */}
         {!hideSidebarAndHeader && <Sidebar />}
 
         {/* Main Content */}
         <div
-          className={`flex-1 flex flex-col transition-all duration-300 ${sidebarMarginClass} print:ml-0 bg-gray-50 print:bg-white text-gray-800 min-h-screen`}
+          className={`flex-1 flex flex-col transition-all duration-300 ${sidebarMarginClass} print:ml-0 print:mr-0 bg-gray-50 print:bg-white text-gray-800 min-h-screen`}
         >
           {/* Header */}
           {!hideSidebarAndHeader && <Header />}
@@ -63,8 +63,15 @@ const hideSidebarAndHeader =
           !location.pathname.startsWith("/customer-invoice/") &&
           !location.pathname.startsWith("/view-invoice/") && <FloatingCalculator />}
       </div>
-    </LanguageProvider>
   );
 };
+
+// ✅ LanguageProvider wraps Sidebar + Header (+ the page margin) so only they can consume
+// the language toggle (rest of the app is untouched, as requested).
+const Layout = () => (
+  <LanguageProvider>
+    <LayoutContent />
+  </LanguageProvider>
+);
 
 export default Layout;
