@@ -12,7 +12,7 @@ const num = (v) => Number(v) || 0;
  * (the vendor's service charges), with the VAT on them and the resulting net total underneath.
  * `size` matches the form it sits in: "sm" (h-8) or "md" (h-9, rounded).
  */
-export default function VendorNetFields({ item, onChange, size = "sm", netInvalid = false, netRequired = false }) {
+export default function VendorNetFields({ item, onChange, size = "sm", netInvalid = false, netRequired = false, children = null }) {
   const inputCls =
     size === "md" ? "h-9 rounded-[10px] text-sm" : "h-8 text-sm";
   const labelCls = size === "md" ? "flex items-center gap-1 text-xs font-medium text-slate-600" : "text-xs font-medium text-slate-600";
@@ -32,6 +32,8 @@ export default function VendorNetFields({ item, onChange, size = "sm", netInvali
           className={`${inputCls} ${netInvalid ? "border-red-300 focus-visible:ring-red-400" : ""}`}
         />
       </div>
+      {/* PAX VAT goes right after the basic fare */}
+      {children}
       <div className="space-y-1">
         <Label className={labelCls}>
           Vendor charges <SaudiRiyal size={size === "md" ? 13 : 15} />

@@ -43,7 +43,13 @@ import { computePaymentBreakdown } from "./paymentBreakdown";
 import BranchPicker from "./BranchPicker";
 import { useIsAdmin } from "../utils/useIsAdmin";
 import VendorNetFields from "./VendorNetFields";
-import { applyVendorParts, isVendorPart, fareNet, vendorChargesPayload } from "./vendorCharges";
+import TotalVatField from "./TotalVatField";
+import {
+  applyVendorParts,
+  isVendorPart,
+  fareNet,
+  vendorChargesPayload,
+} from "./vendorCharges";
 import { HOTEL_ICAO } from "../utils/hotelText";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
@@ -491,9 +497,9 @@ export default function SalesTabComponent() {
   const airlineOptions = airlines
     .filter((a) => !HOTEL_ICAO.has(a.icao_code))
     .map((a) => ({
-    value: a.id,
-    label: `${a.airlineCode} - ${a.iataName}`,
-  }));
+      value: a.id,
+      label: `${a.airlineCode} - ${a.iataName}`,
+    }));
   const vendorOptions = vendors.map((v) => ({
     value: v.id,
     label: v.vendorName,
@@ -655,7 +661,9 @@ export default function SalesTabComponent() {
   return (
     <div className="space-y-4">
       {/* Date & Invoice (+ Branch for an admin) */}
-      <div className={`grid grid-cols-1 gap-4 ${isAdminUser ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
+      <div
+        className={`grid grid-cols-1 gap-4 ${isAdminUser ? "md:grid-cols-3" : "md:grid-cols-2"}`}
+      >
         <div className="space-y-2">
           <Label className="text-sm font-medium text-gray-700">
             Invoice Number
@@ -975,19 +983,21 @@ export default function SalesTabComponent() {
                     size="sm"
                     netRequired
                     netInvalid={!item.netPrice}
-                  />
-
-                  {item.routeType === "DOMESTIC" && (
-                    <div className="space-y-1">
-                      <Label className="text-xs font-medium text-orange-700">
-                        PAX VAT 15% <SaudiRiyal size={15} />
-                      </Label>
-                      <div className="flex items-center gap-1 px-2 h-8 bg-orange-50 border border-orange-200 rounded text-xs font-semibold text-orange-700">
-                        <Calculator className="h-3 w-3" />$
-                        {item.paxVat || "0.00"}
+                  >
+                    {/* PAX VAT sits right after the basic fare (domestic routes only) */}
+                    {item.routeType === "DOMESTIC" && (
+                      <div className="space-y-1">
+                        <Label className="text-xs font-medium text-orange-700">
+                          D. Vat 15%
+                          <SaudiRiyal size={15} />
+                        </Label>
+                        <div className="flex items-center gap-1 px-2 h-8 bg-orange-50 border border-orange-200 rounded text-xs font-semibold text-orange-700">
+                          <Calculator className="h-3 w-3" />
+                          {item.paxVat || "0.00"}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </VendorNetFields>
 
                   <div className="space-y-1">
                     <Label className="text-xs font-medium text-slate-600">
@@ -1041,16 +1051,6 @@ export default function SalesTabComponent() {
                   </div>
 
                   <div className="space-y-1">
-                    <Label className="text-xs font-medium text-blue-700">
-                      VAT 15% <SaudiRiyal size={15} />
-                    </Label>
-                    <div className="flex items-center gap-1 px-2 h-8 bg-blue-50 border border-blue-200 rounded text-xs font-semibold text-blue-700">
-                      <Calculator className="h-3 w-3" />
-                      {item.vatAmount || "0.00"}
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
                     <Label className="text-xs font-medium text-green-700">
                       Profit <SaudiRiyal size={15} />
                     </Label>
@@ -1058,7 +1058,18 @@ export default function SalesTabComponent() {
                       <Calculator className="h-3 w-3" />
                       {profit}
                     </div>
+                    {Number(item.vatAmount) > 0 && (
+                      <p
+                        className="text-[10px] leading-tight text-slate-500"
+                        data-testid="profit-vat"
+                      >
+                        VAT 15%: {Number(item.vatAmount).toFixed(2)}
+                      </p>
+                    )}
                   </div>
+
+                  {/* PAX VAT + vendor VAT + our VAT 15% */}
+                  <TotalVatField item={item} />
 
                   <div className="space-y-1 md:col-span-2 lg:col-span-1">
                     <Label className="text-xs font-medium text-slate-600">
