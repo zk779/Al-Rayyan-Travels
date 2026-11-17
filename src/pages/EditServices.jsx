@@ -18,6 +18,7 @@ import {
 } from "../../shadcn/components/ui/card";
 import { Button } from "../../shadcn/components/ui/button";
 
+import { useAuth } from "../context/AuthContext";
 import EditSalesTab from "../components/EditSaleTab";
 import VoidTabComponent from "../components/VoidTabComponent";
 
@@ -27,9 +28,10 @@ export default function EditSaleComponent() {
   const { saleId } = useParams(); // This could be the Invoice ID or Sale ID depending on your routing
   const [activeTab, setActiveTab] = useState("sales");
   const navigate = useNavigate();
+  const { hasPermission } = useAuth();
 
   // A void is edited with its own form: look at the invoice first to see which one this is
-  const [kind, setKind] = useState("checking"); // "checking" | "sale" | "void"
+  const [kind, setKind] = useState("checking"); // "checking" | "sale" | "void" | "forbidden"
   useEffect(() => {
     const controller = new AbortController();
     fetch(`${API_BASE}/api/sales/${saleId}`, {
@@ -37,7 +39,10 @@ export default function EditSaleComponent() {
       signal: controller.signal,
     })
       .then((r) => r.json())
-      .then((j) => setKind((j.data?.sales || []).some((s) => s.status === "VOID") ? "void" : "sale"))
+      .then((j) => {
+        if (j.success === false && /permission/i.test(j.error || "")) return setKind("forbidden");
+        setKind((j.data?.sales || []).some((s) => s.status === "VOID") ? "void" : "sale");
+      })
       .catch((err) => {
         if (err.name !== "AbortError") setKind("sale");
       });
@@ -85,6 +90,10 @@ export default function EditSaleComponent() {
                 <div className="flex items-center justify-center py-16">
                   <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-500 border-t-transparent" />
                 </div>
+              ) : kind === "forbidden" || (kind === "void" && !hasPermission("VOID_EDIT")) || (kind === "sale" && !hasPermission("SALE_EDIT")) ? (
+                <p className="py-16 text-center text-sm font-medium text-slate-500" data-testid="no-edit-permission">
+                  You don't have permission to edit this {kind === "void" ? "void sale" : "sale"}.
+                </p>
               ) : kind === "void" ? (
                 <VoidTabComponent invoiceId={saleId} />
               ) : (

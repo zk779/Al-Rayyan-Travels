@@ -292,7 +292,7 @@ const Sidebar = () => {
           to="/new-services"
           icon={Plus}
           label={t("newServices")}
-          permission="SALE_CREATE"
+          any={["SALE_CREATE", "REFUND_CREATE", "HOTEL_CREATE", "VOID_CREATE", "OTHER_SERVICE_READ"]}
         />
         <NavItem
           to="/sales-report"

@@ -69,9 +69,9 @@ export default function OtherServices() {
   // "← Services" only when we got here from the Services page (not from the sidebar)
   const fromServices = !!useLocation().state?.fromServices;
   const { hasPermission } = useAuth();
-  const canCreate = hasPermission("SALE_CREATE");
-  const canEdit = hasPermission("SALE_EDIT");
-  const canDelete = hasPermission("SALE_DELETE");
+  const canCreate = hasPermission("OTHER_SERVICE_CREATE");
+  const canEdit = hasPermission("OTHER_SERVICE_EDIT");
+  const canDelete = hasPermission("OTHER_SERVICE_DELETE");
   const token = localStorage.getItem("token");
   const headers = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
 

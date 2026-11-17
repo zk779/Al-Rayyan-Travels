@@ -146,7 +146,7 @@ export default function OtherServiceInvoice() {
                 Paid: {paymentLabel(invoice)}
               </span>
             )}
-            {invoice.status === "DRAFT" && hasPermission("SALE_EDIT") && (
+            {invoice.status === "DRAFT" && hasPermission("OTHER_SERVICE_EDIT") && (
               <button
                 type="button"
                 onClick={() => setConfirmOpen(true)}
@@ -155,7 +155,7 @@ export default function OtherServiceInvoice() {
                 <CheckCircle2 className="h-4 w-4" /> Confirm &amp; receive payment
               </button>
             )}
-            {hasPermission("SALE_EDIT") && (
+            {hasPermission("OTHER_SERVICE_EDIT") && (
               <Link
                 to={`/other-services/${invoice.id}/edit`}
                 className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50"

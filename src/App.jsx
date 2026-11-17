@@ -103,7 +103,7 @@ function App() {
 									<Route
 										path="new-services/void"
 										element={
-											<PermissionRoute permission="SALE_CREATE">
+											<PermissionRoute permission="VOID_CREATE">
 												<NewVoidPage />
 											</PermissionRoute>
 										}
@@ -111,7 +111,7 @@ function App() {
 									<Route
 										path="other-services"
 										element={
-											<PermissionRoute permission="SALE_READ">
+											<PermissionRoute permission="OTHER_SERVICE_READ">
 												<OtherServices />
 											</PermissionRoute>
 										}
@@ -119,7 +119,7 @@ function App() {
 									<Route
 										path="other-services/new"
 										element={
-											<PermissionRoute permission="SALE_CREATE">
+											<PermissionRoute permission="OTHER_SERVICE_CREATE">
 												<NewOtherService />
 											</PermissionRoute>
 										}
@@ -127,7 +127,7 @@ function App() {
 									<Route
 										path="other-services/:id/edit"
 										element={
-											<PermissionRoute permission="SALE_EDIT">
+											<PermissionRoute permission="OTHER_SERVICE_EDIT">
 												<EditOtherService />
 											</PermissionRoute>
 										}
@@ -135,7 +135,7 @@ function App() {
 									<Route
 										path="other-services/:id"
 										element={
-											<PermissionRoute permission="SALE_READ">
+											<PermissionRoute permission="OTHER_SERVICE_READ">
 												<OtherServiceInvoice />
 											</PermissionRoute>
 										}
@@ -143,7 +143,7 @@ function App() {
 									<Route
 										path="new-hotel-booking"
 										element={
-											<PermissionRoute permission="SALE_CREATE">
+											<PermissionRoute permission="HOTEL_CREATE">
 												<NewHotelBooking />
 											</PermissionRoute>
 										}
@@ -151,7 +151,7 @@ function App() {
 									<Route
 										path="edit-hotel-booking/:invoiceId"
 										element={
-											<PermissionRoute permission="SALE_EDIT">
+											<PermissionRoute permission="HOTEL_EDIT">
 												<EditHotelBooking />
 											</PermissionRoute>
 										}
@@ -159,7 +159,7 @@ function App() {
 									<Route
 										path="edit-services/:saleId"
 										element={
-											<PermissionRoute permission="SALE_EDIT">
+											<PermissionRoute any={["SALE_EDIT","VOID_EDIT"]}>
 												<EditSaleComponent />
 											</PermissionRoute>
 										}

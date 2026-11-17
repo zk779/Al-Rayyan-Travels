@@ -170,8 +170,13 @@ export default function DetailedReportTab({
 }) {
   // ✅ RBAC — permission flags
   const { hasPermission } = useAuth();
-  const canEditSale = hasPermission("SALE_EDIT");
-  const canDeleteSale = hasPermission("SALE_DELETE");
+  // A hotel booking is edited / deleted with HOTEL_*, a void sale with VOID_*, everything else with SALE_*
+  const rowPerm = (s, action) =>
+    hasPermission(
+      `${s?.status?.toUpperCase() === "VOID" ? "VOID" : String(s?.saleType || "").toUpperCase() === "HOTEL" ? "HOTEL" : "SALE"}_${action}`,
+    );
+  // (the delete dialog is mounted for anyone who can delete at least one kind)
+  const canDeleteSale = ["SALE_DELETE", "HOTEL_DELETE", "VOID_DELETE"].some((x) => hasPermission(x));
   // ADMIN only: push a sale to any branch
   const isAdminUser = useIsAdmin();
   const [moveTarget, setMoveTarget] = useState(null);
@@ -208,8 +213,8 @@ export default function DetailedReportTab({
 
   const navigate = useNavigate();
 
-  const handleEdit = (invoiceId, saleType) => {
-    if (!canEditSale) return; // ✅ RBAC guard
+  const handleEdit = (invoiceId, saleType, status) => {
+    if (!rowPerm({ saleType, status }, "EDIT")) return; // ✅ RBAC guard
     if (!invoiceId) return;
     // Remembered by SalesReport.jsx so coming back (Back button / browser
     // back) lands at the same scroll position, not the top of the page.
@@ -240,8 +245,8 @@ export default function DetailedReportTab({
   };
 
   const handleConfirmDelete = async () => {
-    if (!canDeleteSale) return; // ✅ RBAC guard
     if (!deleteTarget) return;
+    if (!rowPerm(deleteTarget, "DELETE")) return; // ✅ RBAC guard
     setIsDeleting(true);
     try {
       const response = await fetch(
@@ -684,11 +689,11 @@ export default function DetailedReportTab({
                                   <DropdownMenuLabel>Actions</DropdownMenuLabel>
                                   <DropdownMenuSeparator />
                                   {/* ✅ RBAC — Edit Invoice needs SALE_EDIT (first, with a separator under it) */}
-                                  {!isRefunded && canEditSale && (
+                                  {!isRefunded && rowPerm(sale, "EDIT") && (
                                     <>
                                       <DropdownMenuItem
                                         onClick={() =>
-                                          handleEdit(sale.invoiceId, sale.saleType)
+                                          handleEdit(sale.invoiceId, sale.saleType, sale.status)
                                         }
                                       >
                                         <Edit className="mr-2 h-4 w-4" />
@@ -733,7 +738,7 @@ export default function DetailedReportTab({
                                   {!isRefunded && (
                                     <>
                                       {/* ✅ RBAC — Delete Sale needs SALE_DELETE */}
-                                      {canDeleteSale && (
+                                      {rowPerm(sale, "DELETE") && (
                                         <>
                                           <DropdownMenuSeparator />
                                           <DropdownMenuItem
