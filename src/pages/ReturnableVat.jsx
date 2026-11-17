@@ -135,8 +135,8 @@ export default function ReturnableVat() {
             <VatPeriodPicker period={period} disabled={loading} />
 
             <p className="mt-5 rounded-xl bg-slate-50 px-3 py-2.5 text-[11px] leading-relaxed text-slate-600 ring-1 ring-slate-200">
-              Counts <span className="font-semibold">approved</span> expenses in the <span className="font-semibold">Returnable VAT</span>{" "}
-              category, by expense date. The amount you enter on an expense already includes 15% VAT.
+              Counts <span className="font-semibold">approved</span> expenses that include VAT — the <span className="font-semibold">Returnable VAT</span>{" "}
+              category and any expense marked <span className="font-semibold">VAT included</span> — by expense date.
             </p>
 
             <button
@@ -311,7 +311,7 @@ export default function ReturnableVat() {
                       <Percent className="h-8 w-8 text-slate-200" />
                       <p className="text-sm font-medium text-slate-500">No returnable VAT expenses in this period</p>
                       <p className="text-xs text-slate-400">
-                        Add an expense with the “Returnable VAT” category and it will show up here.
+                        Add an expense with VAT included (or the “Returnable VAT” category) and it will show up here.
                       </p>
                     </div>
                   ) : (

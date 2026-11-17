@@ -2,75 +2,33 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import {
-  DollarSign,
   Plus,
   Search,
   Edit,
   Trash2,
   MoreHorizontal,
   Eye,
-  Calendar as CalendarIcon,
   Landmark,
   Banknote,
-  User as UserIcon,
   UserCog,
   Building2,
-  Wallet,
-  FileText,
-  CheckCircle2,
-  XCircle,
   SaudiRiyal,
   ChevronLeft,
   ChevronRight,
-    Layers,
+  Layers,
+  Paperclip,
   Percent,
+  Receipt,
+  X,
 } from "lucide-react";
 import { format } from "date-fns";
 
 import { Button } from "../../shadcn/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../../shadcn/components/ui/card";
 import { Input } from "../../shadcn/components/ui/input";
 import { Label } from "../../shadcn/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../../shadcn/components/ui/select";
-import { Badge } from "../../shadcn/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "../../shadcn/components/ui/table";
-import { Calendar as CalendarComponent } from "../../shadcn/components/ui/calendar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "../../shadcn/components/ui/popover";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "../../shadcn/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "../../shadcn/components/ui/dropdown-menu";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../shadcn/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../shadcn/components/ui/table";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../../shadcn/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -81,10 +39,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../../shadcn/components/ui/alert-dialog";
-import { Textarea } from "../../shadcn/components/ui/textarea";
 import { useAuth } from "../context/AuthContext"; // ✅ ADD THIS
 import DateRangeInputs from "./DateRangeInputs";
 import { getLocalTimeZone } from "../utils/reportUtils";
+import ExpenseFormDialog from "./expense/ExpenseFormDialog";
+import ExpenseViewDialog from "./expense/ExpenseViewDialog";
+import { CATEGORIES, RETURNABLE_VAT, STATUSES, catLabel, money2, savedVatMode } from "./expense/expenseUtils";
 
 // ── Backend config — adjust these paths if your routes are mounted elsewhere ──
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
@@ -105,55 +65,32 @@ const authHeaders = () => ({
   Authorization: `Bearer ${getToken()}`,
 });
 
-// enum value <-> display label
-const CATEGORIES = [
-  { value: "OFFICE_SUPPLIES", label: "Office Supplies" },
-  { value: "SALARY", label: "Salary" },
-  { value: "TRAVEL", label: "Travel" },
-  { value: "MARKETING", label: "Marketing" },
-  { value: "MEALS", label: "Meals" },
-  { value: "TRAINING", label: "Training" },
-  { value: "UTILITIES", label: "Utilities" },
-  { value: "RENT", label: "Rent" },
-  { value: "INSURANCE", label: "Insurance" },
-  { value: "MAINTENANCE", label: "Maintenance" },
-  { value: "RETURNABLE_VAT", label: "Returnable VAT %" },
-  { value: "OTHER", label: "Other" },
-];
-const STATUSES = [
-  { value: "APPROVED", label: "Approved" },
-  { value: "REJECTED", label: "Rejected" },
-];
-const catLabel = (v) => CATEGORIES.find((c) => c.value === v)?.label ?? v;
-
-// Returnable VAT: the amount entered is the GROSS figure — the 15% VAT is
-// already inside it (5000.00 = 4347.83 net + 652.17 VAT). It's worked out here,
-// in whole halalas, and sent to the API as `vatAmount`, which just stores it.
-const RETURNABLE_VAT = "RETURNABLE_VAT";
-const VAT_RATE_PERCENT = 15;
-const splitVat = (gross) => {
-  const cents = Math.round(Number(gross || 0) * 100);
-  const vatCents = Math.round((cents * VAT_RATE_PERCENT) / (100 + VAT_RATE_PERCENT));
-  return { vat: vatCents / 100, net: (cents - vatCents) / 100, gross: cents / 100 };
-};
-const calcVat = (gross) => splitVat(gross).vat;
-const money2 = (n) => Number(n || 0).toFixed(2);
-const statusColor = (s) => (s === "APPROVED" ? "default" : "destructive");
-
 const PAGE_SIZE_OPTIONS = [10, 20, 30, 50, 100];
 const DEFAULT_PAGINATION = { page: 1, limit: 20, total: 0, pages: 1 };
 const DEFAULT_SUMMARY = { count: 0, totalAmount: 0, totalVat: 0, byBranch: null };
 
-const emptyForm = {
-  expenseDate: new Date(),
-  category: "",
-  branchId: "",
-  amount: "",
-  status: "APPROVED",
-  paymentMode: "CASH",
-  bankId: "",
-  userId: "",
-  description: "",
+const Tile = ({ label, value, sub, tone, icon: Icon, onClick, active, testId }) => {
+  const Wrapper = onClick ? "button" : "div";
+  return (
+    <Wrapper
+      type={onClick ? "button" : undefined}
+      onClick={onClick}
+      data-testid={testId}
+      className={`rounded-xl bg-white p-3.5 text-left shadow-sm ring-1 transition-shadow ${onClick ? "hover:shadow-md" : ""} ${active ? "ring-2 ring-amber-400" : "ring-slate-200/80"}`}
+    >
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</span>
+        <span className={`grid h-7 w-7 place-items-center rounded-lg ${tone}`}>
+          <Icon className="h-3.5 w-3.5" />
+        </span>
+      </div>
+      <p className="mt-1.5 flex items-center gap-1 text-xl font-bold tabular-nums text-slate-900">
+        <SaudiRiyal className="h-4 w-4 opacity-50" />
+        {value}
+      </p>
+      <p className="text-[11px] text-slate-400">{sub}</p>
+    </Wrapper>
+  );
 };
 
 export default function ExpensePage() {
@@ -162,7 +99,6 @@ export default function ExpensePage() {
   const canCreate = hasPermission("EXPENSE_CREATE");
   const canEdit = hasPermission("EXPENSE_EDIT");
   const canDelete = hasPermission("EXPENSE_DELETE");
-  const hasAnyRowAction = canEdit || canDelete;
 
   const [expenses, setExpenses] = useState([]);
   const [branches, setBranches] = useState([]);
@@ -180,6 +116,7 @@ export default function ExpensePage() {
   const [paymentModeFilter, setPaymentModeFilter] = useState("all");
   const [bankFilter, setBankFilter] = useState("all");
   const [createdByFilter, setCreatedByFilter] = useState("all");
+  const [vatFilter, setVatFilter] = useState("all"); // all | yes (carries VAT = returnable) | no
   // Date range is opt-in: empty by default, so no date filter is sent at all.
   const [dateRange, setDateRange] = useState({ from: undefined, to: undefined });
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -190,12 +127,9 @@ export default function ExpensePage() {
   const [pageSize, setPageSize] = useState(20);
 
   const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
-  const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState(emptyForm);
-  const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState("");
 
   // ── Load data ──────────────────────────────────────────────────────────
   const loadExpenses = useCallback(async () => {
@@ -208,6 +142,7 @@ export default function ExpensePage() {
       if (paymentModeFilter !== "all") params.set("paymentMode", paymentModeFilter);
       if (paymentModeFilter === "BANK_TRANSFER" && bankFilter !== "all") params.set("bankId", bankFilter);
       if (createdByFilter !== "all") params.set("createdById", createdByFilter);
+      if (vatFilter !== "all") params.set("hasVat", vatFilter === "yes" ? "true" : "false");
       if (debouncedSearch) params.set("search", debouncedSearch);
       if (dateRange.from || dateRange.to) {
         params.set("timeZone", getLocalTimeZone());
@@ -228,24 +163,9 @@ export default function ExpensePage() {
     } finally {
       setLoading(false);
     }
-  }, [
-    page,
-    pageSize,
-    branchFilter,
-    categoryFilter,
-    statusFilter,
-    paymentModeFilter,
-    bankFilter,
-    createdByFilter,
-    debouncedSearch,
-    dateRange,
-  ]);
+  }, [page, pageSize, branchFilter, categoryFilter, statusFilter, paymentModeFilter, bankFilter, createdByFilter, vatFilter, debouncedSearch, dateRange]);
 
-  // Users are only ever needed for SALARY expenses — fetch lazily, once.
-  // NOTE: assumes each user record includes a `branchId` field so we can
-  // filter the list down to the selected branch on the client.
-  // If your API instead supports server-side filtering, replace this with:
-  //   fetch(`${USERS_URL}?branchId=${branchId}`, ...)
+  // Users are only ever needed for SALARY expenses and the "Created by" filter — fetch lazily, once.
   const ensureUsersLoaded = async () => {
     if (usersLoaded || usersLoading) return;
     try {
@@ -279,17 +199,7 @@ export default function ExpensePage() {
   // Any filter change (other than the page itself) should snap back to page 1
   useEffect(() => {
     setPage(1);
-  }, [
-    branchFilter,
-    categoryFilter,
-    statusFilter,
-    paymentModeFilter,
-    bankFilter,
-    createdByFilter,
-    debouncedSearch,
-    dateRange,
-    pageSize,
-  ]);
+  }, [branchFilter, categoryFilter, statusFilter, paymentModeFilter, bankFilter, createdByFilter, vatFilter, debouncedSearch, dateRange, pageSize]);
 
   // Search is applied server-side (so it spans every page and combines with the
   // other filters) — debounce typing so we don't fetch on every keystroke.
@@ -304,22 +214,6 @@ export default function ExpensePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Fetch users the moment the form's category becomes SALARY
-  useEffect(() => {
-    if (form.category === "SALARY") ensureUsersLoaded();
-  }, [form.category]);
-
-  // Users belonging to the currently selected branch only
-  const branchUsers = useMemo(() => {
-    if (!form.branchId) return [];
-    return users.filter((u) => u.branchId === form.branchId);
-  }, [users, form.branchId]);
-
-  // ── Derived data ──────────────────────────────────────────────────────
-  // Every filter (including the text search and date range) is applied
-  // server-side, so pagination totals and summary cards always match the rows.
-  const filtered = expenses;
-
   const hasActiveFilters =
     !!search ||
     statusFilter !== "all" ||
@@ -327,8 +221,22 @@ export default function ExpensePage() {
     branchFilter !== "all" ||
     paymentModeFilter !== "all" ||
     createdByFilter !== "all" ||
+    vatFilter !== "all" ||
     !!dateRange.from ||
     !!dateRange.to;
+
+  const clearFilters = () => {
+    setSearch("");
+    setDebouncedSearch("");
+    setStatusFilter("all");
+    setCategoryFilter("all");
+    setBranchFilter("all");
+    setPaymentModeFilter("all");
+    setBankFilter("all");
+    setCreatedByFilter("all");
+    setVatFilter("all");
+    setDateRange({ from: undefined, to: undefined });
+  };
 
   const branchTotalCards = useMemo(() => {
     if (branchFilter !== "all") {
@@ -342,272 +250,132 @@ export default function ExpensePage() {
       : [];
   }, [summary, branchFilter, branches]);
 
-  // ── Form helpers ──────────────────────────────────────────────────────
+  // ── Actions ───────────────────────────────────────────────────────────
   const openAdd = () => {
     if (!canCreate) return; // ✅ RBAC guard
-    setEditingId(null);
-    setForm(emptyForm);
-    setFormError("");
+    setEditing(null);
     setFormOpen(true);
   };
 
   const openEdit = (expense) => {
     if (!canEdit) return; // ✅ RBAC guard
-    setEditingId(expense.id);
-    setForm({
-      expenseDate: new Date(expense.expenseDate),
-      category: expense.category,
-      branchId: expense.branchId,
-      amount: String(expense.amount),
-      status: expense.status,
-      paymentMode: expense.paymentMode,
-      bankId: expense.bankId ?? "",
-      userId: expense.userId ?? "",
-      description: expense.description ?? "",
-    });
-    setFormError("");
+    setViewing(null);
+    setEditing(expense);
     setFormOpen(true);
-    if (expense.category === "SALARY") ensureUsersLoaded();
-  };
-
-  // Selecting a branch invalidates any previously chosen employee,
-  // since that employee may not belong to the new branch.
-  const handleBranchChange = (v) => {
-    setForm((prev) => ({
-      ...prev,
-      branchId: v,
-      userId: "",
-    }));
-  };
-
-  const handleCategoryChange = (v) => {
-    setForm((prev) => ({
-      ...prev,
-      category: v,
-      // clear the selected employee whenever we move away from SALARY
-      userId: v === "SALARY" ? prev.userId : "",
-    }));
-  };
-
-  const save = async () => {
-    // ✅ RBAC guard
-    if (editingId && !canEdit) return;
-    if (!editingId && !canCreate) return;
-
-    setSaving(true);
-    setFormError("");
-    try {
-      const payload = {
-        expenseDate: form.expenseDate.toISOString(),
-        category: form.category,
-        branchId: form.branchId,
-        amount: Number(form.amount),
-        status: form.status,
-        paymentMode: form.paymentMode,
-        bankId: form.paymentMode === "BANK_TRANSFER" ? form.bankId : null,
-        userId: form.category === "SALARY" ? form.userId : null,
-        // Calculated on this page (amount is VAT-inclusive); the API just stores it
-        vatAmount: form.category === RETURNABLE_VAT ? calcVat(form.amount) : null,
-        description: form.description || null,
-      };
-
-      const url = editingId ? `${EXPENSES_URL}/${editingId}` : EXPENSES_URL;
-      const method = editingId ? "PUT" : "POST";
-      const res = await fetch(url, {
-        method,
-        headers: authHeaders(),
-        body: JSON.stringify(payload),
-      });
-      const json = await res.json();
-
-      if (!json.success) {
-        setFormError(json.error || "Save failed");
-        return;
-      }
-
-      setFormOpen(false);
-      loadExpenses();
-    } catch {
-      setFormError("Save failed");
-    } finally {
-      setSaving(false);
-    }
   };
 
   const confirmDelete = async () => {
     if (!canDelete) return; // ✅ RBAC guard
     try {
-      const res = await fetch(`${EXPENSES_URL}/${deleteId}`, {
-        method: "DELETE",
-        headers: authHeaders(),
-      });
+      const res = await fetch(`${EXPENSES_URL}/${deleteId}`, { method: "DELETE", headers: authHeaders() });
       const json = await res.json();
       if (json.success) loadExpenses();
+      else setError(json.error || "Failed to delete the expense");
+    } catch {
+      setError("Failed to delete the expense");
     } finally {
       setDeleteId(null);
     }
   };
 
-  const canSave =
-    form.expenseDate &&
-    form.branchId &&
-    form.category &&
-    form.amount &&
-    Number(form.amount) > 0 &&
-    (form.paymentMode === "CASH" || form.bankId) &&
-    (form.category !== "SALARY" || form.userId);
+  const approved = expenses.filter((e) => e.status === "APPROVED");
+  const rejected = expenses.filter((e) => e.status === "REJECTED");
+  const sum = (list) => list.reduce((s, e) => s + e.amount, 0);
 
   return (
-    <div className="w-full mx-auto p-6 space-y-6">
+    <div className="mx-auto w-full space-y-4 pb-8">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">
-            Expense Management
-          </h1>
-          <p className="text-slate-500 mt-1">
-            Track and manage company expenses
-          </p>
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 p-5 text-white shadow-md">
+        <div className="pointer-events-none absolute -right-14 -top-16 h-56 w-56 rounded-full bg-white/5 blur-3xl" />
+        <div className="relative flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/15">
+              <Receipt size={20} />
+            </span>
+            <div>
+              <h1 className="text-xl font-bold tracking-tight md:text-2xl">Expense Management</h1>
+              <p className="text-xs text-slate-400">Track and manage company expenses</p>
+            </div>
+          </div>
+          {/* ✅ RBAC — hide "Add Expense" if no create permission */}
+          {canCreate && (
+            <Button onClick={openAdd} className="h-10 gap-2 rounded-xl bg-white text-slate-900 hover:bg-slate-100">
+              <Plus className="h-4 w-4" /> Add Expense
+            </Button>
+          )}
         </div>
-        {/* ✅ RBAC — hide "Add Expense" if no create permission */}
-        {canCreate && (
-          <Button onClick={openAdd} className="bg-indigo-600 hover:bg-indigo-700">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Expense
-          </Button>
-        )}
       </div>
 
       {error && (
-        <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-2.5">
+        <div className="flex items-start justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700" role="alert">
           {error}
-        </p>
+          <button type="button" onClick={() => setError("")} className="shrink-0 text-rose-400 hover:text-rose-600" aria-label="Dismiss">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       )}
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        <Card className="border-slate-200">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-slate-500">
-              {branchFilter === "all" ? "Total Expenses" : "Branch Total"}
-            </CardTitle>
-            <DollarSign className="h-4 w-4 text-slate-400" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-slate-900 inline-flex items-center gap-1">
-              <SaudiRiyal /> {summary.totalAmount.toFixed(2)}
-            </div>
-            <p className="text-xs text-slate-400">
-              {summary.count} total record{summary.count === 1 ? "" : "s"}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="border-emerald-100 bg-emerald-50/40">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-emerald-700">
-              Approved (this page)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-emerald-700 inline-flex items-center gap-1">
-              <SaudiRiyal />{" "}
-              {expenses
-                .filter((e) => e.status === "APPROVED")
-                .reduce((s, e) => s + e.amount, 0)
-                .toFixed(2)}
-            </div>
-            <p className="text-xs text-emerald-600/70">
-              {expenses.filter((e) => e.status === "APPROVED").length} approved
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="border-red-100 bg-red-50/40">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-red-700">
-              Rejected (this page)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-700 inline-flex items-center gap-1">
-              <SaudiRiyal />{" "}
-              {expenses
-                .filter((e) => e.status === "REJECTED")
-                .reduce((s, e) => s + e.amount, 0)
-                .toFixed(2)}
-            </div>
-            <p className="text-xs text-red-600/70">
-              {expenses.filter((e) => e.status === "REJECTED").length} rejected
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="border-amber-100 bg-amber-50/40">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-amber-700">
-              Returnable VAT
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-amber-700 inline-flex items-center gap-1">
-              <SaudiRiyal /> {money2(summary.totalVat)}
-            </div>
-            <p className="text-xs text-amber-600/70">
-              VAT included in these expenses (to claim back) · all matching records
-            </p>
-          </CardContent>
-        </Card>
+      {/* Summary */}
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <Tile
+          label={branchFilter === "all" ? "Total expenses" : "Branch total"}
+          value={money2(summary.totalAmount)}
+          sub={`${summary.count} record${summary.count === 1 ? "" : "s"}`}
+          tone="bg-slate-100 text-slate-600"
+          icon={Receipt}
+        />
+        <Tile label="Approved (this page)" value={money2(sum(approved))} sub={`${approved.length} approved`} tone="bg-emerald-50 text-emerald-600" icon={Receipt} />
+        <Tile label="Rejected (this page)" value={money2(sum(rejected))} sub={`${rejected.length} rejected`} tone="bg-rose-50 text-rose-600" icon={Receipt} />
+        <Tile
+          label="Returnable VAT"
+          value={money2(summary.totalVat)}
+          sub={vatFilter === "yes" ? "Showing only expenses with VAT · click to show all" : "VAT in these expenses · click to list them"}
+          tone="bg-amber-50 text-amber-600"
+          icon={Percent}
+          onClick={() => setVatFilter((v) => (v === "yes" ? "all" : "yes"))}
+          active={vatFilter === "yes"}
+          testId="tile-vat"
+        />
       </div>
 
       {/* Total expense by branch */}
       {branchTotalCards.length > 0 && (
-        <Card className="border-slate-200">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-slate-600 flex items-center gap-2">
-              <Layers className="h-4 w-4 text-indigo-500" />
-              Total Expense by Branch
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="flex flex-wrap gap-3">
-              {branchTotalCards.map((b) => (
-                <div
-                  key={b.id}
-                  className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-2.5 min-w-[180px]"
-                >
-                  <div className="h-8 w-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
-                    <Building2 className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500 leading-tight">{b.name}</p>
-                    <p className="text-sm font-semibold text-slate-900 inline-flex items-center gap-1">
-                      <SaudiRiyal className="h-3.5 w-3.5" /> {b.totalAmount.toFixed(2)}
-                    </p>
-                  </div>
+        <div className="rounded-xl bg-white p-3.5 shadow-sm ring-1 ring-slate-200/80">
+          <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <Layers className="h-3.5 w-3.5 text-indigo-500" /> Total expense by branch
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {branchTotalCards.map((b) => (
+              <div key={b.id} className="flex min-w-[170px] items-center gap-2.5 rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-slate-200/70">
+                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-indigo-100 text-indigo-600">
+                  <Building2 className="h-3.5 w-3.5" />
+                </span>
+                <div>
+                  <p className="text-[11px] leading-tight text-slate-500">{b.name}</p>
+                  <p className="inline-flex items-center gap-1 text-sm font-semibold tabular-nums text-slate-900">
+                    <SaudiRiyal className="h-3 w-3 opacity-50" /> {money2(b.totalAmount)}
+                  </p>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* Filters */}
-      <Card className="border-slate-200">
-        <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="space-y-2">
-            <Label>Search</Label>
+      <div className="rounded-xl bg-white p-3.5 shadow-sm ring-1 ring-slate-200/80">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="space-y-1">
+            <Label className="text-xs text-slate-500">Search</Label>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 h-4 w-4" />
-              <Input
-                placeholder="Search expenses..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
-              />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input placeholder="Search expenses..." value={search} onChange={(e) => setSearch(e.target.value)} className="h-9 pl-9" />
             </div>
           </div>
-          <div className="space-y-2">
-            <Label>Branch</Label>
+          <div className="space-y-1">
+            <Label className="text-xs text-slate-500">Branch</Label>
             <Select value={branchFilter} onValueChange={setBranchFilter}>
-              <SelectTrigger className="w-full">
+              <SelectTrigger className="h-9 w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -620,26 +388,10 @@ export default function ExpensePage() {
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2">
-            <Label>Status</Label>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                {STATUSES.map((s) => (
-                  <SelectItem key={s.value} value={s.value}>
-                    {s.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Category</Label>
+          <div className="space-y-1">
+            <Label className="text-xs text-slate-500">Category</Label>
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger className="w-full">
+              <SelectTrigger className="h-9 w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -652,26 +404,24 @@ export default function ExpensePage() {
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2 md:col-span-2">
-              <DateRangeInputs
-                from={dateRange.from}
-                to={dateRange.to}
-                onChange={setDateRange}
-              />
-            <Label className="flex items-center justify-between">
-              {(dateRange.from || dateRange.to) && (
-                <button
-                  type="button"
-                  onClick={() => setDateRange({ from: undefined, to: undefined })}
-                  className="text-xs font-normal text-red-600 hover:underline"
-                >
-                  Clear dates X
-                </button>
-              )}
-            </Label>
+          <div className="space-y-1">
+            <Label className="text-xs text-slate-500">Status</Label>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="h-9 w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                {STATUSES.map((s) => (
+                  <SelectItem key={s.value} value={s.value}>
+                    {s.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-          <div className="space-y-2">
-            <Label>Payment Mode</Label>
+          <div className="space-y-1">
+            <Label className="text-xs text-slate-500">Payment mode</Label>
             <Select
               value={paymentModeFilter}
               onValueChange={(v) => {
@@ -679,7 +429,7 @@ export default function ExpensePage() {
                 if (v !== "BANK_TRANSFER") setBankFilter("all");
               }}
             >
-              <SelectTrigger className="w-full">
+              <SelectTrigger className="h-9 w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -690,10 +440,10 @@ export default function ExpensePage() {
             </Select>
           </div>
           {paymentModeFilter === "BANK_TRANSFER" && (
-            <div className="space-y-2">
-              <Label>Bank</Label>
+            <div className="space-y-1">
+              <Label className="text-xs text-slate-500">Bank</Label>
               <Select value={bankFilter} onValueChange={setBankFilter}>
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="h-9 w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -707,10 +457,23 @@ export default function ExpensePage() {
               </Select>
             </div>
           )}
-          <div className="space-y-2">
-            <Label>Created By</Label>
+          <div className="space-y-1">
+            <Label className="text-xs text-slate-500">VAT</Label>
+            <Select value={vatFilter} onValueChange={setVatFilter}>
+              <SelectTrigger className="h-9 w-full" aria-label="VAT filter">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Any</SelectItem>
+                <SelectItem value="yes">With VAT (returnable)</SelectItem>
+                <SelectItem value="no">Without VAT</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs text-slate-500">Created by</Label>
             <Select value={createdByFilter} onValueChange={setCreatedByFilter}>
-              <SelectTrigger className="w-full">
+              <SelectTrigger className="h-9 w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -723,682 +486,228 @@ export default function ExpensePage() {
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2">
-            <Label>&nbsp;</Label>
-            <Button
-              variant="outline"
-              className="w-full"
-              disabled={!hasActiveFilters}
-              onClick={() => {
-                setSearch("");
-                setDebouncedSearch("");
-                setStatusFilter("all");
-                setCategoryFilter("all");
-                setBranchFilter("all");
-                setPaymentModeFilter("all");
-                setBankFilter("all");
-                setCreatedByFilter("all");
-                setDateRange({ from: undefined, to: undefined });
-              }}
-            >
-              Clear Filters
+          <div className="space-y-1 sm:col-span-2">
+            <DateRangeInputs from={dateRange.from} to={dateRange.to} onChange={setDateRange} />
+          </div>
+          <div className="flex items-end">
+            <Button variant="outline" className="h-9 w-full" disabled={!hasActiveFilters} onClick={clearFilters}>
+              Clear filters
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* Table */}
-      <Card className="border-slate-200">
-        <CardHeader>
-          <CardTitle>Expenses</CardTitle>
-        </CardHeader>
-        <CardContent className="overflow-x-auto">
+      <div className="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-slate-200/80">
+        <div className="overflow-x-auto">
           <Table>
             <TableHeader>
-              <TableRow>
+              <TableRow className="bg-slate-50/80">
                 <TableHead>Date</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
                 <TableHead>Branch</TableHead>
-                <TableHead>Created By</TableHead>
-                <TableHead>Remarks</TableHead>
                 <TableHead>Payment</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="w-16">Actions</TableHead>
+                <TableHead className="w-10" />
+                <TableHead className="w-12">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell
-                    colSpan={9}
-                    className="text-center py-8 text-slate-400"
-                  >
+                  <TableCell colSpan={8} className="py-8 text-center text-slate-400">
                     Loading...
                   </TableCell>
                 </TableRow>
-              ) : filtered.length === 0 ? (
+              ) : expenses.length === 0 ? (
                 <TableRow>
-                  <TableCell
-                    colSpan={9}
-                    className="text-center py-8 text-slate-400"
-                  >
+                  <TableCell colSpan={8} className="py-10 text-center text-slate-400">
+                    <Receipt className="mx-auto mb-2 h-7 w-7 text-slate-200" />
                     No expenses found
                   </TableCell>
                 </TableRow>
               ) : (
-                filtered.map((e) => (
-                  <TableRow key={e.id} className="hover:bg-slate-50">
-                    <TableCell>
-                      {format(new Date(e.expenseDate), "MMM dd, yyyy")}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col">
-                        {e.category === RETURNABLE_VAT ? (
-                          <span className="inline-flex w-fit items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                expenses.map((e) => {
+                  const mode = savedVatMode(e);
+                  const firstDetail = (e.details || [])[0];
+                  return (
+                    <TableRow key={e.id} className="hover:bg-slate-50/70" data-testid="expense-row">
+                      <TableCell className="whitespace-nowrap align-top">
+                        <p className="text-sm">{format(new Date(e.expenseDate), "dd MMM yyyy")}</p>
+                        {e.createdBy?.fullName && (
+                          <p className="inline-flex items-center gap-1 text-[11px] text-slate-400">
+                            <UserCog className="h-3 w-3" />
+                            {e.createdBy.fullName}
+                          </p>
+                        )}
+                      </TableCell>
+                      <TableCell className="max-w-[260px] align-top">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span
+                            className={`inline-flex w-fit items-center rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ${
+                              e.category === RETURNABLE_VAT
+                                ? "bg-amber-50 text-amber-700 ring-amber-200"
+                                : e.category === "COMPANY_EXPENSE"
+                                  ? "bg-indigo-50 text-indigo-700 ring-indigo-200"
+                                  : "bg-slate-100 text-slate-700 ring-slate-200"
+                            }`}
+                          >
                             {catLabel(e.category)}
                           </span>
-                        ) : (
-                          <span>{catLabel(e.category)}</span>
+                          {e.category === "SALARY" && e.user?.fullName && <span className="text-xs text-slate-400">{e.user.fullName}</span>}
+                        </div>
+                        {firstDetail && (
+                          <p className="mt-0.5 truncate text-xs text-slate-600" title={(e.details || []).map((d) => `${d.label}: ${d.value}`).join("\n")}>
+                            <span className="font-medium">{firstDetail.label}:</span> {firstDetail.value}
+                            {e.details.length > 1 && <span className="text-slate-400"> +{e.details.length - 1}</span>}
+                          </p>
                         )}
-                        {e.category === "SALARY" && e.user?.fullName && (
-                          <span className="text-xs text-slate-400">
-                            {e.user.fullName}
+                        {e.description && <p className="mt-0.5 truncate text-[11px] italic text-slate-400" title={e.description}>{e.description}</p>}
+                      </TableCell>
+                      <TableCell className="text-right align-top font-medium">
+                        <div className="flex flex-col items-end leading-tight">
+                          <span className="inline-flex items-center gap-1 tabular-nums">
+                            <SaudiRiyal className="h-3.5 w-3.5 opacity-50" />
+                            {money2(e.amount)}
                           </span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right font-medium">
-                      <div className="flex flex-col items-end leading-tight">
-                        <span>${money2(e.amount)}</span>
-                        {e.category === RETURNABLE_VAT && e.vatAmount != null && (
-                          <>
-                            <span className="mt-0.5 text-[11px] font-semibold text-amber-600">
-                              incl. VAT 15% · {money2(e.vatAmount)}
-                            </span>
-                            <span className="text-[10px] font-normal text-slate-400">
-                              Net {money2(Number(e.amount) - Number(e.vatAmount))}
-                            </span>
-                          </>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className="inline-flex items-center gap-1.5 text-sm">
-                        <Building2 className="h-3.5 w-3.5 text-slate-400" />
-                        {e.branch?.name ?? "-"}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      {e.createdBy?.fullName ? (
-                        <span className="inline-flex items-center gap-1.5 text-sm text-slate-600">
-                          <UserCog className="h-3.5 w-3.5 text-slate-400" />
-                          {e.createdBy.fullName}
+                          {mode && e.vatAmount != null && (
+                            <>
+                              <span className="mt-0.5 text-[11px] font-semibold text-amber-600">
+                                {mode === "INCLUSIVE" ? "incl." : "+"} VAT 15% · {money2(e.vatAmount)}
+                              </span>
+                              <span className="text-[10px] font-normal text-slate-400">Net {money2(Number(e.amount) - Number(e.vatAmount))}</span>
+                            </>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="align-top">
+                        <span className="inline-flex items-center gap-1.5 text-sm">
+                          <Building2 className="h-3.5 w-3.5 text-slate-400" />
+                          {e.branch?.name ?? "-"}
                         </span>
-                      ) : (
-                        <span className="text-slate-300">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="italic text-slate-600 text-sm">
-                      {e.description}
-                    </TableCell>
-                    <TableCell>
-                      <span className="flex items-center gap-1.5 text-sm text-slate-600">
-                        {e.paymentMode === "BANK_TRANSFER" ? (
-                          <Landmark className="h-3.5 w-3.5" />
-                        ) : (
-                          <Banknote className="h-3.5 w-3.5" />
+                      </TableCell>
+                      <TableCell className="align-top">
+                        <span className="flex items-center gap-1.5 text-sm text-slate-600">
+                          {e.paymentMode === "BANK_TRANSFER" ? <Landmark className="h-3.5 w-3.5" /> : <Banknote className="h-3.5 w-3.5" />}
+                          {e.paymentMode === "BANK_TRANSFER" ? (e.bank?.bankName ?? "Bank") : "Cash"}
+                        </span>
+                      </TableCell>
+                      <TableCell className="align-top">
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${e.status === "APPROVED" ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-rose-50 text-rose-700 ring-rose-200"}`}>
+                          {e.status === "APPROVED" ? "Approved" : "Rejected"}
+                        </span>
+                      </TableCell>
+                      <TableCell className="align-top">
+                        {e.attachmentUrl && (
+                          <a href={e.attachmentUrl} target="_blank" rel="noreferrer" title="Open the attachment" aria-label="Open the attachment" className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-indigo-600">
+                            <Paperclip className="h-4 w-4" />
+                          </a>
                         )}
-                        {e.paymentMode === "BANK_TRANSFER"
-                          ? (e.bank?.bankName ?? "Bank")
-                          : "Cash"}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={statusColor(e.status)}>
-                        {e.status === "APPROVED" ? "Approved" : "Rejected"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          {/* ✅ View is always visible — page access already implies EXPENSE_READ */}
-                          <DropdownMenuItem onClick={() => setViewing(e)}>
-                            <Eye className="h-4 w-4 mr-2" />
-                            View
-                          </DropdownMenuItem>
-                          {/* ✅ RBAC — Edit only if canEdit */}
-                          {canEdit && (
-                            <DropdownMenuItem onClick={() => openEdit(e)}>
-                              <Edit className="h-4 w-4 mr-2" />
-                              Edit
+                      </TableCell>
+                      <TableCell className="align-top">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" aria-label="Actions">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {/* ✅ View is always visible — page access already implies EXPENSE_READ */}
+                            <DropdownMenuItem onClick={() => setViewing(e)}>
+                              <Eye className="mr-2 h-4 w-4" />
+                              View
                             </DropdownMenuItem>
-                          )}
-                          {/* ✅ RBAC — Delete only if canDelete */}
-                          {canDelete && (
-                            <DropdownMenuItem
-                              onClick={() => setDeleteId(e.id)}
-                              className="text-red-600"
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Delete
-                            </DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))
+                            {/* ✅ RBAC — Edit only if canEdit */}
+                            {canEdit && (
+                              <DropdownMenuItem onClick={() => openEdit(e)}>
+                                <Edit className="mr-2 h-4 w-4" />
+                                Edit
+                              </DropdownMenuItem>
+                            )}
+                            {/* ✅ RBAC — Delete only if canDelete */}
+                            {canDelete && (
+                              <DropdownMenuItem onClick={() => setDeleteId(e.id)} className="text-red-600">
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>
+        </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-100 mt-2">
-            <div className="flex items-center gap-2 text-sm text-slate-500">
-              <span>Rows per page</span>
-              <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
-                <SelectTrigger className="w-[80px] h-8">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PAGE_SIZE_OPTIONS.map((n) => (
-                    <SelectItem key={n} value={String(n)}>
-                      {n}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="text-sm text-slate-500">
-              {pagination.total === 0
-                ? "No results"
-                : `Showing ${(pagination.page - 1) * pagination.limit + 1}-${Math.min(
-                    pagination.page * pagination.limit,
-                    pagination.total
-                  )} of ${pagination.total}`}
-            </div>
-
-            <div className="flex items-center gap-1">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((p) => Math.max(p - 1, 1))}
-                disabled={page <= 1}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <span className="text-sm px-2 whitespace-nowrap text-slate-600">
-                Page {pagination.page} of {pagination.pages || 1}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((p) => Math.min(p + 1, pagination.pages || 1))}
-                disabled={page >= (pagination.pages || 1)}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Add/Edit dialog */}
-      <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="max-w-4xl! max-h-[90vh] overflow-y-auto p-0 gap-0">
-          <DialogHeader className="px-6 pt-6 pb-4 border-b border-slate-100">
-            <DialogTitle className="text-xl">
-              {editingId ? "Edit Expense" : "Add New Expense"}
-            </DialogTitle>
-            <p className="text-sm text-slate-500 mt-1">
-              {editingId
-                ? "Update the details for this expense record."
-                : "Log a new expense against a branch and payment source."}
-            </p>
-          </DialogHeader>
-
-          <div className="px-6 py-5 space-y-6">
-            {/* ── Section: What & When ── */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                <FileText className="h-3.5 w-3.5" />
-                Details
-              </div>
-
-              {/* Branch — selected first, drives which employees are available */}
-              <div className="space-y-1.5">
-                <Label className="flex items-center gap-1.5">
-                  <Building2 className="h-3.5 w-3.5 text-slate-400" />
-                  Branch
-                </Label>
-                <Select value={form.branchId} onValueChange={handleBranchChange}>
-                  <SelectTrigger  className="w-full">
-                    <SelectValue placeholder="Select branch" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {branches.map((b) => (
-                      <SelectItem key={b.id} value={b.id}>
-                        {b.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                {/* Category */}
-                <div className="space-y-1.5">
-                  <Label>Category</Label>
-                  <Select
-                    value={form.category}
-                    onValueChange={handleCategoryChange}
-                  >
-                    <SelectTrigger  className="w-full">
-                      <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CATEGORIES.map((c) => (
-                        <SelectItem key={c.value} value={c.value}>
-                          {c.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Expense date */}
-                <div className="space-y-1.5">
-                  <Label>Expense Date</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="w-full justify-start font-normal"
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4 text-slate-400" />
-                        {form.expenseDate
-                          ? format(form.expenseDate, "MMM dd, yyyy")
-                          : "Pick a date"}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
-                      <CalendarComponent
-                        mode="single"
-                        selected={form.expenseDate}
-                        onSelect={(d) => setForm({ ...form, expenseDate: d })}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-              </div>
-
-              {/* Employee — only for SALARY, filtered to the selected branch */}
-              {form.category === "SALARY" && (
-                <div className="space-y-1.5 rounded-lg border border-indigo-100 bg-indigo-50/50 p-3">
-                  <Label className="flex items-center gap-1.5 text-indigo-900">
-                    <UserIcon className="h-3.5 w-3.5" />
-                    Employee
-                  </Label>
-                  {!form.branchId ? (
-                    <p className="text-xs text-indigo-700/70">
-                      Select a branch first to see its employees.
-                    </p>
-                  ) : (
-                    <>
-                      <Select
-                        value={form.userId}
-                        onValueChange={(v) => setForm({ ...form, userId: v })}
-                      >
-                        <SelectTrigger className="bg-white w-full">
-                          <SelectValue
-                            placeholder={
-                              usersLoading
-                                ? "Loading employees..."
-                                : branchUsers.length === 0
-                                  ? "No employees in this branch"
-                                  : "Select employee"
-                            }
-                          />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {branchUsers.map((u) => (
-                            <SelectItem key={u.id} value={u.id}>
-                              {u.fullName}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-indigo-700/70">
-                        Required for salary expenses.
-                      </p>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* ── Section: Payment ── */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                <Wallet className="h-3.5 w-3.5" />
-                Payment
-              </div>
-
-              {/* Amount */}
-              <div className="space-y-1.5">
-                <Label>Amount</Label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">
-                    $
-                  </span>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="0.00"
-                    value={form.amount}
-                    onChange={(e) => setForm({ ...form, amount: e.target.value })}
-                    className="pl-6 text-base font-medium"
-                  />
-                </div>
-              </div>
-
-              {/* Returnable VAT — 15% exclusive, calculated live (read-only; the server saves it) */}
-              {form.category === RETURNABLE_VAT && (
-                <div className="space-y-1.5 rounded-lg border border-amber-200 bg-amber-50/60 p-3">
-                  <Label className="flex items-center gap-1.5 text-amber-900">
-                    <Percent className="h-3.5 w-3.5" />
-                    Returnable VAT (15% included in the amount)
-                  </Label>
-                  <Input
-                    readOnly
-                    tabIndex={-1}
-                    value={form.amount ? money2(calcVat(form.amount)) : ""}
-                    placeholder="0.00"
-                    className="bg-white font-semibold text-amber-800 cursor-not-allowed"
-                  />
-                  {form.amount && Number(form.amount) > 0 ? (
-                    <div className="space-y-1 rounded-md bg-white/70 px-3 py-2 text-xs text-amber-900">
-                      <div className="flex justify-between">
-                        <span>Net Amount (excluding tax)</span>
-                        <span className="font-semibold tabular-nums">${money2(splitVat(form.amount).net)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Tax (15.0%)</span>
-                        <span className="font-semibold tabular-nums">${money2(splitVat(form.amount).vat)}</span>
-                      </div>
-                      <div className="flex justify-between border-t border-amber-200 pt-1 text-sm font-bold">
-                        <span>Gross Amount (including tax)</span>
-                        <span className="tabular-nums">${money2(splitVat(form.amount).gross)}</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-amber-700/80">
-                      The amount you enter includes 15% VAT. The VAT is calculated here and saved with this expense.
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {/* Payment mode */}
-              <div className="space-y-1.5">
-                <Label>Payment Mode</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    type="button"
-                    variant={form.paymentMode === "CASH" ? "default" : "outline"}
-                    className={
-                      form.paymentMode === "CASH"
-                        ? "bg-indigo-600 hover:bg-indigo-700"
-                        : ""
-                    }
-                    onClick={() =>
-                      setForm({ ...form, paymentMode: "CASH", bankId: "" })
-                    }
-                  >
-                    <Banknote className="h-4 w-4 mr-2" />
-                    Cash
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={
-                      form.paymentMode === "BANK_TRANSFER" ? "default" : "outline"
-                    }
-                    className={
-                      form.paymentMode === "BANK_TRANSFER"
-                        ? "bg-indigo-600 hover:bg-indigo-700"
-                        : ""
-                    }
-                    onClick={() =>
-                      setForm({ ...form, paymentMode: "BANK_TRANSFER" })
-                    }
-                  >
-                    <Landmark className="h-4 w-4 mr-2" />
-                    Bank Transfer
-                  </Button>
-                </div>
-              </div>
-
-              {/* Bank selector */}
-              {form.paymentMode === "BANK_TRANSFER" && (
-                <div className="space-y-1.5">
-                  <Label>Bank</Label>
-                  <Select
-                    value={form.bankId}
-                    onValueChange={(v) => setForm({ ...form, bankId: v })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select bank" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {banks.map((b) => (
-                        <SelectItem key={b.id} value={b.id}>
-                          {b.bankName} — {b.accountNumber}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              {/* Status */}
-              <div className="space-y-1.5">
-                <Label>Status</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    type="button"
-                    variant={form.status === "APPROVED" ? "default" : "outline"}
-                    className={
-                      form.status === "APPROVED"
-                        ? "bg-emerald-600 hover:bg-emerald-700"
-                        : ""
-                    }
-                    onClick={() => setForm({ ...form, status: "APPROVED" })}
-                  >
-                    <CheckCircle2 className="h-4 w-4 mr-2" />
-                    Approved
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={form.status === "REJECTED" ? "default" : "outline"}
-                    className={
-                      form.status === "REJECTED"
-                        ? "bg-red-600 hover:bg-red-700"
-                        : ""
-                    }
-                    onClick={() => setForm({ ...form, status: "REJECTED" })}
-                  >
-                    <XCircle className="h-4 w-4 mr-2" />
-                    Rejected
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            {/* ── Section: Notes ── */}
-            <div className="space-y-1.5">
-              <Label>Description</Label>
-              <Textarea
-                placeholder="Optional notes..."
-                value={form.description}
-                onChange={(e) =>
-                  setForm({ ...form, description: e.target.value })
-                }
-                rows={2}
-              />
-            </div>
-
-            {formError && (
-              <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-3.5 py-2.5">
-                {formError}
-              </p>
-            )}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-4 py-3">
+          <div className="flex items-center gap-2 text-sm text-slate-500">
+            <span>Rows per page</span>
+            <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
+              <SelectTrigger className="h-8 w-[80px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PAGE_SIZE_OPTIONS.map((n) => (
+                  <SelectItem key={n} value={String(n)}>
+                    {n}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          <DialogFooter className="px-6 py-4 border-t border-slate-100">
-            <Button variant="outline" onClick={() => setFormOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={save}
-              disabled={!canSave || saving}
-              className="bg-indigo-600 hover:bg-indigo-700"
-            >
-              {saving
-                ? "Saving..."
-                : editingId
-                  ? "Update Expense"
-                  : "Add Expense"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          <div className="text-sm text-slate-500">
+            {pagination.total === 0
+              ? "No results"
+              : `Showing ${(pagination.page - 1) * pagination.limit + 1}-${Math.min(pagination.page * pagination.limit, pagination.total)} of ${pagination.total}`}
+          </div>
 
-      {/* View dialog */}
-      <Dialog open={!!viewing} onOpenChange={(o) => !o && setViewing(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Expense Details</DialogTitle>
-          </DialogHeader>
-          {viewing && (
-            <div className="space-y-4 py-2">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-xs text-slate-400">Date</Label>
-                  <p>
-                    {format(new Date(viewing.expenseDate), "MMMM dd, yyyy")}
-                  </p>
-                </div>
-                <div>
-                  <Label className="text-xs text-slate-400">Category</Label>
-                  <p>{catLabel(viewing.category)}</p>
-                </div>
-              </div>
-              {viewing.category === "SALARY" && viewing.user?.fullName && (
-                <div>
-                  <Label className="text-xs text-slate-400">Employee</Label>
-                  <p>{viewing.user.fullName}</p>
-                </div>
-              )}
-              <div>
-                <Label className="text-xs text-slate-400">Amount</Label>
-                <p className="text-2xl font-bold">
-                  ${money2(viewing.amount)}
-                </p>
-                {viewing.category === RETURNABLE_VAT && viewing.vatAmount != null && (
-                  <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-sm">
-                    <div className="flex justify-between text-xs text-slate-600">
-                      <span>Net Amount (excluding tax)</span>
-                      <span className="tabular-nums">${money2(Number(viewing.amount) - Number(viewing.vatAmount))}</span>
-                    </div>
-                    <div className="flex justify-between text-amber-800">
-                      <span>Tax (15.0%) · returnable</span>
-                      <span className="font-semibold tabular-nums">${money2(viewing.vatAmount)}</span>
-                    </div>
-                    <div className="mt-0.5 flex justify-between border-t border-amber-200 pt-1 text-xs font-semibold text-slate-700">
-                      <span>Gross Amount (including tax)</span>
-                      <span className="tabular-nums">${money2(viewing.amount)}</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div>
-                <Label className="text-xs text-slate-400">Description</Label>
-                <p>{viewing.description || "-"}</p>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-xs text-slate-400">Branch</Label>
-                  <p>{viewing.branch?.name ?? "-"}</p>
-                </div>
-                <div>
-                  <Label className="text-xs text-slate-400">Status</Label>
-                  <Badge variant={statusColor(viewing.status)}>
-                    {viewing.status}
-                  </Badge>
-                </div>
-              </div>
-              <div>
-                <Label className="text-xs text-slate-400">Created By</Label>
-                <p>{viewing.createdBy?.fullName ?? "-"}</p>
-              </div>
-              <div>
-                <Label className="text-xs text-slate-400">Payment</Label>
-                <p>
-                  {viewing.paymentMode === "BANK_TRANSFER"
-                    ? `Bank Transfer — ${viewing.bank?.bankName ?? ""}`
-                    : "Cash"}
-                </p>
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setViewing(null)}>
-              Close
+          <div className="flex items-center gap-1">
+            <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(p - 1, 1))} disabled={page <= 1} aria-label="Previous page">
+              <ChevronLeft className="h-4 w-4" />
             </Button>
-            {/* ✅ RBAC — Edit from view dialog only if canEdit */}
-            {viewing && canEdit && (
-              <Button
-                onClick={() => {
-                  setViewing(null);
-                  openEdit(viewing);
-                }}
-              >
-                Edit
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <span className="whitespace-nowrap px-2 text-sm text-slate-600">
+              Page {pagination.page} of {pagination.pages || 1}
+            </span>
+            <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(p + 1, pagination.pages || 1))} disabled={page >= (pagination.pages || 1)} aria-label="Next page">
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Add / edit */}
+      <ExpenseFormDialog
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        expense={editing}
+        branches={branches}
+        banks={banks}
+        users={users}
+        usersLoading={usersLoading}
+        ensureUsers={ensureUsersLoaded}
+        onSaved={loadExpenses}
+      />
+
+      {/* View */}
+      <ExpenseViewDialog expense={viewing} onOpenChange={(o) => !o && setViewing(null)} canEdit={canEdit} onEdit={openEdit} />
 
       {/* Delete confirm */}
       {/* ✅ RBAC — only mount delete dialog if user can delete */}
       {canDelete && (
-        <AlertDialog
-          open={!!deleteId}
-          onOpenChange={(o) => !o && setDeleteId(null)}
-        >
+        <AlertDialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This permanently deletes the expense and reverses its ledger
-                entries and account balances.
-              </AlertDialogDescription>
+              <AlertDialogDescription>This permanently deletes the expense and reverses its ledger entries and account balances.</AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={confirmDelete}
-                className="bg-red-600 hover:bg-red-700"
-              >
+              <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">
                 Delete
               </AlertDialogAction>
             </AlertDialogFooter>

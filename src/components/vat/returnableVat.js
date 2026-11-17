@@ -8,8 +8,9 @@ const authHeaders = () => ({
 const MAX_PAGES = 25; // 200 / page — a safety cap, far above any realistic period
 
 /**
- * Every APPROVED "Returnable VAT" expense in the period (a rejected expense is
- * never claimable). The expenses API pages at 200, so keep going until done.
+ * Every APPROVED expense that carries VAT in the period — the "Returnable VAT" category plus any
+ * expense marked "VAT included" (a rejected expense is never claimable). The expenses API pages at
+ * 200, so keep going until done.
  */
 export async function fetchReturnableExpenses(range, signal) {
   const rows = [];
@@ -17,7 +18,7 @@ export async function fetchReturnableExpenses(range, signal) {
   let pages = 1;
   do {
     const params = new URLSearchParams({
-      category: "RETURNABLE_VAT",
+      hasVat: "true",
       status: "APPROVED",
       limit: "200",
       page: String(page),
