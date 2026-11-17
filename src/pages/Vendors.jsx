@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useUrlSearch } from "../utils/useUrlSearch";
 import {
   Table,
   Modal,
@@ -95,7 +96,11 @@ const VendorsPage = () => {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const [saving, setSaving] = useState(false);
-  const [searchText, setSearchText] = useState("");
+  const urlSearch = useUrlSearch(); // arrives from the header search
+  const [searchText, setSearchText] = useState(urlSearch);
+  useEffect(() => {
+    if (urlSearch) setSearchText(urlSearch);
+  }, [urlSearch]);
   const [selectedRowKeys, setSelectedRowKeys] = useState([]);
   const [form] = Form.useForm();
 

@@ -1,6 +1,5 @@
-import React, { useState } from "react";
+import React from "react";
 import {
-  Search,
   Settings,
   LogOut,
   User,
@@ -11,7 +10,6 @@ import {
 import { Link, useNavigate } from "react-router-dom";
 
 import { Button } from "../../shadcn/components/ui/button";
-import { Input } from "../../shadcn/components/ui/input";
 import {
   Avatar,
   AvatarFallback,
@@ -33,11 +31,11 @@ import {
 } from "../../shadcn/components/ui/tooltip";
 
 import NotificationBell from "./NotificationBell";
+import GlobalSearch from "./search/GlobalSearch";
 import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
 
 const Header = () => {
-  const [searchQuery, setSearchQuery] = useState("");
 
   const { user, logout } = useAuth();
   const { language, toggleLanguage, t } = useLanguage();
@@ -61,16 +59,7 @@ const Header = () => {
         <div className="flex h-20 items-center justify-between px-4 lg:px-6">
           {/* Left - Search */}
           <div className="flex items-center gap-4 flex-1">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder={t("searchPlaceholder")}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 border pr-4 w-full bg-muted/50"
-              />
-            </div>
+            <GlobalSearch />
           </div>
 
           {/* Right - Actions */}

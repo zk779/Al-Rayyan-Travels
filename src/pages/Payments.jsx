@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useUrlSearch } from "../utils/useUrlSearch";
 import { Button } from "../../shadcn/components/ui/button";
 import { Card, CardContent } from "../../shadcn/components/ui/card";
 import { Input } from "../../shadcn/components/ui/input";
@@ -746,8 +747,17 @@ export default function PaymentPage() {
   const [customerLoading, setCustomerLoading] = useState(true);
 
   const [error, setError] = useState(null);
-  const [searchVendor, setSearchVendor] = useState("");
-  const [searchCustomer, setSearchCustomer] = useState("");
+  // arrives from the header search: ?search=PV-…&party=VENDOR|CUSTOMER
+  const urlSearch = useUrlSearch();
+  const urlParty = new URLSearchParams(window.location.search).get("party") === "CUSTOMER" ? "CUSTOMER" : "VENDOR";
+  const [searchVendor, setSearchVendor] = useState(urlParty === "VENDOR" ? urlSearch : "");
+  const [searchCustomer, setSearchCustomer] = useState(urlParty === "CUSTOMER" ? urlSearch : "");
+  useEffect(() => {
+    if (!urlSearch) return;
+    if (urlParty === "CUSTOMER") setSearchCustomer(urlSearch);
+    else setSearchVendor(urlSearch);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlSearch]);
   const debouncedSearchVendor = useDebouncedValue(searchVendor);
   const debouncedSearchCustomer = useDebouncedValue(searchCustomer);
   const [editTarget, setEditTarget] = useState(null); // full payment object | null
@@ -985,7 +995,7 @@ export default function PaymentPage() {
         </div>
 
         {/* Tabs */}
-        <Tabs defaultValue="vendor" className="space-y-4">
+        <Tabs defaultValue={urlParty === "CUSTOMER" ? "customer" : "vendor"} className="space-y-4">
           <TabsList className="bg-white border border-slate-200 p-1 h-auto rounded-xl">
             <TabsTrigger
               value="vendor"

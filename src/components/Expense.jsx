@@ -22,6 +22,8 @@ import {
   X,
 } from "lucide-react";
 import { format } from "date-fns";
+import { useSearchParams } from "react-router-dom";
+import { useUrlSearch } from "../utils/useUrlSearch";
 
 import { Button } from "../../shadcn/components/ui/button";
 import { Input } from "../../shadcn/components/ui/input";
@@ -109,7 +111,12 @@ export default function ExpensePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const [search, setSearch] = useState("");
+  const urlSearch = useUrlSearch(); // arrives from the header search
+  const [urlParams, setUrlParams] = useSearchParams();
+  const [search, setSearch] = useState(urlSearch);
+  useEffect(() => {
+    if (urlSearch) setSearch(urlSearch);
+  }, [urlSearch]);
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [branchFilter, setBranchFilter] = useState("all");
@@ -119,7 +126,7 @@ export default function ExpensePage() {
   const [vatFilter, setVatFilter] = useState("all"); // all | yes (carries VAT = returnable) | no
   // Date range is opt-in: empty by default, so no date filter is sent at all.
   const [dateRange, setDateRange] = useState({ from: undefined, to: undefined });
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState(urlSearch);
 
   const [pagination, setPagination] = useState(DEFAULT_PAGINATION);
   const [summary, setSummary] = useState(DEFAULT_SUMMARY);
@@ -256,6 +263,17 @@ export default function ExpensePage() {
     setEditing(null);
     setFormOpen(true);
   };
+
+  useEffect(() => {
+    if (urlParams.get("new") === "1" && canCreate) {
+      setEditing(null);
+      setFormOpen(true);
+      const next = new URLSearchParams(urlParams);
+      next.delete("new");
+      setUrlParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlParams]);
 
   const openEdit = (expense) => {
     if (!canEdit) return; // ✅ RBAC guard

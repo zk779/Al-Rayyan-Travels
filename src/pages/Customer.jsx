@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useUrlSearch } from "../utils/useUrlSearch";
 import {
   Table,
   Modal,
@@ -91,7 +92,11 @@ const CustomersPage = () => {
   const [isEditModal, setIsEditModal] = useState(false);
   const [currentCustomer, setCurrentCustomer] = useState(null);
 
-  const [searchText, setSearchText] = useState("");
+  const urlSearch = useUrlSearch(); // arrives from the header search
+  const [searchText, setSearchText] = useState(urlSearch);
+  useEffect(() => {
+    if (urlSearch) setSearchText(urlSearch);
+  }, [urlSearch]);
   const [filterType, setFilterType] = useState(null);
   const [filterStatus, setFilterStatus] = useState(null);
 

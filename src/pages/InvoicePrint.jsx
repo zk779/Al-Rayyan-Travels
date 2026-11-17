@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import ZATCAQRCode from "../components/ZATCAQRGenerator";
+import InvoiceActionBar from "../components/InvoiceActionBar";
 import { hotelStayText, hotelDescription } from "../utils/hotelText";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
@@ -307,6 +308,9 @@ const InvoicePrint = () => {
         `}
       </style>
       <div className="invoice-container min-h-screen bg-linear-to-b from-slate-100 to-slate-200 py-8">
+        {/* Back + Print — screen only, never printed */}
+        <InvoiceActionBar />
+
         <div
           className="max-w-[210mm] mx-auto bg-white shadow-xl rounded-2xl overflow-hidden print:shadow-none print:rounded-none"
           style={{ fontFamily: "Arial, sans-serif" }}
