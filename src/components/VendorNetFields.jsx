@@ -45,9 +45,9 @@ export default function VendorNetFields({ item, onChange, size = "sm", netInvali
           placeholder="0.00"
           className={inputCls}
         />
-        {charges > 0 && (
+        {(charges > 0 || num(item.discount) > 0) && (
           <p className="text-[10px] leading-tight text-slate-500" data-testid="vendor-net-total">
-            + VAT {vendorVatOf(charges).toFixed(2)} · Net total {num(item.netPrice).toFixed(2)}
+            {charges > 0 ? `+ VAT ${vendorVatOf(charges).toFixed(2)} · ` : ""}Net total {num(item.netPrice).toFixed(2)}
           </p>
         )}
       </div>

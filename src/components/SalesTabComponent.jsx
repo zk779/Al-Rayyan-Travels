@@ -47,7 +47,6 @@ import TotalVatField from "./TotalVatField";
 import {
   applyVendorParts,
   isVendorPart,
-  fareNet,
   vendorChargesPayload,
 } from "./vendorCharges";
 import { HOTEL_ICAO } from "../utils/hotelText";
@@ -79,6 +78,7 @@ const emptyRow = () => ({
   returnDate: null,
   paxVat: "",
   miscCharges: "",
+  discount: "",
   vatAmount: "",
 });
 
@@ -99,32 +99,17 @@ const calcVAT = (profit) => {
   return p > 0 ? (p * 0.15).toFixed(2) : "0.00";
 };
 
-// PAX VAT is inclusive — netPrice already has the 15% baked in, so this
-// extracts it out of netPrice rather than adding 15% on top of it.
-const calcPaxVAT = (netPrice) => {
-  const n = Number(netPrice) || 0;
-  return n > 0 ? (n - n / 1.15).toFixed(2) : "0.00";
-};
 
 const isOriginKSA = (destinations = []) =>
   destinations[0]?.airport?.country === "SA";
 
+// PAX VAT (domestic) is 15% ON TOP of the basic fare, so a route change also changes the net price.
 const applyRouteEffects = (item, routeType) => {
   const updated = { ...item, routeType };
-  if (routeType === "DOMESTIC") {
-    updated.paxVat = calcPaxVAT(fareNet(item));
-    updated.miscCharges = "";
-  } else if (routeType === "ZERO_VAT") {
-    updated.paxVat = "";
-  } else {
-    // MIXED
-    updated.paxVat = "";
-    updated.miscCharges = "";
-  }
+  if (routeType !== "ZERO_VAT") updated.miscCharges = ""; // (legacy MISC, no longer typed)
+  Object.assign(updated, applyVendorParts(updated, null, null));
   // VAT 15% always applies, regardless of route type.
-  updated.vatAmount = calcVAT(
-    Number(item.sellPrice || 0) - Number(item.netPrice || 0),
-  );
+  updated.vatAmount = calcVAT(Number(updated.sellPrice || 0) - Number(updated.netPrice || 0));
   return updated;
 };
 
@@ -454,9 +439,6 @@ export default function SalesTabComponent() {
 
         if (field === "netPrice" || field === "sellPrice") {
           const updated = { ...item, [field]: value };
-          if (updated.routeType === "DOMESTIC") {
-            updated.paxVat = calcPaxVAT(fareNet(updated));
-          }
           // VAT 15% always applies, regardless of route type.
           updated.vatAmount = calcVAT(
             Number(updated.sellPrice || 0) - Number(updated.netPrice || 0),
@@ -517,11 +499,11 @@ export default function SalesTabComponent() {
       sell: acc.sell + (Number(s.sellPrice) || 0),
       vat: acc.vat + (Number(s.vatAmount) || 0),
       paxVat: acc.paxVat + (Number(s.paxVat) || 0),
-      misc: acc.misc + (Number(s.miscCharges) || 0),
+      discount: acc.discount + (Number(s.discount) || 0),
       profit:
         acc.profit + ((Number(s.sellPrice) || 0) - (Number(s.netPrice) || 0)),
     }),
-    { net: 0, sell: 0, vat: 0, paxVat: 0, misc: 0, profit: 0 },
+    { net: 0, sell: 0, vat: 0, paxVat: 0, discount: 0, profit: 0 },
   );
 
   /* ── Payment method breakdown (Cash / Bank Transfer / Credit) ── */
@@ -993,7 +975,7 @@ export default function SalesTabComponent() {
                         </Label>
                         <div className="flex items-center gap-1 px-2 h-8 bg-orange-50 border border-orange-200 rounded text-xs font-semibold text-orange-700">
                           <Calculator className="h-3 w-3" />
-                          {item.paxVat || "0.00"}
+                          {Number(item.paxVat || 0).toFixed(2)}
                         </div>
                       </div>
                     )}
@@ -1001,14 +983,15 @@ export default function SalesTabComponent() {
 
                   <div className="space-y-1">
                     <Label className="text-xs font-medium text-slate-600">
-                      MISC <SaudiRiyal size={15} />
+                      Discount <SaudiRiyal size={15} />
                     </Label>
                     <Input
                       type="tel"
-                      value={item.miscCharges}
+                      value={item.discount ?? ""}
                       onChange={(e) =>
-                        updateSale(item.id, "miscCharges", e.target.value)
+                        updateSale(item.id, "discount", e.target.value)
                       }
+                      aria-label="Discount"
                       placeholder="0.00"
                       className="h-8 text-sm"
                     />
@@ -1115,8 +1098,8 @@ export default function SalesTabComponent() {
                 color: "blue",
               },
               {
-                label: "Total MISC",
-                value: totals.misc.toFixed(2),
+                label: "Total Discount",
+                value: totals.discount.toFixed(2),
                 color: "slate",
               },
               {

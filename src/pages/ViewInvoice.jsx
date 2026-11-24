@@ -235,7 +235,8 @@ function SaleCard({ sale, index }) {
             tone={Number(sale.sellPrice || 0) - Number(sale.paidAmount || 0) > 0.01 ? "red" : "slate"}
           />
           <MoneyField label="VAT (15%)" value={sale.vatAmount} tone="indigo" />
-          <MoneyField label="Misc" value={sale.miscCharges} />
+          <MoneyField label="Discount" value={sale.discount} />
+          {Number(sale.miscCharges) > 0 && <MoneyField label="Misc" value={sale.miscCharges} />}
         </div>
 
         {/* Payment method detail + refund info */}
