@@ -55,13 +55,8 @@ const hideSidebarAndHeader =
           </div>
         </div>
 
-        {/* Floating calculator — available everywhere except the "/" landing
-            route and bare document-style pages (invoice print / customer
-            invoice / view invoice) */}
-        {location.pathname !== "/" &&
-          !location.pathname.startsWith("/invoice-print/") &&
-          !location.pathname.startsWith("/customer-invoice/") &&
-          !location.pathname.startsWith("/view-invoice/") && <FloatingCalculator />}
+        {/* Floating calculator — only on the app's own pages (not the "/" redirect, login, 403 or the printable invoices) */}
+        {!hideSidebarAndHeader && <FloatingCalculator />}
       </div>
   );
 };
