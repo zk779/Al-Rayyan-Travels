@@ -23,6 +23,8 @@ import Expense from "./pages/Expense";
 import BalanceAdjustment from "./pages/BalanceAdjustment";
 import NewHotelBooking from "./pages/NewHotelBooking";
 import EditHotelBooking from "./pages/EditHotelBooking";
+import NewInsurance from "./pages/NewInsurance";
+import EditInsurance from "./pages/EditInsurance";
 import ReportPage from "./pages/ReportPage";
 import VatHome from "./pages/VatHome";
 import VatReport from "./pages/VatReport";
@@ -153,6 +155,22 @@ function App() {
 										element={
 											<PermissionRoute permission="HOTEL_EDIT">
 												<EditHotelBooking />
+											</PermissionRoute>
+										}
+									/>
+									<Route
+										path="new-insurance"
+										element={
+											<PermissionRoute permission="INSURANCE_CREATE">
+												<NewInsurance />
+											</PermissionRoute>
+										}
+									/>
+									<Route
+										path="edit-insurance/:invoiceId"
+										element={
+											<PermissionRoute permission="INSURANCE_EDIT">
+												<EditInsurance />
 											</PermissionRoute>
 										}
 									/>

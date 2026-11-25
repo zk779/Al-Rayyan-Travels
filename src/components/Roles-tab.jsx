@@ -67,6 +67,7 @@ const MODULE_LABEL = {
   AIRLINE: "Airlines",
   SALE: "Sales",
   HOTEL: "Hotel Bookings",
+  INSURANCE: "Insurance Policies",
   VOID: "Void Sales",
   OTHER_SERVICE: "Other Services",
   PAYMENT: "Payments",

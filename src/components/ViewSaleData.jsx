@@ -24,6 +24,8 @@ import {
   Hotel,
   MapPin,
   Moon,
+  ShieldCheck,
+  Hourglass,
 } from "lucide-react";
 import { formatStay, storedNights } from "../utils/stayDates";
 import { Badge } from "../../shadcn/components/ui/badge";
@@ -233,6 +235,29 @@ function buildSections(invoice, sale) {
           <Field label="Check-out" value={formatStay(sale.checkOutDate)} icon={Calendar} />
           <Field label="Guest" value={sale.paxName || "N/A"} icon={User} />
           <Field label="Confirmation No." value={sale.pnr || "N/A"} icon={Hash} mono />
+        </div>
+      ),
+    });
+  }
+
+  if (String(sale.saleType).toUpperCase() === "INSURANCE") {
+    const days = storedNights(sale.checkInDate, sale.checkOutDate);
+    sections.push({
+      key: "insuranceCoverage",
+      label: "Insurance Coverage",
+      icon: ShieldCheck,
+      tint: "sky",
+      full: true,
+      content: (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+          <Field label="Insurer / Plan" value={sale.hotelName || "Not specified"} icon={ShieldCheck} />
+          <Field label="Type" value={sale.airlineName} />
+          <Field label="Coverage Days" value={days ? String(days) : "N/A"} icon={Hourglass} />
+          <Field label="Insured" value={sale.paxName || "N/A"} icon={User} />
+          <Field label="Policy Start" value={formatStay(sale.checkInDate)} icon={Calendar} />
+          <Field label="Policy End" value={formatStay(sale.checkOutDate)} icon={Calendar} />
+          <Field label="Policy No." value={sale.documentNo || "N/A"} icon={Hash} mono />
+          <Field label="Certificate / Ref No." value={sale.pnr || "N/A"} icon={Hash} mono />
         </div>
       ),
     });

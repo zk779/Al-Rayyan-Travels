@@ -170,13 +170,14 @@ export default function DetailedReportTab({
 }) {
   // ✅ RBAC — permission flags
   const { hasPermission } = useAuth();
-  // A hotel booking is edited / deleted with HOTEL_*, a void sale with VOID_*, everything else with SALE_*
-  const rowPerm = (s, action) =>
-    hasPermission(
-      `${s?.status?.toUpperCase() === "VOID" ? "VOID" : String(s?.saleType || "").toUpperCase() === "HOTEL" ? "HOTEL" : "SALE"}_${action}`,
-    );
+  // A hotel booking is edited / deleted with HOTEL_*, an insurance policy with INSURANCE_*, a void sale with VOID_*, everything else with SALE_*
+  const rowPerm = (s, action) => {
+    const type = String(s?.saleType || "").toUpperCase();
+    const kind = s?.status?.toUpperCase() === "VOID" ? "VOID" : type === "HOTEL" || type === "INSURANCE" ? type : "SALE";
+    return hasPermission(`${kind}_${action}`);
+  };
   // (the delete dialog is mounted for anyone who can delete at least one kind)
-  const canDeleteSale = ["SALE_DELETE", "HOTEL_DELETE", "VOID_DELETE"].some((x) => hasPermission(x));
+  const canDeleteSale = ["SALE_DELETE", "HOTEL_DELETE", "INSURANCE_DELETE", "VOID_DELETE"].some((x) => hasPermission(x));
   // ADMIN only: push a sale to any branch
   const isAdminUser = useIsAdmin();
   const [moveTarget, setMoveTarget] = useState(null);
@@ -223,10 +224,13 @@ export default function DetailedReportTab({
     } catch {
       // sessionStorage unavailable — scroll just won't be restored
     }
+    const type = String(saleType).toUpperCase();
     navigate(
-      String(saleType).toUpperCase() === "HOTEL"
+      type === "HOTEL"
         ? `/edit-hotel-booking/${invoiceId}`
-        : `/edit-services/${invoiceId}`,
+        : type === "INSURANCE"
+          ? `/edit-insurance/${invoiceId}`
+          : `/edit-services/${invoiceId}`,
     );
   };
   const GenerateInvoice = (id) => {
@@ -575,19 +579,23 @@ export default function DetailedReportTab({
                                 className={
                                   sale.saleType === "HOTEL"
                                     ? "bg-teal-50 text-teal-700"
-                                    : "bg-blue-50 text-blue-700"
+                                    : sale.saleType === "INSURANCE"
+                                      ? "bg-sky-50 text-sky-700"
+                                      : "bg-blue-50 text-blue-700"
                                 }
                                 title={
-                                  sale.saleType === "HOTEL"
+                                  sale.saleType === "HOTEL" || sale.saleType === "INSURANCE"
                                     ? [sale.hotelName, sale.airlineName].filter(Boolean).join(" · ")
                                     : undefined
                                 }
                               >
                                 {sale.saleType === "HOTEL"
                                   ? sale.airlineName || "Hotel"
-                                  : sale.airlineCode}
+                                  : sale.saleType === "INSURANCE"
+                                    ? sale.airlineName || "Insurance"
+                                    : sale.airlineCode}
                               </Badge>
-                              {sale.saleType === "HOTEL" && (
+                              {(sale.saleType === "HOTEL" || sale.saleType === "INSURANCE") && (
                                 <div className="mt-1 text-[10px] leading-tight text-slate-500 whitespace-nowrap">
                                   {sale.hotelName && (
                                     <div className="max-w-[150px] truncate font-medium text-slate-600" title={sale.hotelName}>
@@ -595,7 +603,7 @@ export default function DetailedReportTab({
                                     </div>
                                   )}
                                   {sale.checkInDate && sale.checkOutDate
-                                    ? `${formatStay(sale.checkInDate, "dd MMM")} → ${formatStay(sale.checkOutDate, "dd MMM yy")} · ${storedNights(sale.checkInDate, sale.checkOutDate)}N`
+                                    ? `${formatStay(sale.checkInDate, "dd MMM")} → ${formatStay(sale.checkOutDate, "dd MMM yy")} · ${storedNights(sale.checkInDate, sale.checkOutDate)}${sale.saleType === "INSURANCE" ? "D" : "N"}`
                                     : null}
                                 </div>
                               )}

@@ -9,6 +9,7 @@ import {
   ExternalLink,
   FileStack,
   Hotel,
+  Umbrella,
   Loader2,
   Plane,
   Printer,
@@ -30,7 +31,7 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL;
 const MIN_CHARS = 2;
 const DEBOUNCE_MS = 300;
 
-const ACTION_ICON = { plane: Plane, hotel: Hotel, void: Undo2, refund: RotateCcw, other: FileStack, expense: Receipt, payment: Banknote };
+const ACTION_ICON = { plane: Plane, hotel: Hotel, insurance: Umbrella, void: Undo2, refund: RotateCcw, other: FileStack, expense: Receipt, payment: Banknote };
 const KIND = {
   sales: { icon: Plane, tone: "bg-indigo-50 text-indigo-600" },
   customers: { icon: User, tone: "bg-emerald-50 text-emerald-600" },
@@ -71,10 +72,10 @@ const Badge = ({ tone, children }) => <span className={`shrink-0 rounded-full px
 function describe(kind, r) {
   switch (kind) {
     case "sales": {
-      const what = r.saleType === "HOTEL" ? "Hotel booking" : r.status === "VOID" ? "Void ticket" : r.airline;
+      const what = r.saleType === "HOTEL" ? "Hotel booking" : r.saleType === "INSURANCE" ? "Insurance policy" : r.status === "VOID" ? "Void ticket" : r.airline;
       const state = r.status === "VOID" ? ["Void", "bg-rose-50 text-rose-700"] : r.status === "REFUNDED" ? ["Refunded", "bg-amber-50 text-amber-700"] : [fmt(r.sellPrice), r.amountMatch ? "bg-amber-100 text-amber-800" : "bg-emerald-50 text-emerald-700"];
       return {
-        title: r.saleType === "HOTEL" ? r.hotelName || r.documentNo : r.documentNo,
+        title: r.saleType === "HOTEL" || r.saleType === "INSURANCE" ? r.hotelName || r.documentNo : r.documentNo,
         sub: [r.invoiceNo, what, r.vendorName, r.paxName, r.pnr && `PNR ${r.pnr}`].filter(Boolean).join(" · "),
         badge: state[0],
         badgeTone: state[1],

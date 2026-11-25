@@ -147,13 +147,13 @@ const FIELD_GROUPS = [
     ],
   },
   {
-    group: "Hotel Details",
+    group: "Hotel / Insurance Details",
     fields: [
-      { key: "saleType", label: "Sale Type", get: (s) => (String(s.status).toUpperCase() === "VOID" ? "Void" : s.saleType === "HOTEL" ? "Hotel" : "Airline") },
-      { key: "hotelName", label: "Hotel Name", get: (s) => s.hotelName || "" },
-      { key: "checkInDate", label: "Check-in", get: (s) => (s.checkInDate ? formatStay(s.checkInDate, "yyyy-MM-dd") : "") },
-      { key: "checkOutDate", label: "Check-out", get: (s) => (s.checkOutDate ? formatStay(s.checkOutDate, "yyyy-MM-dd") : "") },
-      { key: "nights", label: "Nights", get: (s) => (s.checkInDate && s.checkOutDate ? storedNights(s.checkInDate, s.checkOutDate) : "") },
+      { key: "saleType", label: "Sale Type", get: (s) => (String(s.status).toUpperCase() === "VOID" ? "Void" : s.saleType === "HOTEL" ? "Hotel" : s.saleType === "INSURANCE" ? "Insurance" : "Airline") },
+      { key: "hotelName", label: "Hotel Name / Insurer", get: (s) => s.hotelName || "" },
+      { key: "checkInDate", label: "Check-in / Policy Start", get: (s) => (s.checkInDate ? formatStay(s.checkInDate, "yyyy-MM-dd") : "") },
+      { key: "checkOutDate", label: "Check-out / Policy End", get: (s) => (s.checkOutDate ? formatStay(s.checkOutDate, "yyyy-MM-dd") : "") },
+      { key: "nights", label: "Nights / Days", get: (s) => (s.checkInDate && s.checkOutDate ? storedNights(s.checkInDate, s.checkOutDate) : "") },
     ],
   },
   {

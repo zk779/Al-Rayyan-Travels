@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { format } from "date-fns";
 import { hotelStayText, isHotelSale, storedNights } from "../utils/hotelText";
+import { insuranceCoverageText, isInsuranceSale } from "../utils/insuranceText";
 import {
   Loader2,
   AlertCircle,
@@ -196,25 +197,25 @@ function SaleCard({ sale, index }) {
       <div className="p-5 space-y-4">
         {/* Core details */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-          <Field label={isHotelSale(sale) ? "Guest" : "Passenger"} value={sale.paxName} highlight />
+          <Field label={isHotelSale(sale) ? "Guest" : isInsuranceSale(sale) ? "Insured" : "Passenger"} value={sale.paxName} highlight />
           <Field
-            label={isHotelSale(sale) ? "Hotel Type" : "Airline"}
+            label={isHotelSale(sale) ? "Hotel Type" : isInsuranceSale(sale) ? "Insurance Type" : "Airline"}
             value={
-              isHotelSale(sale)
+              isHotelSale(sale) || isInsuranceSale(sale)
                 ? sale.airline?.airlineName || "N/A"
                 : sale.airline ? `${sale.airline.airlineCode} — ${sale.airline.airlineName}` : "N/A"
             }
           />
           <Field
-            label={isHotelSale(sale) ? "Stay" : "Route"}
-            value={isHotelSale(sale) ? hotelStayText(sale) : route || "N/A"}
+            label={isHotelSale(sale) ? "Stay" : isInsuranceSale(sale) ? "Coverage" : "Route"}
+            value={isHotelSale(sale) ? hotelStayText(sale) : isInsuranceSale(sale) ? insuranceCoverageText(sale) : route || "N/A"}
           />
           <Field label="Vendor" value={sale.vendor?.vendorName || "N/A"} />
           <Field label="Customer" value={sale.customer?.customerName || "Walk-in"} />
           <Field
-            label={isHotelSale(sale) ? "Nights" : "Trip Type"}
+            label={isHotelSale(sale) ? "Nights" : isInsuranceSale(sale) ? "Days" : "Trip Type"}
             value={
-              isHotelSale(sale)
+              isHotelSale(sale) || isInsuranceSale(sale)
                 ? `${storedNights(sale.checkInDate, sale.checkOutDate)}`
                 : sale.tripType || "N/A"
             }

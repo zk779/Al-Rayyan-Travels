@@ -1,12 +1,12 @@
 "use client";
 
 import { Link } from "react-router-dom";
-import { ArrowRight, Ban, Briefcase, FileStack, Hotel, Receipt, ShieldCheck, Ticket, Undo2, Zap } from "lucide-react";
+import { ArrowRight, Ban, Briefcase, FileStack, Hotel, Receipt, ShieldCheck, Ticket, Umbrella, Undo2, Zap } from "lucide-react";
 import { Card, CardContent } from "../../shadcn/components/ui/card";
 import { useAuth } from "../context/AuthContext";
 
 // Deep, muted tones (the 800/900 shades, no bright colours): each service has its own — indigo, wine,
-// teal, slate, amber — carried through its panel, tags, hover ring and button. Literal class names
+// teal, sky, slate, amber — carried through its panel, tags, hover ring and button. Literal class names
 // throughout (Tailwind can't see built-up strings).
 const SERVICES = [
   {
@@ -67,9 +67,28 @@ const SERVICES = [
     arrow: "bg-teal-100 text-teal-700",
   },
   {
+    key: "insurance",
+    to: "/new-insurance",
+    no: "04",
+    title: "Insurance Policies",
+    titleAr: "وثائق التأمين",
+    desc: "Sell a domestic or international insurance policy with its start and end dates and the insurer, paid like any other sale.",
+    chips: ["Domestic", "International", "Policy period"],
+    icon: Umbrella,
+    permission: "INSURANCE_CREATE",
+    panel: "from-sky-800 via-sky-900 to-slate-900",
+    iconTile: "bg-sky-200/15 text-sky-50 ring-sky-200/30",
+    line: "bg-sky-300/60",
+    dot: "bg-sky-500",
+    chip: "bg-sky-50/70 text-sky-800 ring-sky-100",
+    ring: "hover:ring-sky-300/70",
+    cta: "group-hover:border-sky-900 group-hover:bg-sky-900",
+    arrow: "bg-sky-100 text-sky-700",
+  },
+  {
     key: "void",
     to: "/new-services/void",
-    no: "04",
+    no: "05",
     title: "Void Sale",
     titleAr: "إلغاء بيع (فويد)",
     desc: "Record a ticket cancelled with the vendor inside its void window — only the vendor ledger is touched, never a customer.",
@@ -88,10 +107,10 @@ const SERVICES = [
   {
     key: "other",
     to: "/other-services",
-    no: "05",
+    no: "06",
     title: "Other Services",
     titleAr: "خدمات أخرى",
-    desc: "Invoices for everything beyond tickets and hotels — transportation, Umrah visa and more — with the 15% VAT worked out for you.",
+    desc: "Invoices for everything beyond tickets, hotels and insurance — transportation, Umrah visa and more — with the 15% VAT worked out for you.",
     chips: ["Transportation", "Umrah visa", "VAT invoice"],
     icon: FileStack,
     permission: "OTHER_SERVICE_READ",
@@ -154,7 +173,7 @@ export default function NewServices() {
           <div className="max-w-md">
             <p className="text-base font-medium text-slate-100">What would you like to do?</p>
             <p className="mt-1 text-sm text-slate-400">
-              Pick a service to open its form — sales, refunds, hotel bookings, voids and other services all live here.
+              Pick a service to open its form — sales, refunds, hotel bookings, insurance, voids and other services all live here.
             </p>
           </div>
         </div>

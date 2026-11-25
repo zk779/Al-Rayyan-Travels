@@ -1,7 +1,13 @@
 import { formatStay, storedNights } from "./stayDates";
 
-// The two "airline" records that represent hotel types (matched on icao_code).
-export const HOTEL_ICAO = new Set(["domesticHotel", "internationalHotel"]);
+// The two "airline" records that represent hotel types (matched on icao_code). The insurance
+// types are special records too, so they are kept out of the airline dropdowns the same way.
+export const HOTEL_ICAO = new Set([
+  "domesticHotel",
+  "internationalHotel",
+  "domesticInsurance",
+  "internationalInsurance",
+]);
 
 export const isHotelSale = (sale) => String(sale?.saleType || "").toUpperCase() === "HOTEL";
 

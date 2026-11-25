@@ -48,6 +48,7 @@ export const GROUPS = [
 export const QUICK_ACTIONS = [
   { label: "New sale", icon: "plane", to: "/new-services/sale", perm: "SALE_CREATE" },
   { label: "Hotel", icon: "hotel", to: "/new-hotel-booking", perm: "HOTEL_CREATE" },
+  { label: "Insurance", icon: "insurance", to: "/new-insurance", perm: "INSURANCE_CREATE" },
   { label: "Void", icon: "void", to: "/new-services/void", perm: "VOID_CREATE" },
   { label: "Refund", icon: "refund", to: "/new-services/refund", perm: "REFUND_CREATE" },
   { label: "Other service", icon: "other", to: "/other-services/new", perm: "OTHER_SERVICE_CREATE" },
@@ -57,7 +58,7 @@ export const QUICK_ACTIONS = [
 
 export const PAGES = [
   { group: "Sales", label: "Sales report", to: "/sales-report", perm: "REPORT_READ" },
-  { group: "Sales", label: "New services", to: "/new-services", any: ["SALE_CREATE", "REFUND_CREATE", "HOTEL_CREATE", "VOID_CREATE", "OTHER_SERVICE_READ"] },
+  { group: "Sales", label: "New services", to: "/new-services", any: ["SALE_CREATE", "REFUND_CREATE", "HOTEL_CREATE", "INSURANCE_CREATE", "VOID_CREATE", "OTHER_SERVICE_READ"] },
   { group: "Sales", label: "Other services", to: "/other-services", perm: "OTHER_SERVICE_READ" },
   { group: "Money", label: "Payments", to: "/manage-payments", perm: "PAYMENT_READ" },
   { group: "Money", label: "Expenses", to: "/expenses", perm: "EXPENSE_READ" },

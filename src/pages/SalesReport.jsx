@@ -50,7 +50,7 @@ const defaultFilters = () => ({
   searchBy: "all",
   agent: "all",
   branch: "all",
-  saleType: "all", // all | AIRLINE | HOTEL | VOID
+  saleType: "all", // all | AIRLINE | HOTEL | INSURANCE | VOID
   order: "desc", // desc = newest first | asc | invoice_asc / invoice_desc = by invoice number
 });
 
@@ -733,9 +733,10 @@ export default function SalesReport() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All (Airline, Hotel &amp; Void)</SelectItem>
+                      <SelectItem value="all">All (Airline, Hotel, Insurance &amp; Void)</SelectItem>
                       <SelectItem value="AIRLINE">Airline</SelectItem>
                       <SelectItem value="HOTEL">Hotel</SelectItem>
+                      <SelectItem value="INSURANCE">Insurance</SelectItem>
                       <SelectItem value="VOID">Void</SelectItem>
                     </SelectContent>
                   </Select>

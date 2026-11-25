@@ -830,9 +830,10 @@ export default function ReportPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={ALL}>Airline &amp; Hotel</SelectItem>
+                    <SelectItem value={ALL}>Airline, Hotel &amp; Insurance</SelectItem>
                     <SelectItem value="AIRLINE">Airline</SelectItem>
                     <SelectItem value="HOTEL">Hotel</SelectItem>
+                    <SelectItem value="INSURANCE">Insurance</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

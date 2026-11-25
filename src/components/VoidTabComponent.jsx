@@ -14,7 +14,7 @@ import { appToast } from "../../shadcn/components/ui/appToast";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 const VAT_RATE = 0.15;
-const HOTEL_ICAO = ["domesticHotel", "internationalHotel"];
+const HOTEL_ICAO = ["domesticHotel", "internationalHotel", "domesticInsurance", "internationalInsurance"];
 
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const num = (v) => Number(v) || 0;

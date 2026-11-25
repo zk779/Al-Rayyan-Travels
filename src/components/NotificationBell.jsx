@@ -13,6 +13,7 @@ import {
   CheckCheck,
   FileStack,
   Hotel,
+  Umbrella,
   Plane,
   Receipt,
   RotateCcw,
@@ -37,6 +38,7 @@ const POLL_MS = 30000;
 const KINDS = [
   { match: /^SALE_/, icon: Plane, tile: "bg-indigo-50 text-indigo-600 ring-indigo-100" },
   { match: /^HOTEL_/, icon: Hotel, tile: "bg-sky-50 text-sky-600 ring-sky-100" },
+  { match: /^INSURANCE_/, icon: Umbrella, tile: "bg-blue-50 text-blue-600 ring-blue-100" },
   { match: /^VOID_/, icon: Undo2, tile: "bg-rose-50 text-rose-600 ring-rose-100" },
   { match: /^REFUND_/, icon: RotateCcw, tile: "bg-amber-50 text-amber-600 ring-amber-100" },
   { match: /^OTHER_SERVICE_/, icon: FileStack, tile: "bg-violet-50 text-violet-600 ring-violet-100" },
