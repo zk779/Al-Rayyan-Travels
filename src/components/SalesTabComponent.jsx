@@ -8,8 +8,6 @@ import {
   Receipt,
   Calculator,
   CalendarIcon,
-  MapPin,
-  Eye,
   SaudiRiyal,
   Route,
   Send,
@@ -35,7 +33,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "../../shadcn/components/ui/popover";
-import { Badge } from "../../shadcn/components/ui/badge";
 import ManageDestinationsDialog from "./ManageDestinationsDialog";
 import PaymentDialog from "./PaymentDialog";
 import { appToast } from "../../shadcn/components/ui/appToast";
@@ -44,6 +41,7 @@ import BranchPicker from "./BranchPicker";
 import { useIsAdmin } from "../utils/useIsAdmin";
 import VendorNetFields from "./VendorNetFields";
 import TotalVatField from "./TotalVatField";
+import DestinationsField from "./DestinationsField";
 import {
   applyVendorParts,
   isVendorPart,
@@ -891,47 +889,12 @@ export default function SalesTabComponent() {
                     <Label className="text-xs font-medium text-slate-600">
                       Destinations
                     </Label>
-                    <div className="flex items-center gap-2">
-                      {item.destinations?.length > 0 ? (
-                        <div className="flex gap-2 w-full">
-                          <Badge
-                            variant="secondary"
-                            className="text-xs px-2 w-2/3 py-1 h-8 flex items-center gap-1"
-                          >
-                            <MapPin className="h-3 w-3" />
-                            {item.destinations.length} selected
-                          </Badge>
-                          <Button
-                            variant="outline"
-                            size="xs"
-                            onClick={() =>
-                              setDestinationDialog({
-                                open: true,
-                                saleId: item.id,
-                              })
-                            }
-                            className="h-8 px-2 w-1/3 text-xs"
-                          >
-                            <Eye className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="xs"
-                          onClick={() =>
-                            setDestinationDialog({
-                              open: true,
-                              saleId: item.id,
-                            })
-                          }
-                          className="h-8 text-xs px-3 border-dashed w-full"
-                        >
-                          <Plus className="h-3 w-3 mr-1.5" /> Add Destinations{" "}
-                          <MapPin className="h-3 w-3 mr-1.5" />
-                        </Button>
-                      )}
-                    </div>
+                    <DestinationsField
+                      destinations={item.destinations}
+                      onOpen={() =>
+                        setDestinationDialog({ open: true, saleId: item.id })
+                      }
+                    />
                   </div>
 
                   {/* ── CHANGE 3: Payment — required ── */}
@@ -964,6 +927,7 @@ export default function SalesTabComponent() {
                     onChange={(f, v) => updateSale(item.id, f, v)}
                     size="sm"
                     netRequired
+                    fareWithVat
                     netInvalid={!item.netPrice}
                   >
                     {/* PAX VAT sits right after the basic fare (domestic routes only) */}

@@ -41,6 +41,9 @@ import PaymentDialog from "./PaymentDialog";
 import EditPaymentDialog from "./EditPaymentDialog";
 import { appToast } from "../../shadcn/components/ui/appToast";
 import { computePaymentBreakdown } from "./paymentBreakdown";
+import VendorNetFields from "./VendorNetFields";
+import TotalVatField from "./TotalVatField";
+import { applyVendorParts, isVendorPart, withVendorParts, vendorChargesPayload } from "./vendorCharges";
 import { toStayISO, fromStayISO, nightsBetween } from "../utils/stayDates";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
@@ -129,6 +132,9 @@ const emptyRow = () => ({
   vendorId: "",
   customerId: "",
   netPrice: "",
+  baseNet: "",
+  vendorServiceCharge: "",
+  vendorVat: "",
   sellPrice: "",
   paidAmount: "",
   paymentType: "",
@@ -140,7 +146,7 @@ const emptyRow = () => ({
   checkOutDate: null,
   routeType: "",
   paxVat: "",
-  miscCharges: "",
+  discount: "",
   vatAmount: "",
 });
 
@@ -152,33 +158,19 @@ const calcVAT = (profit) => {
   return p > 0 ? (p * 0.15).toFixed(2) : "0.00";
 };
 
-// PAX VAT is inclusive — netPrice already has the 15% baked in, so this
-// extracts it out of netPrice rather than adding 15% on top of it.
-const calcPaxVAT = (netPrice) => {
-  const n = Number(netPrice) || 0;
-  return n > 0 ? (n - n / 1.15).toFixed(2) : "0.00";
-};
+// A booking saved before the pricing was split into basic fare / vendor charges has its vendor VAT
+// inside the typed net (and no vendor charges): it opens as a plain basic fare, so its net does not move.
+const legacyFix = (s) => (Number(s.vendorServiceCharge) > 0 ? s : { ...s, vendorVat: 0 });
 
-// The vendor's VAT on a policy is already INSIDE the net amount that is typed, so it is worked
-// out from it (683.79 -> 89.19) — never added on top.
-const calcVendorVat = (netPrice) => {
-  const n = Number(netPrice) || 0;
-  return n > 0 ? Math.round((n - n / 1.15 + Number.EPSILON) * 100) / 100 : 0;
-};
-
-// Re-applies the VAT conditions for the chosen insurance type (same rules as the
-// DOMESTIC / ZERO_VAT flight routes, see INSURANCE_KINDS above).
+// Re-applies the VAT conditions for the chosen type (same rules as the DOMESTIC / ZERO_VAT flight routes,
+// see INSURANCE_KINDS above): domestic -> PAX VAT 15% on top of the basic fare, international -> none. The net
+// price follows from the basic fare, the PAX VAT, the vendor charges (+ their VAT) and the discount.
 const applyInsuranceEffects = (item, icao) => {
   const routeType = INSURANCE_KINDS[icao]?.routeType || "";
   const updated = { ...item, routeType };
-  if (routeType === "DOMESTIC") {
-    updated.paxVat = calcPaxVAT(item.netPrice);
-    updated.miscCharges = "";
-  } else {
-    updated.paxVat = "";
-  }
+  Object.assign(updated, applyVendorParts(updated, null, null));
   updated.vatAmount = calcVAT(
-    Number(item.sellPrice || 0) - Number(item.netPrice || 0),
+    Number(updated.sellPrice || 0) - Number(updated.netPrice || 0),
   );
   return updated;
 };
@@ -293,7 +285,7 @@ export default function InsuranceBookingForm({ invoiceId = null }) {
         );
         setUiSales(
           (inv.sales || []).map((s) => ({
-            ...s,
+            ...withVendorParts(legacyFix(s)),
             hotelName: s.hotelName || "",
             checkInDate: fromStayISO(s.checkInDate),
             checkOutDate: fromStayISO(s.checkOutDate),
@@ -428,10 +420,21 @@ export default function InsuranceBookingForm({ invoiceId = null }) {
       return next.length || isEdit ? next : [emptyRow()];
     });
 
-  const updateSale = (id, field, value) =>
+  const updateSale = (id, fieldArg, valueArg) =>
     setUiSales((prev) =>
-      prev.map((item) => {
-        if (item.id !== id) return item;
+      prev.map((orig) => {
+        if (orig.id !== id) return orig;
+
+        // Basic fare, vendor charges and discount are typed; the row's netPrice follows from them
+        // (plus the PAX VAT and the 15% VAT on the charges) and goes through the same checks as before.
+        let field = fieldArg;
+        let value = valueArg;
+        let item = orig;
+        if (isVendorPart(fieldArg)) {
+          item = { ...orig, ...applyVendorParts(orig, fieldArg, valueArg) };
+          field = "netPrice";
+          value = item.netPrice;
+        }
 
         if (field === "netPrice") {
           const vendor = vendorMap[item.vendorId];
@@ -451,7 +454,7 @@ export default function InsuranceBookingForm({ invoiceId = null }) {
                 );
                 lastToastValue.current = key;
               }
-              return item;
+              return orig;
             }
           }
           lastToastValue.current = null;
@@ -464,7 +467,7 @@ export default function InsuranceBookingForm({ invoiceId = null }) {
                 "Not Allowed",
                 "Net price cannot exceed Sell price. Only Admins can override this.",
               );
-              return item;
+              return orig;
             }
             appToast.warning(
               "Warning",
@@ -512,8 +515,6 @@ export default function InsuranceBookingForm({ invoiceId = null }) {
 
         if (field === "netPrice" || field === "sellPrice") {
           const updated = { ...item, [field]: value };
-          if (updated.routeType === "DOMESTIC")
-            updated.paxVat = calcPaxVAT(updated.netPrice);
           updated.vatAmount = calcVAT(
             Number(updated.sellPrice || 0) - Number(updated.netPrice || 0),
           );
@@ -556,12 +557,12 @@ export default function InsuranceBookingForm({ invoiceId = null }) {
       sell: acc.sell + (Number(s.sellPrice) || 0),
       vat: acc.vat + (Number(s.vatAmount) || 0),
       paxVat: acc.paxVat + (Number(s.paxVat) || 0),
-      misc: acc.misc + (Number(s.miscCharges) || 0),
+      discount: acc.discount + (Number(s.discount) || 0),
       profit:
         acc.profit + ((Number(s.sellPrice) || 0) - (Number(s.netPrice) || 0)),
       days: acc.days + nightsBetween(s.checkInDate, s.checkOutDate),
     }),
-    { net: 0, sell: 0, vat: 0, paxVat: 0, misc: 0, profit: 0, days: 0 },
+    { net: 0, sell: 0, vat: 0, paxVat: 0, discount: 0, profit: 0, days: 0 },
   );
 
   const { totals: paymentTotals, tabbyRows } = useMemo(
@@ -698,9 +699,8 @@ export default function InsuranceBookingForm({ invoiceId = null }) {
       paxName: s.paxName || null,
       destinations: [],
       netPrice: Number(s.netPrice),
-      // the typed net already includes the vendor's VAT; no separate vendor charges on a policy
-      vendorServiceCharge: 0,
-      vendorVat: calcVendorVat(s.netPrice),
+      // vendor charges, the VAT on them and the discount (all inside / taken off the net price)
+      ...vendorChargesPayload(s),
       sellPrice: Number(s.sellPrice),
       vatAmount: Number(s.vatAmount || 0),
       paxVat: Number(s.paxVat || 0),
@@ -1143,7 +1143,8 @@ export default function InsuranceBookingForm({ invoiceId = null }) {
                   </div>
                 </div>
 
-{/* Pricing */}
+{/* Pricing — same layout as a New Sale: basic fare (VAT exclusive), D. Vat, vendor charges + their VAT,
+                    discount, sell / paid, profit and the total VAT */}
                 <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
                   <div className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
                     <Calculator className="h-3.5 w-3.5" /> Pricing &amp; Payment
@@ -1151,78 +1152,41 @@ export default function InsuranceBookingForm({ invoiceId = null }) {
                   <div
                     className={`grid grid-cols-2 gap-3 ${item.routeType === "DOMESTIC" ? "md:grid-cols-4 xl:grid-cols-9" : "md:grid-cols-4 xl:grid-cols-8"}`}
                   >
-                    <div className="space-y-1">
-                      <FieldLabel required>
-                        Net <SaudiRiyal size={13} />
-                      </FieldLabel>
-                      <Input
-                        type="tel"
-                        value={item.netPrice}
-                        onChange={(e) =>
-                          updateSale(item.id, "netPrice", e.target.value)
-                        }
-                        placeholder="0.00"
-                        className={inputClass(!item.netPrice)}
-                      />
-                    </div>
-
-                    {/* The vendor's VAT, worked out from the net (which already includes it) */}
-                    <div className="space-y-1">
-                      <Label className="flex items-center gap-1 text-xs font-medium text-slate-600">
-                        Vendor VAT 15% <SaudiRiyal size={13} />
-                      </Label>
-                      <div
-                        className="flex h-9 items-center gap-1 rounded-[10px] border border-slate-200 bg-slate-100 px-2.5 text-xs font-semibold text-slate-700"
-                        data-testid="vendor-vat"
-                      >
-                        <Calculator className="h-3 w-3" />{" "}
-                        {calcVendorVat(item.netPrice).toFixed(2)}
-                      </div>
-                      {/* What is left of the net once the vendor's VAT is taken out */}
-                      {Number(item.netPrice) > 0 && (
-                        <p
-                          className="flex items-center justify-between gap-2 rounded-md bg-sky-50 px-2 py-1 text-[11px] text-sky-800 ring-1 ring-sky-100"
-                          data-testid="basic-amount"
-                          title={`${Number(item.netPrice).toFixed(2)} − ${calcVendorVat(item.netPrice).toFixed(2)}`}
-                        >
-                          <span>Basic amount</span>
-                          <span className="font-semibold tabular-nums">
-                            {(
-                              Math.round(
-                                (Number(item.netPrice) -
-                                  calcVendorVat(item.netPrice) +
-                                  Number.EPSILON) *
-                                  100,
-                              ) / 100
-                            ).toFixed(2)}
-                          </span>
-                        </p>
-                      )}
-                    </div>
-
-                    {item.routeType === "DOMESTIC" && (
-                      <div className="space-y-1">
-                        <Label className="flex items-center gap-1 text-xs font-medium text-orange-700">
-                          D. Vat 15%
-                          <SaudiRiyal size={13} />
-                        </Label>
-                        <div className="flex h-9 items-center gap-1 rounded-[10px] border border-orange-200 bg-orange-50 px-2.5 text-xs font-semibold text-orange-700">
-                          <Calculator className="h-3 w-3" />{" "}
-                          {item.paxVat || "0.00"}
+                    {/* Basic fare (typed WITHOUT VAT), then PAX VAT on top of it (domestic only), then the vendor's
+                        charges with the VAT on them and the resulting net total underneath */}
+                    <VendorNetFields
+                      item={item}
+                      onChange={(f, v) => updateSale(item.id, f, v)}
+                      size="md"
+                      netRequired
+                      fareWithVat
+                      netInvalid={!item.netPrice}
+                    >
+                      {item.routeType === "DOMESTIC" && (
+                        <div className="space-y-1">
+                          <Label className="flex items-center gap-1 text-xs font-medium text-orange-700">
+                            D. Vat 15%
+                            <SaudiRiyal size={13} />
+                          </Label>
+                          <div className="flex h-9 items-center gap-1 rounded-[10px] border border-orange-200 bg-orange-50 px-2.5 text-xs font-semibold text-orange-700">
+                            <Calculator className="h-3 w-3" />{" "}
+                            {Number(item.paxVat || 0).toFixed(2)}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </VendorNetFields>
 
                     <div className="space-y-1">
                       <FieldLabel>
-                        MISC <SaudiRiyal size={13} />
+                        Discount <SaudiRiyal size={13} />
                       </FieldLabel>
                       <Input
                         type="tel"
-                        value={item.miscCharges}
+                        value={item.discount ?? ""}
                         onChange={(e) =>
-                          updateSale(item.id, "miscCharges", e.target.value)
+                          updateSale(item.id, "discount", e.target.value)
                         }
+                        aria-label="Discount"
                         placeholder="0.00"
                         className={inputClass(false)}
                       />
@@ -1266,23 +1230,24 @@ export default function InsuranceBookingForm({ invoiceId = null }) {
                     </div>
 
                     <div className="space-y-1">
-                      <Label className="flex items-center gap-1 text-xs font-medium text-blue-700">
-                        VAT 15% <SaudiRiyal size={13} />
-                      </Label>
-                      <div className="flex h-9 items-center gap-1 rounded-[10px] border border-blue-200 bg-blue-50 px-2.5 text-xs font-semibold text-blue-700">
-                        <Calculator className="h-3 w-3" />{" "}
-                        {item.vatAmount || "0.00"}
-                      </div>
-                    </div>
-
-                    <div className="space-y-1">
                       <Label className="flex items-center gap-1 text-xs font-medium text-emerald-700">
                         Profit <SaudiRiyal size={13} />
                       </Label>
                       <div className="flex h-9 items-center gap-1 rounded-[10px] border border-emerald-200 bg-emerald-50 px-2.5 text-xs font-semibold text-emerald-700">
                         <Calculator className="h-3 w-3" /> {profit}
                       </div>
+                      {Number(item.vatAmount) > 0 && (
+                        <p
+                          className="text-[10px] leading-tight text-slate-500"
+                          data-testid="profit-vat"
+                        >
+                          VAT 15%: {Number(item.vatAmount).toFixed(2)}
+                        </p>
+                      )}
                     </div>
+
+                    {/* PAX VAT + vendor VAT + our VAT 15% */}
+                    <TotalVatField item={item} size="md" />
 
                     <div className="col-span-2 space-y-1 md:col-span-1">
                       <FieldLabel required>Payment</FieldLabel>
@@ -1338,8 +1303,8 @@ export default function InsuranceBookingForm({ invoiceId = null }) {
                 color: "blue",
               },
               {
-                label: "Total MISC",
-                value: totals.misc.toFixed(2),
+                label: "Total Discount",
+                value: totals.discount.toFixed(2),
                 color: "slate",
               },
               {
