@@ -5,12 +5,87 @@ import { ArrowRight, Ban, Briefcase, FileStack, Hotel, Receipt, ShieldCheck, Tic
 import { Card, CardContent } from "../../shadcn/components/ui/card";
 import { useAuth } from "../context/AuthContext";
 
-// Deep, muted tones (the 800/900 shades, no bright colours): each service has its own — indigo, wine,
-// teal, sky, slate, amber — carried through its panel, tags, hover ring and button. Literal class names
-// throughout (Tailwind can't see built-up strings).
+// Each service has its own colour — indigo, rose, teal, sky, slate, amber — carried through its icon tile, tags, number and hover
+// ring. Literal class names throughout (Tailwind can't see built-up strings).
+const TONES = {
+  indigo: {
+    bar: "from-indigo-400 via-indigo-500 to-violet-600",
+    card: "from-indigo-50 via-white to-white",
+    icon: "from-indigo-500 to-violet-600 shadow-indigo-500/40",
+    glow: "from-indigo-200/80",
+    text: "text-indigo-700",
+    chip: "bg-indigo-100/80 text-indigo-800 ring-indigo-200",
+    dot: "bg-indigo-500",
+    ring: "hover:ring-indigo-300 hover:shadow-indigo-500/20",
+    num: "text-indigo-200",
+    cta: "bg-indigo-50 text-indigo-700 ring-indigo-200 group-hover:from-indigo-500 group-hover:to-violet-600"
+  },
+  rose: {
+    bar: "from-rose-400 via-rose-500 to-pink-600",
+    card: "from-rose-50 via-white to-white",
+    icon: "from-rose-500 to-pink-600 shadow-rose-500/40",
+    glow: "from-rose-200/80",
+    text: "text-rose-700",
+    chip: "bg-rose-100/80 text-rose-800 ring-rose-200",
+    dot: "bg-rose-500",
+    ring: "hover:ring-rose-300 hover:shadow-rose-500/20",
+    num: "text-rose-200",
+    cta: "bg-rose-50 text-rose-700 ring-rose-200 group-hover:from-rose-500 group-hover:to-pink-600"
+  },
+  teal: {
+    bar: "from-teal-400 via-teal-500 to-emerald-600",
+    card: "from-teal-50 via-white to-white",
+    icon: "from-teal-500 to-emerald-600 shadow-teal-500/40",
+    glow: "from-teal-200/80",
+    text: "text-teal-700",
+    chip: "bg-teal-100/80 text-teal-800 ring-teal-200",
+    dot: "bg-teal-500",
+    ring: "hover:ring-teal-300 hover:shadow-teal-500/20",
+    num: "text-teal-200",
+    cta: "bg-teal-50 text-teal-700 ring-teal-200 group-hover:from-teal-500 group-hover:to-emerald-600"
+  },
+  sky: {
+    bar: "from-sky-400 via-sky-500 to-blue-600",
+    card: "from-sky-50 via-white to-white",
+    icon: "from-sky-500 to-blue-600 shadow-sky-500/40",
+    glow: "from-sky-200/80",
+    text: "text-sky-700",
+    chip: "bg-sky-100/80 text-sky-800 ring-sky-200",
+    dot: "bg-sky-500",
+    ring: "hover:ring-sky-300 hover:shadow-sky-500/20",
+    num: "text-sky-200",
+    cta: "bg-sky-50 text-sky-700 ring-sky-200 group-hover:from-sky-500 group-hover:to-blue-600"
+  },
+  slate: {
+    bar: "from-slate-400 via-slate-500 to-zinc-600",
+    card: "from-slate-50 via-white to-white",
+    icon: "from-slate-500 to-zinc-600 shadow-slate-500/40",
+    glow: "from-slate-200/80",
+    text: "text-slate-700",
+    chip: "bg-slate-100/80 text-slate-800 ring-slate-200",
+    dot: "bg-slate-500",
+    ring: "hover:ring-slate-300 hover:shadow-slate-500/20",
+    num: "text-slate-200",
+    cta: "bg-slate-50 text-slate-700 ring-slate-200 group-hover:from-slate-500 group-hover:to-zinc-600"
+  },
+  amber: {
+    bar: "from-amber-400 via-amber-500 to-orange-600",
+    card: "from-amber-50 via-white to-white",
+    icon: "from-amber-500 to-orange-600 shadow-amber-500/40",
+    glow: "from-amber-200/80",
+    text: "text-amber-700",
+    chip: "bg-amber-100/80 text-amber-800 ring-amber-200",
+    dot: "bg-amber-500",
+    ring: "hover:ring-amber-300 hover:shadow-amber-500/20",
+    num: "text-amber-200",
+    cta: "bg-amber-50 text-amber-700 ring-amber-200 group-hover:from-amber-500 group-hover:to-orange-600"
+  }
+};
+
 const SERVICES = [
   {
     key: "sale",
+    tone: TONES.indigo,
     to: "/new-services/sale",
     no: "01",
     title: "New Sale",
@@ -19,17 +94,10 @@ const SERVICES = [
     chips: ["Cash", "Bank", "POS", "Credit", "Split"],
     icon: Ticket,
     permission: "SALE_CREATE",
-    panel: "from-indigo-800 via-indigo-900 to-slate-900",
-    iconTile: "bg-indigo-200/15 text-indigo-50 ring-indigo-200/30",
-    line: "bg-indigo-300/60",
-    dot: "bg-indigo-500",
-    chip: "bg-indigo-50/70 text-indigo-800 ring-indigo-100",
-    ring: "hover:ring-indigo-300/70",
-    cta: "group-hover:border-indigo-900 group-hover:bg-indigo-900",
-    arrow: "bg-indigo-100 text-indigo-700",
   },
   {
     key: "refund",
+    tone: TONES.rose,
     to: "/new-services/refund",
     no: "02",
     title: "Sale Refund",
@@ -38,17 +106,10 @@ const SERVICES = [
     chips: ["Customer payout", "Vendor refund", "Fees"],
     icon: Undo2,
     permission: "REFUND_CREATE",
-    panel: "from-rose-800 via-rose-900 to-slate-900",
-    iconTile: "bg-rose-200/15 text-rose-50 ring-rose-200/30",
-    line: "bg-rose-300/60",
-    dot: "bg-rose-500",
-    chip: "bg-rose-50/70 text-rose-800 ring-rose-100",
-    ring: "hover:ring-rose-300/70",
-    cta: "group-hover:border-rose-900 group-hover:bg-rose-900",
-    arrow: "bg-rose-100 text-rose-700",
   },
   {
     key: "hotel",
+    tone: TONES.teal,
     to: "/new-hotel-booking",
     no: "03",
     title: "Hotel Bookings",
@@ -57,17 +118,10 @@ const SERVICES = [
     chips: ["Domestic", "International", "Check-in / out"],
     icon: Hotel,
     permission: "HOTEL_CREATE",
-    panel: "from-teal-800 via-teal-900 to-slate-900",
-    iconTile: "bg-teal-200/15 text-teal-50 ring-teal-200/30",
-    line: "bg-teal-300/60",
-    dot: "bg-teal-500",
-    chip: "bg-teal-50/70 text-teal-800 ring-teal-100",
-    ring: "hover:ring-teal-300/70",
-    cta: "group-hover:border-teal-900 group-hover:bg-teal-900",
-    arrow: "bg-teal-100 text-teal-700",
   },
   {
     key: "insurance",
+    tone: TONES.sky,
     to: "/new-insurance",
     no: "04",
     title: "Insurance Policies",
@@ -76,17 +130,10 @@ const SERVICES = [
     chips: ["Domestic", "International", "Policy period"],
     icon: Umbrella,
     permission: "INSURANCE_CREATE",
-    panel: "from-sky-800 via-sky-900 to-slate-900",
-    iconTile: "bg-sky-200/15 text-sky-50 ring-sky-200/30",
-    line: "bg-sky-300/60",
-    dot: "bg-sky-500",
-    chip: "bg-sky-50/70 text-sky-800 ring-sky-100",
-    ring: "hover:ring-sky-300/70",
-    cta: "group-hover:border-sky-900 group-hover:bg-sky-900",
-    arrow: "bg-sky-100 text-sky-700",
   },
   {
     key: "void",
+    tone: TONES.slate,
     to: "/new-services/void",
     no: "05",
     title: "Void Sale",
@@ -95,17 +142,10 @@ const SERVICES = [
     chips: ["Vendor only", "Credit + debit", "Service charge"],
     icon: Ban,
     permission: "VOID_CREATE",
-    panel: "from-slate-600 via-slate-700 to-slate-900",
-    iconTile: "bg-slate-200/15 text-slate-50 ring-slate-200/30",
-    line: "bg-slate-300/60",
-    dot: "bg-slate-500",
-    chip: "bg-slate-100 text-slate-700 ring-slate-200",
-    ring: "hover:ring-slate-400/70",
-    cta: "group-hover:border-slate-900 group-hover:bg-slate-900",
-    arrow: "bg-slate-200 text-slate-700",
   },
   {
     key: "other",
+    tone: TONES.amber,
     to: "/other-services",
     no: "06",
     title: "Other Services",
@@ -114,14 +154,6 @@ const SERVICES = [
     chips: ["Transportation", "Umrah visa", "VAT invoice"],
     icon: FileStack,
     permission: "OTHER_SERVICE_READ",
-    panel: "from-amber-800 via-amber-900 to-slate-900",
-    iconTile: "bg-amber-200/15 text-amber-50 ring-amber-200/30",
-    line: "bg-amber-300/60",
-    dot: "bg-amber-500",
-    chip: "bg-amber-50/70 text-amber-800 ring-amber-100",
-    ring: "hover:ring-amber-300/70",
-    cta: "group-hover:border-amber-900 group-hover:bg-amber-900",
-    arrow: "bg-amber-100 text-amber-700",
   },
 ];
 
@@ -151,9 +183,11 @@ export default function NewServices() {
   return (
     <div className="mx-auto w-full pb-10">
       {/* Hero */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-800 to-slate-900 p-5 text-white shadow-lg md:p-8">
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-5 text-white shadow-lg md:p-7">
         <div className="pointer-events-none absolute -right-16 -top-20 h-72 w-72 rounded-full bg-white/5 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-24 left-1/3 h-64 w-64 rounded-full bg-slate-400/10 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 left-1/3 h-64 w-64 rounded-full bg-sky-400/20 blur-3xl" />
+        <div className="pointer-events-none absolute -left-10 -top-16 h-56 w-56 rounded-full bg-rose-500/15 blur-3xl" />
+        <div className="pointer-events-none absolute bottom-0 right-1/4 h-40 w-40 rounded-full bg-amber-400/10 blur-3xl" />
         <div className="pointer-events-none absolute right-10 top-8 hidden h-24 w-24 rotate-12 rounded-3xl border border-white/5 md:block" />
         <div className="pointer-events-none absolute right-24 top-20 hidden h-16 w-16 -rotate-6 rounded-2xl border border-white/5 md:block" />
 
@@ -179,10 +213,9 @@ export default function NewServices() {
         </div>
       </div>
 
-      {/* Services */}
-      {/* On a desktop screen the services sit in two rows (up to 3 per row; a single row when there are 3 or fewer); they stack on smaller screens */}
+      {/* Services — two rows of three on a desktop screen (one row when there are 3 or fewer); stacked on smaller screens */}
       <div
-        className="mt-7 grid grid-cols-1 gap-4 md:grid-cols-2 lg:[grid-template-columns:repeat(var(--cols),minmax(0,1fr))]"
+        className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2 lg:[grid-template-columns:repeat(var(--cols),minmax(0,1fr))]"
         style={{ "--cols": allowed.length <= 3 ? Math.max(allowed.length, 1) : Math.ceil(allowed.length / 2) }}
       >
         {allowed.map((s) => (
@@ -190,53 +223,43 @@ export default function NewServices() {
             key={s.key}
             to={s.to}
             state={{ fromServices: true }} // lets the page opened know it was reached from here
-            className={`group relative flex w-full flex-col overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-slate-200 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-slate-900/10 ${s.ring}`}
+            className={`group relative flex w-full flex-col overflow-hidden rounded-2xl bg-gradient-to-br shadow-sm ring-1 ring-slate-200 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl ${s.tone.card} ${s.tone.ring}`}
           >
-            {/* Panel: a deep, muted shade of the service's colour fading to slate */}
-            <div className={`relative flex h-32 items-end justify-between overflow-hidden bg-gradient-to-br p-5 ${s.panel}`}>
-              <span className={`absolute inset-x-0 top-0 h-0.5 ${s.line}`} />
-              <s.icon
-                size={140}
-                strokeWidth={1.25}
-                className="pointer-events-none absolute -bottom-8 -right-6 rotate-12 text-white/10 transition-transform duration-500 group-hover:rotate-6 group-hover:scale-105"
-              />
+            {/* colour bar */}
+            <span className={`h-1.5 w-full bg-gradient-to-r ${s.tone.bar}`} />
+            {/* soft colour glow, grows on hover */}
+            <span className={`pointer-events-none absolute -right-14 top-4 h-44 w-44 rounded-full bg-gradient-to-br ${s.tone.glow} to-transparent blur-2xl transition-all duration-500 group-hover:scale-125`} />
 
-              <span className={`relative flex h-14 w-14 items-center justify-center rounded-2xl ring-1 backdrop-blur transition-transform duration-300 group-hover:scale-105 ${s.iconTile}`}>
-                <s.icon size={26} />
-              </span>
-              <span className="relative text-3xl font-bold tracking-tight text-white/20">{s.no}</span>
-            </div>
+            <div className="relative flex flex-1 flex-col p-5">
+              <div className="flex items-start justify-between">
+                <span className={`flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br text-white shadow-lg ring-4 ring-white transition-transform duration-300 group-hover:-rotate-6 group-hover:scale-110 ${s.tone.icon}`}>
+                  <s.icon size={26} />
+                </span>
+                <span className={`text-5xl font-black leading-none tracking-tighter ${s.tone.num}`}>{s.no}</span>
+              </div>
 
-            {/* Body */}
-            <div className="flex flex-1 flex-col p-5">
-              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+              <div className="mt-4 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
                 <h2 className="text-lg font-bold text-slate-900">{s.title}</h2>
-                <span className="text-xs text-slate-400" dir="rtl">
+                <span className={`text-xs font-medium opacity-70 ${s.tone.text}`} dir="rtl">
                   {s.titleAr}
                 </span>
               </div>
-              <p className="mt-2 text-sm leading-relaxed text-slate-500">{s.desc}</p>
+              <p className="mt-1.5 text-sm leading-relaxed text-slate-600">{s.desc}</p>
 
-              <div className="mt-4 flex flex-wrap gap-1.5">
+              <div className="mb-5 mt-3.5 flex flex-wrap gap-1.5">
                 {s.chips.map((chip) => (
-                  <span
-                    key={chip}
-                    className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ring-1 ${s.chip}`}
-                  >
-                    <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
+                  <span key={chip} className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ${s.tone.chip}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${s.tone.dot}`} />
                     {chip}
                   </span>
                 ))}
               </div>
 
-              <div className="mt-auto pt-6">
-                <span className={`flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800 transition-all duration-300 group-hover:text-white ${s.cta}`}>
-                  Open {s.title.toLowerCase()}
-                  <span className={`grid h-7 w-7 place-items-center rounded-full transition-all duration-300 group-hover:translate-x-1 group-hover:bg-white/15 group-hover:text-white ${s.arrow}`}>
-                    <ArrowRight size={15} />
-                  </span>
-                </span>
-              </div>
+              {/* call to action: tinted pill that floods with the service colour on hover */}
+              <span className={`mt-auto flex items-center justify-between rounded-xl bg-gradient-to-r px-4 py-2.5 text-sm font-semibold ring-1 transition-all duration-300 group-hover:text-white group-hover:shadow-md group-hover:ring-transparent ${s.tone.cta}`}>
+                Open {s.title.toLowerCase()}
+                <ArrowRight size={16} className="transition-transform duration-300 group-hover:translate-x-1.5" />
+              </span>
             </div>
           </Link>
         ))}
@@ -246,7 +269,7 @@ export default function NewServices() {
       <div className="mt-7 grid grid-cols-1 gap-3 md:grid-cols-3">
         {TIPS.map((t) => (
           <div key={t.text} className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 text-sm text-slate-600 ring-1 ring-slate-200">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-500">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-indigo-100 to-sky-100 text-indigo-600">
               <t.icon size={16} />
             </span>
             {t.text}
