@@ -1,8 +1,7 @@
 // A sale's net price is what the vendor bills us, worked out from the vendor's invoice:
 //
 //   Basic fare (typed WITHOUT VAT)
-// + VAT on the fare 15% of the basic fare — on EVERY route (domestic, international, mixed …); on a domestic
-//                 route it is also kept as the PAX VAT (D. Vat)
+// + PAX VAT      15% of the basic fare — domestic routes only
 // + Vendor charges (typed)
 // + VAT on those charges (15%)
 // − Discount      what the vendor takes off
@@ -31,9 +30,10 @@ export const isDomestic = (routeType) => String(routeType || "").toUpperCase() =
  * The net price as the string the forms keep ("" until a basic fare is typed, and "" when the discount
  * would take it to nothing).
  */
-export const netTotalOf = ({ baseNet, vendorServiceCharge, discount }) => {
+export const netTotalOf = ({ baseNet, vendorServiceCharge, discount, routeType }) => {
   if (baseNet === "" || baseNet == null) return "";
-  const net = r2(num(baseNet) + paxVatOf(baseNet) + num(vendorServiceCharge) + vendorVatOf(vendorServiceCharge) - num(discount));
+  const pax = isDomestic(routeType) ? paxVatOf(baseNet) : 0;
+  const net = r2(num(baseNet) + pax + num(vendorServiceCharge) + vendorVatOf(vendorServiceCharge) - num(discount));
   return net > 0 ? String(net) : "";
 };
 
@@ -54,7 +54,7 @@ export const applyVendorParts = (item, field, value) => {
     discount,
     vendorVat: num(vendorServiceCharge) > 0 ? vendorVatOf(vendorServiceCharge).toFixed(2) : "",
     paxVat: dom ? (num(baseNet) > 0 ? paxVatOf(baseNet).toFixed(2) : "") : "",
-    netPrice: netTotalOf({ baseNet, vendorServiceCharge, discount }),
+    netPrice: netTotalOf({ baseNet, vendorServiceCharge, discount, routeType: item.routeType }),
   };
 };
 
@@ -65,22 +65,13 @@ export const withVendorParts = (sale) => {
   const charges = num(sale.vendorServiceCharge);
   const vat = num(sale.vendorVat) || vendorVatOf(charges);
   const discount = num(sale.discount);
-  const net = sale.netPrice == null || sale.netPrice === "" ? "" : num(sale.netPrice);
-  // The saved net holds the 15% on the basic fare on every route. A domestic sale also stored it (paxVat);
-  // for the other routes it is taken back out of the net (a sale saved before that rule simply opens with the
-  // basic fare that reproduces its saved net — its net price itself is never touched until a typed field changes).
-  const baseNet =
-    net === ""
-      ? ""
-      : isDomestic(sale.routeType)
-        ? String(r2(net + discount - charges - vat - num(sale.paxVat)))
-        : String(r2((net + discount - charges - vat) / (1 + VAT_RATE)));
+  const pax = isDomestic(sale.routeType) ? num(sale.paxVat) : 0;
   return {
     ...sale,
     vendorServiceCharge: charges ? String(charges) : "",
     vendorVat: charges ? vat.toFixed(2) : "",
     discount: discount ? String(discount) : "",
-    baseNet,
+    baseNet: sale.netPrice == null || sale.netPrice === "" ? "" : String(r2(num(sale.netPrice) + discount - charges - vat - pax)),
   };
 };
 
