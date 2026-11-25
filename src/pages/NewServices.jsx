@@ -180,10 +180,10 @@ export default function NewServices() {
       </div>
 
       {/* Services */}
-      {/* All the services on ONE line on a desktop screen (one column per card); they stack on smaller screens */}
+      {/* On a desktop screen the services sit in two rows (up to 3 per row; a single row when there are 3 or fewer); they stack on smaller screens */}
       <div
         className="mt-7 grid grid-cols-1 gap-4 md:grid-cols-2 lg:[grid-template-columns:repeat(var(--cols),minmax(0,1fr))]"
-        style={{ "--cols": Math.max(allowed.length, 1) }}
+        style={{ "--cols": allowed.length <= 3 ? Math.max(allowed.length, 1) : Math.ceil(allowed.length / 2) }}
       >
         {allowed.map((s) => (
           <Link
